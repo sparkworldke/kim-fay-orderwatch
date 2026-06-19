@@ -1,0 +1,531 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { setSession, setToken } from "@/lib/auth";
+import type { Role } from "@/lib/auth";
+import { apiFetch } from "@/lib/api";
+import logoAsset from "@/assets/kim-fay-logo.png.asset.json";
+
+export const Route = createFileRoute("/auth")({
+  head: () => ({
+    meta: [
+      { title: "Sign in — Kim-Fay OrderWatch" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: AuthPage,
+});
+
+type LoginMode = "otp-only" | "otp-and-password";
+
+type EmailValidation =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "valid" }
+  | { status: "invalid-format"; message: string }
+  | { status: "not-registered"; message: string }
+  | { status: "inactive"; message: string }
+  | { status: "error"; message: string };
+
+type EmailCheckResponse = {
+  exists: boolean;
+  eligible: boolean;
+  status: "registered" | "not_registered" | "inactive";
+  message?: string;
+};
+
+/** Loose format check — catches obvious non-emails before hitting the API. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Masks an email like "contact@kimfay.com" → "co**********ct@kim***.c**" */
+function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email;
+
+  const maskPart = (s: string) => {
+    if (s.length <= 2) return s;
+    const keep = Math.max(2, Math.ceil(s.length * 0.25));
+    const half = Math.ceil(keep / 2);
+    const start = s.slice(0, half);
+    const end = s.slice(-(keep - half));
+    return start + "*".repeat(s.length - keep) + end;
+  };
+
+  const dotIdx = domain.lastIndexOf(".");
+  const domainName = dotIdx > 0 ? domain.slice(0, dotIdx) : domain;
+  const tld = dotIdx > 0 ? domain.slice(dotIdx) : "";
+
+  return `${maskPart(local)}@${maskPart(domainName)}${tld.slice(0, 1)}${"*".repeat(Math.max(0, tld.length - 1))}`;
+}
+
+function AuthPage() {
+  const navigate = useNavigate();
+
+  const [step, setStep] = useState<"email" | "otp">("email");
+  const [email, setEmail] = useState("");
+  const [emailValidation, setEmailValidation] = useState<EmailValidation>({ status: "idle" });
+  const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginMode, setLoginMode] = useState<LoginMode>("otp-only");
+  const [secondsLeft, setSecondsLeft] = useState(900);
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const validationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref holds the latest email so async callbacks can detect stale responses.
+  const latestEmailRef = useRef("");
+
+  function startCountdown() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setSecondsLeft(900);
+    timerRef.current = setInterval(
+      () => setSecondsLeft((s) => Math.max(0, s - 1)),
+      1000,
+    );
+  }
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (validationDebounceRef.current) clearTimeout(validationDebounceRef.current);
+    };
+  }, []);
+
+  async function checkEmailRegistration(value: string): Promise<EmailValidation> {
+    const data = await apiFetch<EmailCheckResponse>("auth/email/check", {
+      method: "POST",
+      body: { email: value },
+    });
+
+    if (data.eligible) return { status: "valid" };
+
+    if (data.status === "inactive") {
+      return {
+        status: "inactive",
+        message: data.message ?? "This account is not active. Contact your administrator.",
+      };
+    }
+
+    return {
+      status: "not-registered",
+      message: data.message ?? "This email is not registered in OrderWatch",
+    };
+  }
+
+  function handleEmailChange(value: string) {
+    setEmail(value);
+    const normalizedEmail = value.trim().toLowerCase();
+    latestEmailRef.current = normalizedEmail;
+
+    if (validationDebounceRef.current) clearTimeout(validationDebounceRef.current);
+
+    if (!normalizedEmail) {
+      setEmailValidation({ status: "idle" });
+      return;
+    }
+
+    // Immediate client-side format check — no network call needed.
+    if (!EMAIL_RE.test(normalizedEmail)) {
+      setEmailValidation({
+        status: "invalid-format",
+        message: "Please enter a valid email address",
+      });
+      return;
+    }
+
+    // Format is fine — debounce the registration check.
+    setEmailValidation({ status: "checking" });
+
+    const captured = normalizedEmail;
+    validationDebounceRef.current = setTimeout(async () => {
+      try {
+        const result = await checkEmailRegistration(captured);
+        // Discard if the user has already changed the email input.
+        if (latestEmailRef.current !== captured) return;
+        setEmailValidation(result);
+      } catch {
+        if (latestEmailRef.current !== captured) return;
+        setEmailValidation({
+          status: "error",
+          message: "Unable to verify this email right now. Check your connection and try again.",
+        });
+      }
+    }, 600);
+  }
+
+  async function sendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!EMAIL_RE.test(normalizedEmail)) {
+      const result: EmailValidation = {
+        status: "invalid-format",
+        message: "Please enter a valid email address",
+      };
+      setEmailValidation(result);
+      toast.error(result.message);
+      return;
+    }
+
+    if (emailValidation.status !== "valid" || latestEmailRef.current !== normalizedEmail) {
+      try {
+        setEmailValidation({ status: "checking" });
+        const result = await checkEmailRegistration(normalizedEmail);
+        setEmailValidation(result);
+
+        if (result.status !== "valid") {
+          toast.error("message" in result ? result.message : "Email validation failed");
+          return;
+        }
+      } catch {
+        const result: EmailValidation = {
+          status: "error",
+          message: "Unable to verify this email right now. Check your connection and try again.",
+        };
+        setEmailValidation(result);
+        toast.error(result.message);
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      await apiFetch("auth/otp/request", {
+        method: "POST",
+        body: { email: normalizedEmail },
+      });
+      setEmail(normalizedEmail);
+      latestEmailRef.current = normalizedEmail;
+      toast.success(`Verification code sent to ${normalizedEmail}`);
+      setOtp("");
+      setPassword("");
+      setStep("otp");
+      startCountdown();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send code");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resendOtp() {
+    setResending(true);
+    try {
+      await apiFetch("auth/otp/request", {
+        method: "POST",
+        body: { email: email.trim().toLowerCase() },
+      });
+      toast.success("New code sent");
+      startCountdown();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to resend code");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  async function verifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (otp.length !== 6) {
+      toast.error("Enter the 6-digit code");
+      return;
+    }
+    if (loginMode === "otp-and-password" && !password) {
+      toast.error("Enter your password");
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await apiFetch<{
+        token: string;
+        user: { id: number; name: string; email: string; role: string };
+      }>("auth/otp/verify", {
+        method: "POST",
+        body: {
+          email: email.trim().toLowerCase(),
+          otp,
+          login_mode: loginMode,
+          ...(loginMode === "otp-and-password" ? { password } : {}),
+        },
+      });
+      setToken(data.token);
+      setSession({
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role as Role,
+        loggedInAt: new Date().toISOString(),
+        token: data.token,
+      });
+      if (timerRef.current) clearInterval(timerRef.current);
+      toast.success("Welcome to OrderWatch");
+      navigate({ to: "/app" });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function goBackToEmail() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setStep("email");
+    setOtp("");
+    setPassword("");
+    setLoginMode("otp-only");
+  }
+
+  const emailHasKnownError =
+    emailValidation.status === "invalid-format" ||
+    emailValidation.status === "not-registered" ||
+    emailValidation.status === "inactive" ||
+    emailValidation.status === "error";
+
+  const canRequestOtp = emailValidation.status === "valid" && !loading;
+
+  return (
+    <div className="relative grid min-h-screen lg:grid-cols-2">
+      {/* Brand panel */}
+      <div
+        className="relative hidden flex-col justify-between overflow-hidden p-10 text-white lg:flex"
+        style={{ background: "var(--gradient-brand)" }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/95 shadow">
+            <img src={logoAsset.url} alt="Kim-Fay" className="h-9 w-9 object-contain" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold tracking-wide">KIM-FAY</div>
+            <div className="text-xs text-white/70">OrderWatch · Internal</div>
+          </div>
+        </div>
+
+        <div className="relative z-10 max-w-md">
+          <h1 className="font-mono text-4xl font-semibold leading-tight">
+            Every Order.<br />Accounted For.
+          </h1>
+          <p className="mt-4 text-sm text-white/80">
+            Real-time control tower for Outlook order capture, Acumatica reconciliation,
+            SLA monitoring and revenue protection — powered by AI insights every 3 hours.
+          </p>
+
+          <div className="mt-8 grid grid-cols-3 gap-3 text-xs">
+            {[
+              { k: "Capture", v: "98.4%" },
+              { k: "SLA", v: "96.1%" },
+              { k: "At Risk", v: "KES 4.2M" },
+            ].map((s) => (
+              <div key={s.k} className="rounded-md border border-white/15 bg-white/5 p-3 backdrop-blur">
+                <div className="text-[10px] uppercase tracking-wider text-white/60">{s.k}</div>
+                <div className="font-mono text-base font-semibold">{s.v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-white/60">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          Restricted access · Kim-Fay employees only
+        </div>
+
+        <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-40 -left-20 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
+      </div>
+
+      {/* Auth form */}
+      <div className="flex items-center justify-center bg-background px-6 py-12">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex items-center gap-2 lg:hidden">
+            <img src={logoAsset.url} alt="Kim-Fay" className="h-8 w-8" />
+            <span className="text-sm font-semibold">Kim-Fay OrderWatch</span>
+          </div>
+
+          {step === "email" ? (
+            <form onSubmit={sendOtp} className="space-y-5">
+              <div>
+                <h2 className="text-xl font-semibold">Sign in</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Use your Kim-Fay email. We'll send you a 6-digit verification code.
+                </p>
+              </div>
+
+              {/* Mode toggle */}
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="login-mode-toggle"
+                  checked={loginMode === "otp-and-password"}
+                  onCheckedChange={(checked) =>
+                    setLoginMode(checked ? "otp-and-password" : "otp-only")
+                  }
+                />
+                <Label
+                  htmlFor="login-mode-toggle"
+                  className="cursor-pointer text-sm text-muted-foreground select-none"
+                >
+                  OTP + Password
+                </Label>
+              </div>
+
+              {/* Email field with real-time validation */}
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Work email</Label>
+                <div className="relative">
+                  <Input
+                    id="email"
+                    type="email"
+                    autoFocus
+                    required
+                    value={email}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    placeholder="firstname.lastname@kim-fay.com"
+                    className={
+                      emailValidation.status === "valid"
+                        ? "border-green-500 pr-9"
+                        : emailHasKnownError
+                          ? "border-red-500 pr-9"
+                          : emailValidation.status === "checking"
+                            ? "pr-9"
+                            : ""
+                    }
+                  />
+                  {emailValidation.status === "checking" && (
+                    <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                  )}
+                  {emailValidation.status === "valid" && (
+                    <CheckCircle2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-green-500" />
+                  )}
+                </div>
+                {emailHasKnownError && (
+                  <p className="text-xs text-red-500">
+                    {(emailValidation as { message: string }).message}
+                  </p>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={!canRequestOtp}
+              >
+                {loading ? "Sending…" : emailValidation.status === "checking" ? "Checking email…" : (
+                  <>Send verification code <ArrowRight className="ml-1 h-4 w-4" /></>
+                )}
+              </Button>
+              <p className="text-center text-[11px] text-muted-foreground">
+                {loginMode === "otp-only"
+                  ? "Passwordless · OTP expires in 15 minutes"
+                  : "OTP + Password · OTP expires in 15 minutes"}
+              </p>
+            </form>
+          ) : (
+            <form onSubmit={verifyOtp} className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">
+                  Verify using an available option
+                </h2>
+                <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+                  Verify using an OTP sent to{" "}
+                  <span className="font-medium text-foreground">{maskEmail(email)}</span>{" "}
+                  or any other available option to continue.
+                </p>
+              </div>
+
+              {/* OTP input — full-width single row */}
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+                autoFocus
+                containerClassName="w-full"
+              >
+                <InputOTPGroup className="w-full">
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <InputOTPSlot
+                      key={i}
+                      index={i}
+                      className="flex-1 h-14 text-xl rounded-none first:rounded-l-md last:rounded-r-md border-y border-r first:border-l bg-muted/40"
+                    />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+
+              {loginMode === "otp-and-password" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Your account password"
+                  />
+                </div>
+              )}
+
+              {/* Actions row */}
+              <div className="flex items-center justify-between text-sm">
+                <button
+                  type="button"
+                  className="font-medium text-primary hover:underline"
+                  onClick={() => {
+                    if (timerRef.current) clearInterval(timerRef.current);
+                    setLoginMode(loginMode === "otp-only" ? "otp-and-password" : "otp-only");
+                    setStep("email");
+                    setOtp("");
+                    setPassword("");
+                  }}
+                >
+                  {loginMode === "otp-only" ? "Sign in using password" : "Sign in using OTP only"}
+                </button>
+
+                {secondsLeft > 0 ? (
+                  <span className="text-muted-foreground">
+                    Resend in{" "}
+                    <span className="font-medium text-foreground">{secondsLeft}s</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="font-medium text-primary hover:underline disabled:opacity-50"
+                    onClick={resendOtp}
+                    disabled={resending}
+                  >
+                    {resending ? "Sending…" : "Resend"}
+                  </button>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-12 text-base font-semibold"
+                disabled={loading}
+              >
+                {loading ? "Verifying…" : "Sign in"}
+              </Button>
+
+              <button
+                type="button"
+                className="block w-full text-center text-xs text-muted-foreground hover:text-foreground"
+                onClick={goBackToEmail}
+              >
+                Use a different email
+              </button>
+            </form>
+          )}
+
+          <div className="mt-10 border-t pt-4 text-[11px] text-muted-foreground">
+            By signing in you agree to Kim-Fay's internal systems policy. Activity is logged.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,56 @@
+{
+  "name": "Acumatica Sales Order Payload Reference",
+  "description": "Sanitized reference for authenticating with Acumatica and fetching SalesOrder records. Use environment variables for all credentials.",
+  "token_request": {
+    "method": "POST",
+    "url": "${ACUMATICA_BASE_URL}/identity/connect/token",
+    "content_type": "application/x-www-form-urlencoded",
+    "timeout_seconds": 15,
+    "form_fields": {
+      "grant_type": "password",
+      "client_id": "${ACUMATICA_CLIENT_ID}",
+      "client_secret": "${ACUMATICA_CLIENT_SECRET}",
+      "username": "${ACUMATICA_USERNAME}",
+      "password": "${ACUMATICA_PASSWORD}",
+      "scope": "api"
+    }
+  },
+  "sales_order_fetch": {
+    "method": "GET",
+    "url_template": "${ACUMATICA_BASE_URL}/entity/${ACUMATICA_ENDPOINT}/${ACUMATICA_VERSION}/SalesOrder/",
+    "headers": {
+      "Authorization": "Bearer ${ACUMATICA_ACCESS_TOKEN}",
+      "Accept": "application/json"
+    },
+    "query": {
+      "$expand": "CustomerDetails,DocumentDetails,PaymentDetails"
+    },
+    "optional_filters": [
+      {
+        "label": "Fetch by sales order number",
+        "$filter": "OrderNbr eq '{order_number}'",
+        "example": "OrderNbr eq 'SO358387'"
+      },
+      {
+        "label": "Fetch by customer ID",
+        "$filter": "CustomerID eq '{customer_id}'",
+        "example": "CustomerID eq 'CUST101239'"
+      }
+    ]
+  },
+  "environment_variables": {
+    "ACUMATICA_BASE_URL": "https://kimfay.acumatica.com",
+    "ACUMATICA_TOKEN_URL": "${ACUMATICA_BASE_URL}/identity/connect/token",
+    "ACUMATICA_CLIENT_ID": "${ACUMATICA_CLIENT_ID}",
+    "ACUMATICA_CLIENT_SECRET": "${ACUMATICA_CLIENT_SECRET}",
+    "ACUMATICA_USERNAME": "${ACUMATICA_USERNAME}",
+    "ACUMATICA_PASSWORD": "${ACUMATICA_PASSWORD}",
+    "ACUMATICA_ENDPOINT": "${ACUMATICA_ENDPOINT}",
+    "ACUMATICA_VERSION": "${ACUMATICA_VERSION}"
+  },
+  "notes": [
+    "Do not commit real Acumatica credentials to this file.",
+    "Persist real values in the Laravel .env file or an approved secret manager.",
+    "Store credentials encrypted at rest before writing them to application database tables."
+  ]
+}

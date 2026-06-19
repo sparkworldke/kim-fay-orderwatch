@@ -1,0 +1,123 @@
+{
+  "info": {
+    "_postman_id": "98931215-9fc2-490c-a4aa-f31003ea7066",
+    "name": "Saas kimfay orders per customer per date",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "15012210"
+  },
+  "item": [
+    {
+      "name": "Initialization",
+      "item": [
+        {
+          "name": "New Request",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text",
+                  "uuid": "2625885b-8784-46dd-b249-606c198c3977"
+                },
+                {
+                  "key": "client_id",
+                  "value": "B86BC41A-1183-A796-BD0E-64DB1C8F8103@Kim-Fay Limited",
+                  "type": "text",
+                  "uuid": "5a53e44a-7117-4971-9adb-9bc706d711b2"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "RaRhquF5o-e4bO5x2cU9Nw",
+                  "type": "text",
+                  "uuid": "28ad0a7e-8eec-4c3c-ab03-cfcd7c821b91"
+                },
+                {
+                  "key": "username",
+                  "value": "ipay",
+                  "type": "text",
+                  "uuid": "1869a770-852e-47f4-9880-838ece86598d"
+                },
+                {
+                  "key": "password",
+                  "value": "DN3!724@Nms",
+                  "type": "text",
+                  "uuid": "bbb22f06-d265-4824-b60f-8385f04a104a"
+                },
+                {
+                  "key": "scope",
+                  "value": "api",
+                  "type": "text",
+                  "uuid": "627c340e-30d3-422e-983c-f3657249d5fb"
+                }
+              ]
+            },
+            "url": {
+              "raw": "https://kimfay.acumatica.com/identity/connect/token",
+              "protocol": "https",
+              "host": [
+                "kimfay",
+                "acumatica",
+                "com"
+              ],
+              "path": [
+                "identity",
+                "connect",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Fetching orders",
+      "item": [
+        {
+          "name": "New Request",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://kimfay.acumatica.com/entity/IpayV2/22.200.001/SalesOrder/?$filter=OrderNbr eq 'SO358387'&$expand=CustomerDetails,DocumentDetails,PaymentDetails",
+              "protocol": "https",
+              "host": [
+                "kimfay",
+                "acumatica",
+                "com"
+              ],
+              "path": [
+                "entity",
+                "IpayV2",
+                "22.200.001",
+                "SalesOrder",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "$filter",
+                  "value": "CustomerID eq 'CUST101239'",
+                  "disabled": true
+                },
+                {
+                  "key": "$filter",
+                  "value": "OrderNbr eq 'SO358387'",
+                  "type": "text"
+                },
+                {
+                  "key": "$expand",
+                  "value": "CustomerDetails,DocumentDetails,PaymentDetails"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
