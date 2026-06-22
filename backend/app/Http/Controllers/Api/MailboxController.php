@@ -9,6 +9,7 @@ use App\Services\Email\OutlookEmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Throwable;
@@ -27,7 +28,7 @@ class MailboxController extends Controller
     public function startOAuth(Request $request): JsonResponse
     {
         $state = Str::random(32);
-        session(['mailbox_oauth_state' => $state]);
+        Cache::put('mailbox_oauth_state_' . $state, true, now()->addMinutes(15));
 
         return response()->json([
             'auth_url' => $this->outlook->getAuthUrl($state),
@@ -44,7 +45,7 @@ class MailboxController extends Controller
         }
 
         $state = $request->query('state', '');
-        if ($state !== session('mailbox_oauth_state')) {
+        if (empty($state) || ! Cache::pull('mailbox_oauth_state_' . $state)) {
             return redirect("{$frontendBase}/app/mailbox?error=invalid_state");
         }
 
@@ -55,8 +56,7 @@ class MailboxController extends Controller
 
         try {
             $account = $this->outlook->handleCallback($code);
-            SyncMailboxJob::dispatch($account->id);
-            session()->forget('mailbox_oauth_state');
+            SyncMailboxJob::dispatchSync($account->id);
 
             return redirect("{$frontendBase}/app/mailbox?connected=1&email=" . urlencode($account->email));
         } catch (Throwable $exception) {
@@ -64,11 +64,32 @@ class MailboxController extends Controller
         }
     }
 
+    public function update(Request $request, MailboxAccount $mailbox): JsonResponse
+    {
+        $validated = $request->validate([
+            'sync_from_date' => 'nullable|date_format:Y-m-d',
+        ]);
+
+        // Changing the from-date invalidates the existing delta position so the
+        // next sync re-fetches from the new date rather than where it left off.
+        $newDate = $validated['sync_from_date'] ?? null;
+        $oldDate = $mailbox->sync_from_date?->format('Y-m-d');
+
+        if ($newDate !== $oldDate) {
+            $validated['delta_token']    = null;
+            $validated['last_synced_at'] = null;
+        }
+
+        $mailbox->update($validated);
+
+        return response()->json($this->present($mailbox));
+    }
+
     public function sync(MailboxAccount $mailbox): JsonResponse
     {
-        SyncMailboxJob::dispatch($mailbox->id);
+        SyncMailboxJob::dispatchSync($mailbox->id);
 
-        return response()->json(['message' => 'Sync queued.']);
+        return response()->json(['message' => 'Sync completed.']);
     }
 
     public function destroy(MailboxAccount $mailbox): JsonResponse
@@ -205,6 +226,7 @@ class MailboxController extends Controller
             'display_name'   => $account->display_name,
             'status'         => $account->status,
             'last_synced_at' => $account->last_synced_at,
+            'sync_from_date' => $account->sync_from_date?->format('Y-m-d'),
             'created_at'     => $account->created_at,
         ];
     }

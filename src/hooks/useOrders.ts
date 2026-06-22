@@ -8,6 +8,7 @@ interface OrderFilters {
   date_to?: string;
   customer_id?: string;
   status?: string;
+  sort?: "latest" | "oldest";
   page?: number;
   per_page?: number;
 }
@@ -19,6 +20,7 @@ export function useOrders(filters: OrderFilters = {}) {
   if (filters.date_to)     params.set("date_to", filters.date_to);
   if (filters.customer_id) params.set("customer_id", filters.customer_id);
   if (filters.status)      params.set("status", filters.status);
+  if (filters.sort)        params.set("sort", filters.sort);
   if (filters.page)        params.set("page",     String(filters.page));
   if (filters.per_page)   params.set("per_page", String(filters.per_page));
 

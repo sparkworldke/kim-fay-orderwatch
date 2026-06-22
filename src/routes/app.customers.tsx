@@ -1053,7 +1053,7 @@ function CustomerDetailSheet({ customer }: { customer: CustomerWithBranches }) {
 
       {customer.synced_at && (
         <p className="mt-5 text-xs text-muted-foreground">
-          Last synced: {new Date(customer.synced_at).toLocaleString()}
+          Last synced: {new Date(customer.synced_at).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}
         </p>
       )}
     </>

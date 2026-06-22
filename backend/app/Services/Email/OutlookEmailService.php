@@ -4,6 +4,8 @@ namespace App\Services\Email;
 
 use App\Contracts\EmailProviderInterface;
 use App\Models\Email;
+use App\Models\EmailFilter;
+use App\Models\EmailImportConfig;
 use App\Models\MailboxAccount;
 use App\Services\Admin\EncryptionService;
 use Carbon\Carbon;
@@ -17,8 +19,10 @@ class OutlookEmailService implements EmailProviderInterface
     private string $tenantId;
     private string $redirectUri;
 
-    public function __construct(private readonly EncryptionService $encryption)
-    {
+    public function __construct(
+        private readonly EncryptionService $encryption,
+        private readonly EmailFilterEngine $filterEngine,
+    ) {
         $this->clientId     = config('services.microsoft.client_id', '');
         $this->clientSecret = config('services.microsoft.client_secret', '');
         $this->tenantId     = config('services.microsoft.tenant_id', 'common');
@@ -77,16 +81,29 @@ class OutlookEmailService implements EmailProviderInterface
         );
     }
 
-    public function syncEmails(MailboxAccount $account): int
+    public function syncEmails(MailboxAccount $account, ?int $emailFilterId = null): int
     {
-        $accessToken = $this->getValidAccessToken($account);
+        $accessToken   = $this->getValidAccessToken($account);
+        $senderConfigs = EmailImportConfig::where('is_active', true)->get();
+
+        // When a specific rule is targeted, use only that rule.
+        // Otherwise use all active rules as an import gate (OR across rules).
+        $activeRules = $emailFilterId
+            ? EmailFilter::where('id', $emailFilterId)->get()
+            : EmailFilter::where('is_active', true)->get();
 
         $url    = 'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages/delta';
         $params = ['$select' => 'id,subject,from,toRecipients,bodyPreview,isRead,receivedDateTime'];
 
         if ($account->delta_token) {
+            // Subsequent sync — delta token already encodes any date filter from initial sync
             $url    = $account->delta_token;
             $params = [];
+        } else {
+            // Initial sync — scope to configured from-date so we don't pull the full mailbox history
+            if ($account->sync_from_date) {
+                $params['$filter'] = 'receivedDateTime ge ' . $account->sync_from_date->format('Y-m-d') . 'T00:00:00Z';
+            }
         }
 
         $count = 0;
@@ -106,12 +123,31 @@ class OutlookEmailService implements EmailProviderInterface
                     continue;
                 }
 
+                $fromEmail = $message['from']['emailAddress']['address'] ?? '';
+
+                // Gate 1: allowed sender configs
+                if ($senderConfigs->isNotEmpty() && ! $senderConfigs->contains(fn ($cfg) => $cfg->matchesSender($fromEmail))) {
+                    continue;
+                }
+
+                // Gate 2: active filter rules — email must match at least one (OR across rules)
+                if ($activeRules->isNotEmpty()) {
+                    $emailData = [
+                        'from_email'  => $fromEmail,
+                        'subject'     => $message['subject'] ?? '',
+                        'received_at' => $message['receivedDateTime'] ?? null,
+                    ];
+                    if (! $activeRules->contains(fn ($rule) => $this->filterEngine->matchesFilter($emailData, $rule))) {
+                        continue;
+                    }
+                }
+
                 Email::updateOrCreate(
                     ['message_id' => $message['id']],
                     [
                         'mailbox_account_id' => $account->id,
                         'subject'            => $message['subject'] ?? '(no subject)',
-                        'from_email'         => $message['from']['emailAddress']['address'] ?? null,
+                        'from_email'         => $fromEmail ?: null,
                         'from_name'          => $message['from']['emailAddress']['name'] ?? null,
                         'to_recipients'      => array_map(
                             fn ($r) => $r['emailAddress'],

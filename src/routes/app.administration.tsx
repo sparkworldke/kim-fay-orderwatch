@@ -770,7 +770,7 @@ function EmailImportPanel() {
               <tbody>
                 {history.data.map((r) => (
                   <tr key={r.id} className="border-t">
-                    <td className="px-3 py-2 text-xs">{new Date(r.started_at).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-xs">{new Date(r.started_at).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}</td>
                     <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
                     <td className="px-3 py-2 tabular-nums text-xs">{r.emails_processed}</td>
                     <td className="px-3 py-2 tabular-nums text-xs">{r.po_extracted}</td>
@@ -976,5 +976,5 @@ function formatDate(value: string | null | undefined) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString();
+  return date.toLocaleString("en-KE", { timeZone: "Africa/Nairobi" });
 }

@@ -238,7 +238,7 @@ function ProfilePage() {
                     {logsData.data.map((entry) => (
                       <tr key={entry.id} className="border-t">
                         <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
-                          {new Date(entry.created_at).toLocaleString("en-KE")}
+                          {new Date(entry.created_at).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}
                         </td>
                         <td className="px-3 py-2 font-mono text-xs">{entry.ip_address}</td>
                         <td className="px-3 py-2 text-xs text-muted-foreground">

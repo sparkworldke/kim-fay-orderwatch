@@ -2,13 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\SyncMailboxJob;
 use App\Models\Email;
 use App\Models\EmailFilter;
 use App\Models\MailboxAccount;
+use App\Models\MailboxSyncLog;
 use App\Models\User;
+use App\Services\Email\OutlookEmailService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class EmailSyncTest extends TestCase
@@ -42,6 +42,14 @@ class EmailSyncTest extends TestCase
             'token_expires_at'         => now()->addHour(),
             'status'                   => 'connected',
         ]);
+    }
+
+    private function singleCondition(string $type, string $value): array
+    {
+        return [[
+            'type' => $type,
+            'value' => $value,
+        ]];
     }
 
     // --- Auth ---
@@ -88,16 +96,57 @@ class EmailSyncTest extends TestCase
         $this->assertDatabaseMissing('mailbox_accounts', ['id' => $mailbox->id]);
     }
 
-    public function test_sync_endpoint_dispatches_job(): void
+    public function test_admin_can_update_a_mailbox_with_put(): void
     {
-        Queue::fake();
         $mailbox = $this->mailbox();
 
         $this->actingAs($this->adminUser(), 'sanctum')
-            ->postJson("/api/admin/mailboxes/{$mailbox->id}/sync")
-            ->assertOk();
+            ->putJson("/api/admin/mailboxes/{$mailbox->id}", [
+                'sync_from_date' => '2026-06-01',
+            ])
+            ->assertOk()
+            ->assertJsonFragment(['sync_from_date' => '2026-06-01']);
 
-        Queue::assertPushed(SyncMailboxJob::class, fn ($job) => $job->mailboxAccountId === $mailbox->id);
+        $this->assertDatabaseHas('mailbox_accounts', [
+            'id' => $mailbox->id,
+            'sync_from_date' => '2026-06-01 00:00:00',
+            'delta_token' => null,
+        ]);
+    }
+
+    public function test_admin_can_update_a_mailbox_with_patch(): void
+    {
+        $mailbox = $this->mailbox();
+
+        $this->actingAs($this->adminUser(), 'sanctum')
+            ->patchJson("/api/admin/mailboxes/{$mailbox->id}", [
+                'sync_from_date' => '2026-06-15',
+            ])
+            ->assertOk()
+            ->assertJsonFragment(['sync_from_date' => '2026-06-15']);
+    }
+
+    public function test_sync_endpoint_runs_immediately_without_queue_worker(): void
+    {
+        $mailbox = $this->mailbox();
+        $this->mock(OutlookEmailService::class, function ($mock) use ($mailbox) {
+            $mock->shouldReceive('syncEmails')
+                ->once()
+                ->withArgs(fn (MailboxAccount $account, ?int $filterId) => $account->is($mailbox) && $filterId === null)
+                ->andReturn(3);
+        });
+
+        $this->actingAs($this->adminUser(), 'sanctum')
+            ->postJson("/api/admin/mailboxes/{$mailbox->id}/sync")
+            ->assertOk()
+            ->assertJsonFragment(['message' => 'Sync completed.']);
+
+        $log = MailboxSyncLog::latest('id')->first();
+
+        $this->assertNotNull($log);
+        $this->assertSame($mailbox->id, $log->mailbox_account_id);
+        $this->assertSame('completed', $log->status);
+        $this->assertSame(3, $log->emails_fetched);
     }
 
     // --- Email listing ---
@@ -164,14 +213,34 @@ class EmailSyncTest extends TestCase
     {
         $this->actingAs($this->regularUser(), 'sanctum')
             ->postJson('/api/email-filters', [
-                'name'  => 'Gmail Domain',
-                'type'  => 'sender_domain',
+                'name' => 'Gmail Domain',
+                'conditions' => $this->singleCondition('sender_domain', 'gmail.com'),
+            ])
+            ->assertCreated()
+            ->assertJsonFragment([
+                'name' => 'Gmail Domain',
+                'type' => 'sender_domain',
+                'value' => 'gmail.com',
+                'match_count' => 0,
+            ]);
+
+        $this->assertDatabaseHas('email_filters', ['name' => 'Gmail Domain']);
+    }
+
+    public function test_user_can_create_an_email_filter_with_legacy_single_condition_payload(): void
+    {
+        $this->actingAs($this->regularUser(), 'sanctum')
+            ->postJson('/api/email-filters', [
+                'name' => 'Legacy Gmail Domain',
+                'type' => 'sender_domain',
                 'value' => 'gmail.com',
             ])
             ->assertCreated()
-            ->assertJsonFragment(['name' => 'Gmail Domain', 'type' => 'sender_domain', 'match_count' => 0]);
-
-        $this->assertDatabaseHas('email_filters', ['name' => 'Gmail Domain']);
+            ->assertJsonFragment([
+                'name' => 'Legacy Gmail Domain',
+                'type' => 'sender_domain',
+                'value' => 'gmail.com',
+            ]);
     }
 
     public function test_email_filter_match_count_reflects_stored_emails(): void
@@ -182,9 +251,8 @@ class EmailSyncTest extends TestCase
 
         $response = $this->actingAs($this->regularUser(), 'sanctum')
             ->postJson('/api/email-filters', [
-                'name'  => 'Gmail',
-                'type'  => 'sender_domain',
-                'value' => 'gmail.com',
+                'name' => 'Gmail',
+                'conditions' => $this->singleCondition('sender_domain', 'gmail.com'),
             ])
             ->assertCreated();
 
@@ -193,7 +261,11 @@ class EmailSyncTest extends TestCase
 
     public function test_user_can_update_a_filter(): void
     {
-        $filter = EmailFilter::create(['name' => 'Old', 'type' => 'sender_email', 'value' => 'old@old.com', 'is_active' => true]);
+        $filter = EmailFilter::create([
+            'name' => 'Old',
+            'conditions' => $this->singleCondition('sender_email', 'old@old.com'),
+            'is_active' => true,
+        ]);
 
         $this->actingAs($this->regularUser(), 'sanctum')
             ->patchJson("/api/email-filters/{$filter->id}", ['name' => 'New Name', 'is_active' => false])
@@ -203,7 +275,11 @@ class EmailSyncTest extends TestCase
 
     public function test_user_can_delete_a_filter(): void
     {
-        $filter = EmailFilter::create(['name' => 'To Delete', 'type' => 'sender_email', 'value' => 'd@d.com', 'is_active' => true]);
+        $filter = EmailFilter::create([
+            'name' => 'To Delete',
+            'conditions' => $this->singleCondition('sender_email', 'd@d.com'),
+            'is_active' => true,
+        ]);
 
         $this->actingAs($this->regularUser(), 'sanctum')
             ->deleteJson("/api/email-filters/{$filter->id}")
@@ -216,12 +292,11 @@ class EmailSyncTest extends TestCase
     {
         $this->actingAs($this->regularUser(), 'sanctum')
             ->postJson('/api/email-filters', [
-                'name'  => 'Bad',
-                'type'  => 'invalid_type',
-                'value' => 'whatever',
+                'name' => 'Bad',
+                'conditions' => $this->singleCondition('invalid_type', 'whatever'),
             ])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['type']);
+            ->assertJsonValidationErrors(['conditions.0.type']);
     }
 
     public function test_filter_list_returns_match_counts_for_all_filters(): void
@@ -229,8 +304,16 @@ class EmailSyncTest extends TestCase
         $mailbox = $this->mailbox();
         Email::create(['mailbox_account_id' => $mailbox->id, 'message_id' => 'y1', 'subject' => 'Order shipped', 'from_email' => 'shop@store.com', 'received_at' => now()]);
 
-        EmailFilter::create(['name' => 'Store', 'type' => 'sender_domain', 'value' => 'store.com', 'is_active' => true]);
-        EmailFilter::create(['name' => 'Orders', 'type' => 'subject_keyword', 'value' => 'order', 'is_active' => true]);
+        EmailFilter::create([
+            'name' => 'Store',
+            'conditions' => $this->singleCondition('sender_domain', 'store.com'),
+            'is_active' => true,
+        ]);
+        EmailFilter::create([
+            'name' => 'Orders',
+            'conditions' => $this->singleCondition('subject_keyword', 'order'),
+            'is_active' => true,
+        ]);
 
         $response = $this->actingAs($this->regularUser(), 'sanctum')
             ->getJson('/api/email-filters')

@@ -143,6 +143,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('mailboxes',                           [MailboxController::class, 'index']);
         Route::post('mailboxes/oauth/start',              [MailboxController::class, 'startOAuth']);
         Route::get('mailboxes/oauth/check',               [MailboxController::class, 'checkOAuth']);
+        Route::match(['put', 'patch'], 'mailboxes/{mailbox}', [MailboxController::class, 'update']);
         Route::post('mailboxes/{mailbox}/sync',           [MailboxController::class, 'sync']);
         Route::get('mailboxes/{mailbox}/sync-logs',       [MailboxController::class, 'syncLogs']);
         Route::delete('mailboxes/{mailbox}',              [MailboxController::class, 'destroy']);
@@ -155,5 +156,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('email-filters',                           [EmailFilterController::class, 'index']);
     Route::post('email-filters',                          [EmailFilterController::class, 'store']);
     Route::patch('email-filters/{emailFilter}',           [EmailFilterController::class, 'update']);
+    Route::post('email-filters/{emailFilter}/sync',       [EmailFilterController::class, 'sync']);
     Route::delete('email-filters/{emailFilter}',          [EmailFilterController::class, 'destroy']);
 });

@@ -22,9 +22,12 @@ export function formatPercent(n: number, digits = 1) {
   return `${n.toFixed(digits)}%`;
 }
 
+export const EAT = "Africa/Nairobi";
+
 export function formatDateTime(d: Date | string) {
   const date = typeof d === "string" ? new Date(d) : d;
   return date.toLocaleString("en-KE", {
+    timeZone: EAT,
     month: "short",
     day: "2-digit",
     hour: "2-digit",

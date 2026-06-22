@@ -64,8 +64,19 @@ class DashboardController extends Controller
             ->mapWithKeys(fn ($cnt, $status) => [strtolower(trim($status ?? 'unknown')) => (int) $cnt])
             ->toArray();
 
+        $total = (int) (clone $base)->count();
+
+        // Count distinct days that have at least one order (active trading days)
+        $activeDays = (int) (clone $base)
+            ->selectRaw('COUNT(DISTINCT DATE(order_date)) as cnt')
+            ->value('cnt');
+
+        $avgPerDay = $activeDays > 0
+            ? round($total / $activeDays, 1)
+            : 0.0;
+
         return [
-            'total'            => (int) (clone $base)->count(),
+            'total'            => $total,
             'completed'        => $rows['completed']        ?? 0,
             'shipping'         => $rows['shipping']         ?? 0,
             'pending_approval' => $rows['pending approval'] ?? 0,
@@ -73,6 +84,8 @@ class DashboardController extends Controller
             'on_hold'          => ($rows['on hold'] ?? 0) + ($rows['credit hold'] ?? 0),
             'open'             => $rows['open']             ?? 0,
             'back_order'       => $rows['back order']       ?? 0,
+            'avg_per_day'      => $avgPerDay,
+            'active_days'      => $activeDays,
         ];
     }
 

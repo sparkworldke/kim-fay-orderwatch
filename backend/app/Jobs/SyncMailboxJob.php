@@ -5,22 +5,17 @@ namespace App\Jobs;
 use App\Models\MailboxAccount;
 use App\Models\MailboxSyncLog;
 use App\Services\Email\OutlookEmailService;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 use Throwable;
 
-class SyncMailboxJob implements ShouldQueue
+class SyncMailboxJob
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
 
-    public int $tries = 3;
-
-    public int $backoff = 60;
-
-    public function __construct(public readonly int $mailboxAccountId) {}
+    public function __construct(
+        public readonly int $mailboxAccountId,
+        public readonly ?int $emailFilterId = null,
+    ) {}
 
     public function handle(OutlookEmailService $outlook): void
     {
@@ -33,7 +28,7 @@ class SyncMailboxJob implements ShouldQueue
         ]);
 
         try {
-            $count = $outlook->syncEmails($account);
+            $count = $outlook->syncEmails($account, $this->emailFilterId);
 
             $log->update([
                 'status'         => 'completed',

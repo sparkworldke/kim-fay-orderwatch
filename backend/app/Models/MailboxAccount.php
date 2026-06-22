@@ -16,6 +16,7 @@ class MailboxAccount extends Model
         'status',
         'last_synced_at',
         'delta_token',
+        'sync_from_date',
     ];
 
     protected function casts(): array
@@ -23,6 +24,7 @@ class MailboxAccount extends Model
         return [
             'token_expires_at' => 'datetime',
             'last_synced_at'   => 'datetime',
+            'sync_from_date'   => 'date',
         ];
     }
 

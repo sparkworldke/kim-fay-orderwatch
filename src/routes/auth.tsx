@@ -9,7 +9,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { setSession, setToken } from "@/lib/auth";
 import type { Role } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
-import logoAsset from "@/assets/kim-fay-logo.png.asset.json";
+import { LogoImage } from "@/components/logo-image";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -324,7 +324,7 @@ function AuthPage() {
       >
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/95 shadow">
-            <img src={logoAsset.url} alt="Kim-Fay" className="h-9 w-9 object-contain" />
+            <LogoImage className="h-9 w-9 object-contain" />
           </div>
           <div>
             <div className="text-sm font-semibold tracking-wide">KIM-FAY</div>
@@ -336,23 +336,6 @@ function AuthPage() {
           <h1 className="font-mono text-4xl font-semibold leading-tight">
             Every Order.<br />Accounted For.
           </h1>
-          <p className="mt-4 text-sm text-white/80">
-            Real-time control tower for Outlook order capture, Acumatica reconciliation,
-            SLA monitoring and revenue protection — powered by AI insights every 3 hours.
-          </p>
-
-          <div className="mt-8 grid grid-cols-3 gap-3 text-xs">
-            {[
-              { k: "Capture", v: "98.4%" },
-              { k: "SLA", v: "96.1%" },
-              { k: "At Risk", v: "KES 4.2M" },
-            ].map((s) => (
-              <div key={s.k} className="rounded-md border border-white/15 bg-white/5 p-3 backdrop-blur">
-                <div className="text-[10px] uppercase tracking-wider text-white/60">{s.k}</div>
-                <div className="font-mono text-base font-semibold">{s.v}</div>
-              </div>
-            ))}
-          </div>
         </div>
 
         <div className="flex items-center gap-2 text-xs text-white/60">
@@ -368,7 +351,7 @@ function AuthPage() {
       <div className="flex items-center justify-center bg-background px-6 py-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-2 lg:hidden">
-            <img src={logoAsset.url} alt="Kim-Fay" className="h-8 w-8" />
+            <LogoImage className="h-8 w-8 object-contain" />
             <span className="text-sm font-semibold">Kim-Fay OrderWatch</span>
           </div>
 

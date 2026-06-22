@@ -21,10 +21,11 @@ function showError(error: unknown) {
 
 // --- Mailboxes ---
 
-export function useMailboxAccounts() {
+export function useMailboxAccounts(enabled = true) {
   return useQuery({
     queryKey: MAILBOXES_KEY,
     queryFn: () => apiFetch<MailboxAccount[]>("admin/mailboxes"),
+    enabled,
   });
 }
 
@@ -52,14 +53,30 @@ export function useCheckOAuth() {
   });
 }
 
+export function useUpdateMailbox() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...payload }: { id: number; sync_from_date?: string | null }) =>
+      apiFetch<MailboxAccount>(`admin/mailboxes/${id}`, { method: "PUT", body: payload }),
+    onSuccess: () => {
+      toast.success("Import settings saved — next sync will use the new date.");
+      queryClient.invalidateQueries({ queryKey: MAILBOXES_KEY });
+    },
+    onError: showError,
+  });
+}
+
 export function useSyncMailbox() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (id: number) => apiFetch<{ message: string }>(`admin/mailboxes/${id}/sync`, { method: "POST" }),
-    onSuccess: () => {
-      toast.success("Sync queued — emails will update shortly.");
+    onSuccess: (_data, id) => {
+      toast.success("Sync completed.");
       queryClient.invalidateQueries({ queryKey: MAILBOXES_KEY });
+      // Immediately refresh logs so the "running" state appears without waiting for the poll
+      queryClient.invalidateQueries({ queryKey: [...MAILBOXES_KEY, id, "sync-logs"] });
     },
     onError: showError,
   });
@@ -84,6 +101,8 @@ export function useMailboxSyncLogs(mailboxId: number | null) {
     queryKey: [...MAILBOXES_KEY, mailboxId, "sync-logs"],
     queryFn: () => apiFetch<SyncLog[]>(`admin/mailboxes/${mailboxId}/sync-logs`),
     enabled: mailboxId !== null,
+    // Poll every 5 s so running syncs update live; stops automatically when disabled
+    refetchInterval: 5000,
   });
 }
 
@@ -143,6 +162,20 @@ export function useUpdateEmailFilter() {
     onSuccess: () => {
       toast.success("Filter updated.");
       queryClient.invalidateQueries({ queryKey: FILTERS_KEY });
+    },
+    onError: showError,
+  });
+}
+
+export function useSyncRule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (filterId: number) =>
+      apiFetch<{ message: string }>(`email-filters/${filterId}/sync`, { method: "POST" }),
+    onSuccess: (data) => {
+      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: MAILBOXES_KEY });
     },
     onError: showError,
   });

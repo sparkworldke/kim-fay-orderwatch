@@ -7,6 +7,7 @@ import {
   Loader2,
   Mail,
   MailOpen,
+  Minus,
   Plus,
   RefreshCw,
   Search,
@@ -42,12 +43,16 @@ import {
   useEmailFilters,
   useEmails,
   useMailboxAccounts,
+  useMailboxSyncLogs,
   useStartOAuth,
   useSyncMailbox,
+  useSyncRule,
   useUpdateEmailFilter,
   type OAuthCheckResult,
 } from "@/hooks/mailbox/useMailbox";
-import type { CreateEmailFilterPayload, EmailFilter, EmailFilterType, EmailMessage, MailboxAccount } from "@/types/mailbox";
+import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
+import type { CreateEmailFilterPayload, EmailFilter, EmailFilterCondition, EmailFilterType, EmailMessage, MailboxAccount, SyncLog } from "@/types/mailbox";
 
 export const Route = createFileRoute("/app/mailbox")({
   head: () => ({ meta: [{ title: "Mailbox - Kim-Fay OrderWatch" }] }),
@@ -60,10 +65,12 @@ export const Route = createFileRoute("/app/mailbox")({
 
 function MailboxPage() {
   const { connected, error } = useSearch({ from: "/app/mailbox" });
+  const { session } = useAuth();
+  const isAdmin = session?.role === "Administrator";
 
   useEffect(() => {
     if (connected === "1") {
-      toast.success("Outlook account connected — initial sync queued.");
+      toast.success("Outlook account connected — initial sync completed.");
     }
     if (error) {
       toast.error(`OAuth error: ${error}`);
@@ -89,10 +96,12 @@ function MailboxPage() {
             <Filter className="h-3.5 w-3.5" />
             Filter Rules
           </TabsTrigger>
-          <TabsTrigger value="accounts" className="gap-1.5">
-            <Settings className="h-3.5 w-3.5" />
-            Accounts
-          </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="accounts" className="gap-1.5">
+              <Settings className="h-3.5 w-3.5" />
+              Accounts
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="inbox">
@@ -101,9 +110,11 @@ function MailboxPage() {
         <TabsContent value="filters">
           <FilterRulesPanel />
         </TabsContent>
-        <TabsContent value="accounts">
-          <AccountsPanel />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="accounts">
+            <AccountsPanel />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
@@ -115,8 +126,10 @@ function InboxPanel() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [mailboxId, setMailboxId] = useState<number | undefined>();
+  const { session } = useAuth();
+  const isAdmin = session?.role === "Administrator";
 
-  const { data: mailboxes } = useMailboxAccounts();
+  const { data: mailboxes } = useMailboxAccounts(isAdmin);
   const { data, isLoading, isError, refetch } = useEmails({
     search: debouncedSearch || undefined,
     mailbox_id: mailboxId,
@@ -194,7 +207,9 @@ function InboxPanel() {
               title="No emails yet"
               description={
                 mailboxes && mailboxes.length === 0
-                  ? "Connect an Outlook account in the Accounts tab to start syncing."
+                  ? isAdmin
+                    ? "Connect an Outlook account in the Accounts tab to start syncing."
+                    : "An administrator must connect a mailbox account before synced email import is available."
                   : "No emails match your current search."
               }
             />
@@ -235,7 +250,7 @@ function EmailRow({ email }: { email: EmailMessage }) {
             </span>
             {email.received_at && (
               <span className="shrink-0 text-xs text-muted-foreground">
-                {new Date(email.received_at).toLocaleString()}
+                {new Date(email.received_at).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}
               </span>
             )}
           </div>
@@ -260,27 +275,58 @@ function EmailRow({ email }: { email: EmailMessage }) {
 
 function FilterRulesPanel() {
   const { data, isLoading, isError, refetch } = useEmailFilters();
+  const { session } = useAuth();
+  const isAdmin = session?.role === "Administrator";
+  const { data: mailboxes } = useMailboxAccounts(isAdmin);
+  const sync = useSyncMailbox();
   const [createOpen, setCreateOpen] = useState(false);
+  const [syncedIds, setSyncedIds] = useState<number[]>([]);
+
+  function syncAll() {
+    const accounts = mailboxes ?? [];
+    setSyncedIds(accounts.map((a) => a.id));
+    accounts.forEach((a) => sync.mutate(a.id, { onSettled: () => setSyncedIds((ids) => ids.filter((id) => id !== a.id)) }));
+  }
+
+  const hasSyncing = syncedIds.length > 0;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-0.5">
           <p className="text-sm text-muted-foreground">
-            Rules are evaluated against all synced emails. Each card shows a real-time match count.
+            Rules control which emails are imported during sync — an email is kept if it matches <strong>at least one</strong> active rule.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Each card shows a real-time count of already-synced emails that match the rule.
           </p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5 shrink-0">
-              <Plus className="h-3.5 w-3.5" />
-              New Rule
+        <div className="flex shrink-0 gap-2">
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={hasSyncing || !mailboxes?.length}
+              onClick={syncAll}
+              title={!mailboxes?.length ? "No mailbox connected" : "Sync inbox now"}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${hasSyncing ? "animate-spin" : ""}`} />
+              {hasSyncing ? "Syncing…" : "Sync Inbox"}
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <CreateFilterDialog onSuccess={() => setCreateOpen(false)} />
-          </DialogContent>
-        </Dialog>
+          )}
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5 shrink-0">
+                <Plus className="h-3.5 w-3.5" />
+                New Rule
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <CreateFilterDialog onSuccess={() => { setCreateOpen(false); refetch(); }} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading && (
@@ -324,26 +370,37 @@ function FilterRulesPanel() {
 }
 
 const FILTER_TYPE_LABELS: Record<EmailFilterType, string> = {
-  sender_email: "Sender Email",
+  sender_email: "Exact Email",
   sender_domain: "Sender Domain",
-  subject_keyword: "Subject Keyword",
+  subject_keyword: "Subject Contains",
+  received_date: "Received Date",
+  date_range: "Date Range",
 };
 
+function displayConditionValue(type: EmailFilterType, value: string): string {
+  if (type === "received_date") {
+    return new Date(value + "T12:00:00").toLocaleDateString("en-KE", { dateStyle: "medium" });
+  }
+  if (type === "date_range") {
+    const [from = "", to = ""] = value.split("|");
+    const fmt = (d: string) =>
+      new Date(d + "T12:00:00").toLocaleDateString("en-KE", { dateStyle: "medium" });
+    return `${fmt(from)} – ${fmt(to)}`;
+  }
+  return value;
+}
+
 function FilterRuleCard({ filter }: { filter: EmailFilter }) {
-  const update = useUpdateEmailFilter();
-  const remove = useDeleteEmailFilter();
+  const update    = useUpdateEmailFilter();
+  const remove    = useDeleteEmailFilter();
+  const syncRule  = useSyncRule();
   const [editOpen, setEditOpen] = useState(false);
 
   return (
     <Card className={filter.is_active ? "" : "opacity-60"}>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="text-sm font-medium leading-tight">{filter.name}</CardTitle>
-            <Badge variant="outline" className="mt-1 text-[10px]">
-              {FILTER_TYPE_LABELS[filter.type]}
-            </Badge>
-          </div>
+          <CardTitle className="text-sm font-medium leading-tight">{filter.name}</CardTitle>
           <div className="shrink-0 text-right">
             <div className="text-2xl font-bold tabular-nums text-primary">{filter.match_count}</div>
             <div className="text-[10px] text-muted-foreground leading-tight">matches</div>
@@ -351,7 +408,18 @@ function FilterRuleCard({ filter }: { filter: EmailFilter }) {
         </div>
       </CardHeader>
       <CardContent className="pt-0 space-y-2">
-        <p className="font-mono text-xs text-muted-foreground break-all">{filter.value}</p>
+        <div className="rounded-sm border bg-muted/20 divide-y overflow-hidden">
+          {normalizeConditions(filter).map((c, i) => (
+            <div key={i} className="flex items-center gap-0 text-xs">
+              <span className="shrink-0 bg-muted/50 px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide w-28 border-r">
+                {FILTER_TYPE_LABELS[c.type]}
+              </span>
+              <span className="font-mono px-2 py-1 text-muted-foreground break-all flex-1">
+                {displayConditionValue(c.type, c.value)}
+              </span>
+            </div>
+          ))}
+        </div>
         <div className="flex items-center justify-between gap-2 pt-1">
           <div className="flex items-center gap-1.5">
             <Switch
@@ -362,6 +430,17 @@ function FilterRuleCard({ filter }: { filter: EmailFilter }) {
             <span className="text-xs text-muted-foreground">{filter.is_active ? "Active" : "Paused"}</span>
           </div>
           <div className="flex gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={syncRule.isPending || !filter.is_active}
+              title={filter.is_active ? "Sync inbox using only this rule" : "Rule is paused"}
+              onClick={() => syncRule.mutate(filter.id)}
+            >
+              <RefreshCw className={`h-3 w-3 ${syncRule.isPending ? "animate-spin" : ""}`} />
+              Sync
+            </Button>
             <Dialog open={editOpen} onOpenChange={setEditOpen}>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -388,22 +467,147 @@ function FilterRuleCard({ filter }: { filter: EmailFilter }) {
   );
 }
 
+// ─── Filter form types ───────────────────────────────────────────────────────
+
+type ConditionRow = {
+  type: EmailFilterType;
+  value: string;
+  value_to: string; // only used when type === "date_range"
+};
+
+type FilterFormState = {
+  name: string;
+  conditions: ConditionRow[];
+  is_active: boolean;
+};
+
+type ConditionRowErrors = {
+  type?: string;
+  value?: string;
+  value_to?: string;
+};
+
+type FilterFormErrors = {
+  form?: string;
+  name?: string;
+  conditions: ConditionRowErrors[];
+};
+
+const DEFAULT_CONDITION: ConditionRow = { type: "sender_domain", value: "", value_to: "" };
+
+function normalizeConditions(filter: EmailFilter): EmailFilterCondition[] {
+  if (filter.conditions?.length) return filter.conditions;
+  // Old server response: top-level type + value
+  if (filter.type) return [{ type: filter.type, value: filter.value ?? "" }];
+  return [];
+}
+
+function deserializeConditions(filter: EmailFilter): ConditionRow[] {
+  const conditions = normalizeConditions(filter);
+  if (!conditions.length) return [{ ...DEFAULT_CONDITION }];
+  return conditions.map((c) => {
+    if (c.type === "date_range") {
+      const [from = "", to = ""] = c.value.split("|");
+      return { type: c.type, value: from, value_to: to };
+    }
+    return { type: c.type, value: c.value, value_to: "" };
+  });
+}
+
+function buildPayload(form: FilterFormState): CreateEmailFilterPayload {
+  const conditions = form.conditions.map((c) => ({
+    type: c.type,
+    value: c.type === "date_range" ? `${c.value}|${c.value_to}` : c.value.trim(),
+  }));
+
+  const primaryCondition = conditions[0];
+
+  return {
+    name: form.name.trim(),
+    conditions,
+    ...(primaryCondition ? { type: primaryCondition.type, value: primaryCondition.value } : {}),
+    is_active: form.is_active,
+  };
+}
+
+function emptyFormErrors(form: FilterFormState): FilterFormErrors {
+  return {
+    conditions: form.conditions.map(() => ({})),
+  };
+}
+
+function hasFormErrors(errors: FilterFormErrors): boolean {
+  return Boolean(
+    errors.form ||
+    errors.name ||
+    errors.conditions.some((condition) => condition.type || condition.value || condition.value_to),
+  );
+}
+
+function validateForm(form: FilterFormState): FilterFormErrors {
+  const errors = emptyFormErrors(form);
+
+  if (!form.name.trim()) {
+    errors.name = "Rule name is required.";
+  }
+
+  if (!form.conditions.length) {
+    errors.form = "Add at least one condition.";
+    return errors;
+  }
+
+  form.conditions.forEach((condition, index) => {
+    const conditionErrors = errors.conditions[index] ?? {};
+
+    if (!condition.type) {
+      conditionErrors.type = "Condition type is required.";
+    }
+
+    if (condition.type === "date_range") {
+      if (!condition.value) {
+        conditionErrors.value = "From date is required.";
+      }
+      if (!condition.value_to) {
+        conditionErrors.value_to = "To date is required.";
+      }
+      if (condition.value && condition.value_to && condition.value > condition.value_to) {
+        conditionErrors.value_to = "To date must be on or after the from date.";
+      }
+    } else if (!condition.value.trim()) {
+      conditionErrors.value = "Condition value is required.";
+    }
+
+    errors.conditions[index] = conditionErrors;
+  });
+
+  if (!errors.form && hasFormErrors(errors)) {
+    errors.form = "Please fix the highlighted fields before submitting.";
+  }
+
+  return errors;
+}
+
+// ─── Dialogs ─────────────────────────────────────────────────────────────────
+
 function CreateFilterDialog({ onSuccess }: { onSuccess: () => void }) {
   const create = useCreateEmailFilter();
-  const [form, setForm] = useState<CreateEmailFilterPayload>({
+  const [form, setForm] = useState<FilterFormState>({
     name: "",
-    type: "sender_domain",
-    value: "",
+    conditions: [{ ...DEFAULT_CONDITION }],
     is_active: true,
   });
+  const [showErrors, setShowErrors] = useState(false);
+  const validation = validateForm(form);
+  const errors = showErrors ? validation : emptyFormErrors(form);
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!form.name.trim() || !form.value.trim()) {
-      toast.error("Name and value are required.");
+    setShowErrors(true);
+    if (hasFormErrors(validation)) {
+      toast.error(validation.form ?? "Please fix the highlighted fields before submitting.");
       return;
     }
-    create.mutate(form, { onSuccess });
+    create.mutate(buildPayload(form), { onSuccess });
   }
 
   return (
@@ -411,13 +615,13 @@ function CreateFilterDialog({ onSuccess }: { onSuccess: () => void }) {
       <DialogHeader>
         <DialogTitle>New Filter Rule</DialogTitle>
       </DialogHeader>
-      <div className="mt-4 grid gap-3">
-        <FilterFormFields form={form} setForm={setForm} />
+      <div className="mt-4 space-y-4">
+        <FilterFormFields form={form} setForm={setForm} errors={errors} />
       </div>
       <DialogFooter className="mt-4">
         <Button type="submit" disabled={create.isPending}>
           {create.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-          Create Filter
+          Create Rule
         </Button>
       </DialogFooter>
     </form>
@@ -426,16 +630,23 @@ function CreateFilterDialog({ onSuccess }: { onSuccess: () => void }) {
 
 function EditFilterDialog({ filter, onSuccess }: { filter: EmailFilter; onSuccess: () => void }) {
   const update = useUpdateEmailFilter();
-  const [form, setForm] = useState<CreateEmailFilterPayload>({
+  const [form, setForm] = useState<FilterFormState>({
     name: filter.name,
-    type: filter.type,
-    value: filter.value,
+    conditions: deserializeConditions(filter),
     is_active: filter.is_active,
   });
+  const [showErrors, setShowErrors] = useState(false);
+  const validation = validateForm(form);
+  const errors = showErrors ? validation : emptyFormErrors(form);
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    update.mutate({ id: filter.id, ...form }, { onSuccess });
+    setShowErrors(true);
+    if (hasFormErrors(validation)) {
+      toast.error(validation.form ?? "Please fix the highlighted fields before submitting.");
+      return;
+    }
+    update.mutate({ id: filter.id, ...buildPayload(form) }, { onSuccess });
   }
 
   return (
@@ -443,8 +654,8 @@ function EditFilterDialog({ filter, onSuccess }: { filter: EmailFilter; onSucces
       <DialogHeader>
         <DialogTitle>Edit Filter Rule</DialogTitle>
       </DialogHeader>
-      <div className="mt-4 grid gap-3">
-        <FilterFormFields form={form} setForm={setForm} />
+      <div className="mt-4 space-y-4">
+        <FilterFormFields form={form} setForm={setForm} errors={errors} />
       </div>
       <DialogFooter className="mt-4">
         <Button type="submit" disabled={update.isPending}>
@@ -456,60 +667,77 @@ function EditFilterDialog({ filter, onSuccess }: { filter: EmailFilter; onSucces
   );
 }
 
+// ─── Form fields ─────────────────────────────────────────────────────────────
+
 function FilterFormFields({
   form,
   setForm,
+  errors,
 }: {
-  form: CreateEmailFilterPayload;
-  setForm: React.Dispatch<React.SetStateAction<CreateEmailFilterPayload>>;
+  form: FilterFormState;
+  setForm: React.Dispatch<React.SetStateAction<FilterFormState>>;
+  errors: FilterFormErrors;
 }) {
-  const placeholders: Record<EmailFilterType, string> = {
-    sender_email: "e.g. alerts@github.com",
-    sender_domain: "e.g. gmail.com",
-    subject_keyword: "e.g. invoice",
-  };
+  function addCondition() {
+    setForm((v) => ({ ...v, conditions: [...v.conditions, { ...DEFAULT_CONDITION }] }));
+  }
+
+  function removeCondition(i: number) {
+    setForm((v) => ({ ...v, conditions: v.conditions.filter((_, idx) => idx !== i) }));
+  }
+
+  function updateCondition(i: number, patch: Partial<ConditionRow>) {
+    setForm((v) => ({
+      ...v,
+      conditions: v.conditions.map((c, idx) =>
+        idx === i ? { ...c, ...patch } : c
+      ),
+    }));
+  }
 
   return (
     <>
+      {errors.form && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {errors.form}
+        </div>
+      )}
+
       <div className="grid gap-1.5">
         <Label htmlFor="filter-name">Rule Name</Label>
         <Input
           id="filter-name"
+          aria-invalid={Boolean(errors.name)}
+          className={errors.name ? "border-destructive focus-visible:ring-destructive" : undefined}
           value={form.name}
-          placeholder="e.g. Gmail Senders"
+          placeholder="e.g. Naivas Purchase Orders"
           onChange={(e) => setForm((v) => ({ ...v, name: e.target.value }))}
         />
+        {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
       </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="filter-type">Filter By</Label>
-        <Select
-          value={form.type}
-          onValueChange={(v) => setForm((prev) => ({ ...prev, type: v as EmailFilterType }))}
-        >
-          <SelectTrigger id="filter-type">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="sender_email">Sender Email (exact)</SelectItem>
-            <SelectItem value="sender_domain">Sender Domain</SelectItem>
-            <SelectItem value="subject_keyword">Subject Keyword</SelectItem>
-          </SelectContent>
-        </Select>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>Conditions <span className="text-xs text-muted-foreground font-normal">(all must match)</span></Label>
+          <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={addCondition}>
+            <Plus className="h-3 w-3" />
+            Add
+          </Button>
+        </div>
+
+        {form.conditions.map((condition, i) => (
+          <ConditionRowField
+            key={i}
+            index={i}
+            condition={condition}
+            errors={errors.conditions[i] ?? {}}
+            showRemove={form.conditions.length > 1}
+            onChange={(patch) => updateCondition(i, patch)}
+            onRemove={() => removeCondition(i)}
+          />
+        ))}
       </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="filter-value">Value</Label>
-        <Input
-          id="filter-value"
-          value={form.value}
-          placeholder={placeholders[form.type]}
-          onChange={(e) => setForm((v) => ({ ...v, value: e.target.value }))}
-        />
-        <p className="text-xs text-muted-foreground">
-          {form.type === "sender_email" && "Exact email address match (case-insensitive)."}
-          {form.type === "sender_domain" && "Matches any email ending in @domain. Enter only the domain part."}
-          {form.type === "subject_keyword" && "Matches subjects containing this word or phrase (case-insensitive)."}
-        </p>
-      </div>
+
       <div className="flex items-center gap-2">
         <Switch
           id="filter-active"
@@ -522,14 +750,132 @@ function FilterFormFields({
   );
 }
 
+function ConditionRowField({
+  index,
+  condition,
+  errors,
+  showRemove,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  condition: ConditionRow;
+  errors: ConditionRowErrors;
+  showRemove: boolean;
+  onChange: (patch: Partial<ConditionRow>) => void;
+  onRemove: () => void;
+}) {
+  const isDate = condition.type === "received_date" || condition.type === "date_range";
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Select
+          value={condition.type}
+          onValueChange={(v) => onChange({ type: v as EmailFilterType, value: "", value_to: "" })}
+        >
+          <SelectTrigger
+            aria-invalid={Boolean(errors.type)}
+            className={`h-8 text-xs flex-1 ${errors.type ? "border-destructive focus:ring-destructive" : ""}`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="sender_email">Exact Email Address</SelectItem>
+            <SelectItem value="sender_domain">Sender Domain</SelectItem>
+            <SelectItem value="subject_keyword">Subject Contains</SelectItem>
+            <SelectItem value="received_date">Received Date</SelectItem>
+            <SelectItem value="date_range">Date Range</SelectItem>
+          </SelectContent>
+        </Select>
+        {showRemove && (
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={onRemove}>
+            <Minus className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+      {errors.type && <p className="text-xs text-destructive">{errors.type}</p>}
+
+      {!isDate && (
+        <>
+          <Input
+            aria-invalid={Boolean(errors.value)}
+            className={`h-8 text-xs ${errors.value ? "border-destructive focus-visible:ring-destructive" : ""}`}
+            value={condition.value}
+            placeholder={
+              condition.type === "sender_email" ? "e.g. orders@supplier.com" :
+              condition.type === "sender_domain" ? "e.g. naivas.co.ke" :
+              "e.g. purchase order"
+            }
+            onChange={(e) => onChange({ value: e.target.value })}
+          />
+          {errors.value && <p className="text-xs text-destructive">{errors.value}</p>}
+        </>
+      )}
+
+      {condition.type === "received_date" && (
+        <>
+          <Input
+            type="date"
+            aria-invalid={Boolean(errors.value)}
+            className={`h-8 text-xs ${errors.value ? "border-destructive focus-visible:ring-destructive" : ""}`}
+            value={condition.value}
+            onChange={(e) => onChange({ value: e.target.value })}
+          />
+          {errors.value && <p className="text-xs text-destructive">{errors.value}</p>}
+        </>
+      )}
+
+      {condition.type === "date_range" && (
+        <>
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              aria-invalid={Boolean(errors.value)}
+              className={`h-8 text-xs ${errors.value ? "border-destructive focus-visible:ring-destructive" : ""}`}
+              value={condition.value}
+              onChange={(e) => onChange({ value: e.target.value })}
+            />
+            <span className="text-xs text-muted-foreground shrink-0">to</span>
+            <Input
+              type="date"
+              aria-invalid={Boolean(errors.value_to)}
+              className={`h-8 text-xs ${errors.value_to ? "border-destructive focus-visible:ring-destructive" : ""}`}
+              value={condition.value_to}
+              min={condition.value || undefined}
+              onChange={(e) => onChange({ value_to: e.target.value })}
+            />
+          </div>
+          {errors.value && <p className="text-xs text-destructive">{errors.value}</p>}
+          {errors.value_to && <p className="text-xs text-destructive">{errors.value_to}</p>}
+        </>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">
+        {condition.type === "sender_email" && "Exact address match (case-insensitive)."}
+        {condition.type === "sender_domain" && "Matches any email from @domain — enter only the domain part."}
+        {condition.type === "subject_keyword" && "Matches subjects containing this word or phrase."}
+        {condition.type === "received_date" && "Emails received on this exact calendar date."}
+        {condition.type === "date_range" && "Emails received between these dates (inclusive)."}
+      </p>
+    </div>
+  );
+}
+
 // ─── Accounts Panel ───────────────────────────────────────────────────────────
 
 function AccountsPanel() {
-  const { data, isLoading, isError, refetch } = useMailboxAccounts();
+  const { session } = useAuth();
+  const isAdmin = session?.role === "Administrator";
+  const { data, isLoading, isError, error, refetch } = useMailboxAccounts(isAdmin);
   const startOAuth = useStartOAuth();
   const sync       = useSyncMailbox();
   const disconnect = useDisconnectMailbox();
   const checkOAuth = useCheckOAuth();
+  const loadErrorMessage =
+    error instanceof ApiError
+      ? error.message
+      : "Try again.";
 
   return (
     <div className="space-y-4">
@@ -542,7 +888,7 @@ function AccountsPanel() {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            disabled={checkOAuth.isPending}
+            disabled={checkOAuth.isPending || !isAdmin}
             onClick={() => checkOAuth.mutate()}
           >
             {checkOAuth.isPending
@@ -553,7 +899,7 @@ function AccountsPanel() {
           <Button
             size="sm"
             className="gap-1.5"
-            disabled={startOAuth.isPending}
+            disabled={startOAuth.isPending || !isAdmin}
             onClick={() => startOAuth.mutate()}
           >
             {startOAuth.isPending
@@ -567,7 +913,15 @@ function AccountsPanel() {
       {/* OAuth check results */}
       {checkOAuth.data && <OAuthCheckPanel result={checkOAuth.data} />}
 
-      {isLoading && (
+      {!isAdmin && (
+        <EmptyState
+          icon={XCircle}
+          title="Administrator Access Required"
+          description="Only administrators can view and manage connected mailbox accounts."
+        />
+      )}
+
+      {isAdmin && isLoading && (
         <div className="space-y-2">
           {Array.from({ length: 2 }).map((_, i) => (
             <Skeleton key={i} className="h-20 rounded-lg" />
@@ -575,15 +929,15 @@ function AccountsPanel() {
         </div>
       )}
 
-      {isError && (
-        <EmptyState icon={XCircle} title="Could not load accounts" description="Try again.">
+      {isAdmin && isError && (
+        <EmptyState icon={XCircle} title="Could not load accounts" description={loadErrorMessage}>
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             Retry
           </Button>
         </EmptyState>
       )}
 
-      {!isLoading && !isError && data && data.length === 0 && (
+      {isAdmin && !isLoading && !isError && data && data.length === 0 && (
         <EmptyState
           icon={Mail}
           title="No accounts connected"
@@ -591,7 +945,7 @@ function AccountsPanel() {
         />
       )}
 
-      {!isLoading && !isError && data && data.length > 0 && (
+      {isAdmin && !isLoading && !isError && data && data.length > 0 && (
         <div className="divide-y rounded-lg border bg-card">
           {data.map((account) => (
             <MailboxAccountRow
@@ -624,44 +978,130 @@ function MailboxAccountRow({
   syncPending: boolean;
   disconnectPending: boolean;
 }) {
+  const { data: logs } = useMailboxSyncLogs(account.id);
+  const hasRunning = logs?.some((l) => l.status === "running") ?? false;
+
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <AccountStatusIcon status={account.status} />
-          <span className="font-medium text-sm">{account.email}</span>
-          {account.display_name && account.display_name !== account.email && (
-            <span className="text-xs text-muted-foreground">({account.display_name})</span>
-          )}
+    <div className="px-4 py-3 space-y-3">
+      {/* Account header */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <AccountStatusIcon status={account.status} />
+            <span className="font-medium text-sm">{account.email}</span>
+            {account.display_name && account.display_name !== account.email && (
+              <span className="text-xs text-muted-foreground">({account.display_name})</span>
+            )}
+            {hasRunning && (
+              <span className="flex items-center gap-1 text-[11px] text-blue-500 font-medium">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Syncing…
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {account.last_synced_at
+              ? `Last synced ${new Date(account.last_synced_at).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}`
+              : "Never synced"}
+          </div>
         </div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          {account.last_synced_at
-            ? `Last synced ${new Date(account.last_synced_at).toLocaleString()}`
-            : "Never synced"}
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={onSync}
+            disabled={syncPending || hasRunning}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${hasRunning ? "animate-spin" : ""}`} />
+            {hasRunning ? "Syncing" : "Sync"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-destructive hover:text-destructive"
+            onClick={onDisconnect}
+            disabled={disconnectPending}
+          >
+            <Unplug className="h-3.5 w-3.5" />
+            Disconnect
+          </Button>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={onSync}
-          disabled={syncPending}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${syncPending ? "animate-spin" : ""}`} />
-          Sync
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5 text-destructive hover:text-destructive"
-          onClick={onDisconnect}
-          disabled={disconnectPending}
-        >
-          <Unplug className="h-3.5 w-3.5" />
-          Disconnect
-        </Button>
+
+      {/* Sync log */}
+      <MailboxSyncLogs logs={logs ?? []} />
+    </div>
+  );
+}
+
+function MailboxSyncLogs({ logs }: { logs: SyncLog[] }) {
+  if (!logs.length) {
+    return (
+      <p className="text-xs text-muted-foreground italic">
+        No sync history yet — click Sync to start importing emails.
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-md border bg-muted/20 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/40">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Sync History</span>
+        <span className="text-[11px] text-muted-foreground">· {logs.length} run{logs.length !== 1 ? "s" : ""}</span>
       </div>
+      <div className="divide-y">
+        {logs.map((log) => (
+          <SyncLogRow key={log.id} log={log} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SyncLogRow({ log }: { log: SyncLog }) {
+  const started = new Date(log.started_at);
+  const duration =
+    log.ended_at
+      ? Math.round((new Date(log.ended_at).getTime() - started.getTime()) / 1000)
+      : null;
+
+  const fmtDate = started.toLocaleString("en-KE", {
+    timeZone: "Africa/Nairobi",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 text-xs">
+      {log.status === "running"   && <Loader2    className="h-3 w-3 animate-spin text-blue-500 shrink-0" />}
+      {log.status === "completed" && <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />}
+      {log.status === "failed"    && <XCircle    className="h-3 w-3 text-destructive shrink-0" />}
+
+      <span className="shrink-0 text-muted-foreground w-32">{fmtDate}</span>
+
+      <span className="flex-1 truncate">
+        {log.status === "running" && (
+          <span className="text-blue-500 font-medium">Importing emails…</span>
+        )}
+        {log.status === "completed" && (
+          <span className="text-green-600">
+            {log.emails_fetched} email{log.emails_fetched !== 1 ? "s" : ""} imported
+          </span>
+        )}
+        {log.status === "failed" && (
+          <span className="text-destructive" title={log.error_message ?? undefined}>
+            {log.error_message ? log.error_message.slice(0, 80) : "Sync failed"}
+          </span>
+        )}
+      </span>
+
+      {duration !== null && (
+        <span className="shrink-0 text-muted-foreground">{duration}s</span>
+      )}
     </div>
   );
 }
@@ -709,7 +1149,7 @@ function OAuthCheckPanel({ result }: { result: OAuthCheckResult }) {
           {result.overall_ok ? "OAuth configuration looks good" : "Issues found — see details below"}
         </span>
         <span className="ml-auto text-[10px] text-muted-foreground">
-          Checked {new Date(result.checked_at).toLocaleTimeString()}
+          Checked {new Date(result.checked_at).toLocaleTimeString("en-KE", { timeZone: "Africa/Nairobi", hour: "2-digit", minute: "2-digit", hour12: false })}
         </span>
       </div>
 

@@ -150,7 +150,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 function fmt(value: string | null | undefined) {
   if (!value) return "—";
   const d = new Date(value);
-  return isNaN(d.getTime()) ? value : d.toLocaleString();
+  return isNaN(d.getTime()) ? value : d.toLocaleString("en-KE", { timeZone: "Africa/Nairobi" });
 }
 
 function fmtDate(value: string | null | undefined) {
@@ -602,7 +602,7 @@ function WorkflowCell({ value, color, isDate }: { value: string | null; color: W
   if (isNaN(d.getTime())) return <span className="text-xs text-muted-foreground">—</span>;
   return (
     <span className={`text-xs font-medium ${wfColors[color]}`}>
-      {isDate ? d.toLocaleDateString() : d.toLocaleString()}
+      {isDate ? d.toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" }) : d.toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}
     </span>
   );
 }

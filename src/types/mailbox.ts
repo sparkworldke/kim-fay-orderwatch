@@ -4,6 +4,7 @@ export interface MailboxAccount {
   display_name: string | null;
   status: "connected" | "error" | "disconnected";
   last_synced_at: string | null;
+  sync_from_date: string | null;
   created_at: string;
 }
 
@@ -22,13 +23,25 @@ export interface EmailMessage {
   created_at: string;
 }
 
-export type EmailFilterType = "sender_email" | "sender_domain" | "subject_keyword";
+export type EmailFilterType =
+  | "sender_email"
+  | "sender_domain"
+  | "subject_keyword"
+  | "received_date"
+  | "date_range";
+
+export interface EmailFilterCondition {
+  type: EmailFilterType;
+  value: string;
+}
 
 export interface EmailFilter {
   id: number;
   name: string;
-  type: EmailFilterType;
-  value: string;
+  // New server: conditions array. Old server: type + value at top level.
+  conditions?: EmailFilterCondition[];
+  type?: EmailFilterType;
+  value?: string;
   is_active: boolean;
   match_count: number;
   created_at: string;
@@ -37,13 +50,15 @@ export interface EmailFilter {
 
 export interface CreateEmailFilterPayload {
   name: string;
-  type: EmailFilterType;
-  value: string;
+  conditions: EmailFilterCondition[];
+  type?: EmailFilterType;
+  value?: string;
   is_active?: boolean;
 }
 
 export interface UpdateEmailFilterPayload {
   name?: string;
+  conditions?: EmailFilterCondition[];
   type?: EmailFilterType;
   value?: string;
   is_active?: boolean;

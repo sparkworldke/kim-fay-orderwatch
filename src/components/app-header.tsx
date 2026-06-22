@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bell, LogOut, RefreshCw, Search } from "lucide-react";
+import { LogOut, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +52,7 @@ export function AppHeader() {
         >
           <RefreshCw className="h-4 w-4" />
         </Button>
+        {/* Notifications hidden for now
         <Link to="/app/notifications" className="relative inline-flex">
           <Button variant="ghost" size="icon" aria-label="Notifications">
             <Bell className="h-4 w-4" />
@@ -62,6 +63,7 @@ export function AppHeader() {
             </span>
           )}
         </Link>
+        */}
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

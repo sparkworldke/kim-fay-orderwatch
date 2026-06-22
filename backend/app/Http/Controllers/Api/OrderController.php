@@ -41,7 +41,11 @@ class OrderController extends Controller
                 'acumatica_sales_orders.email_received_at',
                 'acumatica_sales_orders.synced_at',
             ])
-            ->orderByDesc('acumatica_sales_orders.order_date');
+            ->when(
+            $request->input('sort', 'latest') === 'oldest',
+            fn ($q) => $q->orderBy('acumatica_sales_orders.order_date', 'asc'),
+            fn ($q) => $q->orderByDesc('acumatica_sales_orders.order_date')
+        );
 
         if ($request->has('date_from')) {
             $query->whereDate('acumatica_sales_orders.order_date', '>=', $request->input('date_from'));

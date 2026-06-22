@@ -36,6 +36,12 @@ export const Route = createFileRoute("/app/orders")({
   component: OrdersPage,
 });
 
+function today() { return new Date().toISOString().slice(0, 10); }
+function startOfMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 const ORDER_STATUSES = ["Open", "Completed", "Cancelled", "Back Order", "Credit Hold", "On Hold", "Rejected", "Shipping", "Pending Approval"];
 
 const MATCH_STATUSES = [
@@ -52,8 +58,9 @@ function OrdersPage() {
   const [status, setStatus]         = useState(search.status ?? "all");
   const [matchStatus, setMatchStatus] = useState("all");
   const [flagFilter, setFlagFilter] = useState("all");
-  const [dateFrom, setDateFrom]     = useState(search.date_from ?? "");
-  const [dateTo, setDateTo]         = useState(search.date_to   ?? "");
+  const [sort, setSort]             = useState<"latest" | "oldest">("latest");
+  const [dateFrom, setDateFrom]     = useState(() => search.date_from ?? startOfMonth());
+  const [dateTo, setDateTo]         = useState(() => search.date_to   ?? today());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [page, setPage]       = useState(1);
   const [perPage, setPerPage] = useState(50);
@@ -61,6 +68,7 @@ function OrdersPage() {
   const { data, isLoading, isError, refetch } = useOrders({
     q:         q || undefined,
     status:    status !== "all" ? status : undefined,
+    sort,
     date_from: dateFrom || undefined,
     date_to:   dateTo   || undefined,
     page,
@@ -159,6 +167,13 @@ function OrdersPage() {
             <SelectItem value="acumatica">⚠ Acumatica</SelectItem>
             <SelectItem value="email">⚠ Email</SelectItem>
             <SelectItem value="none">No flag</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sort} onValueChange={(v) => { setSort(v as "latest" | "oldest"); resetPage(); }}>
+          <SelectTrigger className="h-9 w-[130px] text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="latest">⬇ Latest first</SelectItem>
+            <SelectItem value="oldest">⬆ Oldest first</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline" size="sm" className="h-9" onClick={() => refetch()}>
@@ -608,13 +623,14 @@ function fmtDatetime(value: string | null | undefined): string {
   if (!value) return "";
   const d = new Date(value);
   if (isNaN(d.getTime())) return "";
+  const tz = { timeZone: "Africa/Nairobi" } as const;
   const hasTime = value.includes("T") || value.includes(" ");
   if (!hasTime) {
-    return d.toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    return d.toLocaleDateString("en-KE", { ...tz, weekday: "short", day: "numeric", month: "short", year: "numeric" });
   }
-  const weekday = d.toLocaleDateString("en-KE", { weekday: "short" });
-  const date    = d.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
-  const time    = d.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  const weekday = d.toLocaleDateString("en-KE", { ...tz, weekday: "short" });
+  const date    = d.toLocaleDateString("en-KE", { ...tz, day: "numeric", month: "short", year: "numeric" });
+  const time    = d.toLocaleTimeString("en-KE", { ...tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
   return `${weekday}, ${date} ${time}`;
 }
 
@@ -623,8 +639,9 @@ function fmtCompact(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
   if (isNaN(d.getTime())) return "—";
-  const weekday = d.toLocaleDateString("en-KE", { weekday: "short" });
-  const date    = d.toLocaleDateString("en-KE", { day: "numeric", month: "short" });
-  const time    = d.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const tz = { timeZone: "Africa/Nairobi" } as const;
+  const weekday = d.toLocaleDateString("en-KE", { ...tz, weekday: "short" });
+  const date    = d.toLocaleDateString("en-KE", { ...tz, day: "numeric", month: "short" });
+  const time    = d.toLocaleTimeString("en-KE", { ...tz, hour: "2-digit", minute: "2-digit", hour12: false });
   return `${weekday} ${date}, ${time}`;
 }
