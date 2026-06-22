@@ -1,0 +1,7 @@
+name = "your-orderwatch-app"
+main = "src/server-entry.js"  # or appropriate entry for TanStack
+compatibility_date = "2026-06-01"
+
+[[routes]]
+pattern = "orderwatch.fayshop.co.ke/*"
+custom_domain = true

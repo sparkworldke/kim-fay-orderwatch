@@ -11,8 +11,13 @@ class AcumaticaSyncLog extends Model
         'started_at',
         'ended_at',
         'record_count',
+        'success_count',
+        'failed_count',
         'status',
         'error_message',
+        'filters',
+        'trigger_type',
+        'triggered_by_user_id',
     ];
 
     protected function casts(): array
@@ -20,6 +25,7 @@ class AcumaticaSyncLog extends Model
         return [
             'started_at' => 'datetime',
             'ended_at'   => 'datetime',
+            'filters'    => 'array',
         ];
     }
 }

@@ -8,9 +8,15 @@ use App\Http\Controllers\Api\Admin\HealthController;
 use App\Http\Controllers\Api\Admin\NotificationRuleController;
 use App\Http\Controllers\Api\Admin\PermissionController;
 use App\Http\Controllers\Api\Admin\RoleController;
+use App\Http\Controllers\Api\AcumaticaImportController;
+use App\Http\Controllers\Api\Admin\EmailImportConfigController;
+use App\Http\Controllers\Api\Admin\OrderMatchingController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\EmailController;
+use App\Http\Controllers\Api\EmailFilterController;
+use App\Http\Controllers\Api\MailboxController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\ProfileController;
@@ -34,6 +40,10 @@ Route::prefix('auth')->group(function () {
     Route::post('otp/verify',    [OtpController::class, 'verify'])->middleware('throttle:otp-verify');
 });
 
+// --- Public: Microsoft OAuth Callback (no token — redirect flow) ---
+Route::get('admin/mailboxes/oauth/callback', [MailboxController::class, 'handleCallback'])
+    ->name('mailbox.oauth.callback');
+
 // --- Protected ---
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -43,13 +53,24 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout',[AuthController::class, 'logout']);
     });
 
-    // Dashboard KPIs
-    Route::get('dashboard/kpis', [DashboardController::class, 'kpis']);
+    // Dashboard KPIs + trend
+    Route::get('dashboard/kpis',   [DashboardController::class, 'kpis']);
+    Route::get('dashboard/trend',  [DashboardController::class, 'trend']);
 
     // Orders
+    Route::get('orders/stats', [OrderController::class, 'stats']);
     Route::apiResource('orders', OrderController::class);
 
+    // Sales order import history (Acumatica sync results)
+    Route::get('so-imports',              [AcumaticaImportController::class, 'index']);
+    Route::get('so-imports/customers',    [AcumaticaImportController::class, 'customers']);
+    Route::get('so-imports/emails',       [AcumaticaImportController::class, 'emails']);
+    Route::get('so-imports/workflow',     [AcumaticaImportController::class, 'workflow']);
+
     // Customers
+    Route::get('customers/categories',               [CustomerController::class, 'categories']);
+    Route::get('customers/by-category/{class}',      [CustomerController::class, 'byCategory']);
+    Route::patch('customers/{id}/set-parent',        [CustomerController::class, 'setParent']);
     Route::apiResource('customers', CustomerController::class);
 
     // Profile
@@ -67,9 +88,48 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('ai-keys', [AiConnectorController::class, 'store']);
         Route::delete('ai-keys/{id}', [AiConnectorController::class, 'destroy']);
 
-        Route::get('acumatica', [AcumaticaController::class, 'index']);
-        Route::put('acumatica', [AcumaticaController::class, 'update']);
+        // Acumatica config
+        Route::get('acumatica',           [AcumaticaController::class, 'index']);
+        Route::put('acumatica',           [AcumaticaController::class, 'update']);
         Route::post('acumatica/validate', [AcumaticaController::class, 'validateCredentials']);
+
+        // Acumatica sync triggers
+        Route::post('acumatica/sync/customers',       [AcumaticaController::class, 'syncCustomers']);
+        Route::post('acumatica/sync/orders',          [AcumaticaController::class, 'syncOrders']);
+        Route::post('acumatica/sync/customer-orders', [AcumaticaController::class, 'syncCustomerOrders']);
+        Route::get('acumatica/sync/logs',             [AcumaticaController::class, 'syncLogs']);
+
+        // Reconciliation
+        Route::get('acumatica/reconciliation',        [AcumaticaController::class, 'reconciliation']);
+        Route::patch('acumatica/reconciliation/{id}', [AcumaticaController::class, 'updateReconciliationStatus']);
+
+        // Dead letters
+        Route::get('acumatica/dead-letters',          [AcumaticaController::class, 'deadLetters']);
+
+        // Customer search for selective sync
+        Route::get('acumatica/customers/search',         [AcumaticaController::class, 'searchCustomers']);
+        Route::get('acumatica/customers/{customerId}',   [AcumaticaController::class, 'previewCustomer']);
+
+        // Email import configuration
+        Route::get('email-import-configs',               [EmailImportConfigController::class, 'index']);
+        Route::post('email-import-configs',              [EmailImportConfigController::class, 'store']);
+        Route::put('email-import-configs/{id}',          [EmailImportConfigController::class, 'update']);
+        Route::delete('email-import-configs/{id}',       [EmailImportConfigController::class, 'destroy']);
+        Route::post('email-import-configs/test-sender',  [EmailImportConfigController::class, 'testSender']);
+
+        // Order matching & PO extraction
+        Route::post('order-matching/extract-po',         [OrderMatchingController::class, 'extractPo']);
+        Route::post('order-matching/match',              [OrderMatchingController::class, 'matchOrders']);
+        Route::post('order-matching/run-all',            [OrderMatchingController::class, 'runAll']);
+        Route::post('order-matching/override-po',        [OrderMatchingController::class, 'overridePo']);
+        Route::get('order-matching/history',             [OrderMatchingController::class, 'history']);
+        Route::get('order-matching/pending-manual',      [OrderMatchingController::class, 'pendingManual']);
+        Route::get('acumatica/orders/{orderNbr}',        [AcumaticaController::class, 'previewOrder']);
+
+        // Data truncation (admin only)
+        Route::post('so-imports/truncate/orders',    [AcumaticaImportController::class, 'truncateOrders']);
+        Route::post('so-imports/truncate/customers', [AcumaticaImportController::class, 'truncateCustomers']);
+        Route::post('so-imports/truncate/emails',    [AcumaticaImportController::class, 'truncateEmails']);
 
         Route::get('roles', [RoleController::class, 'index']);
         Route::get('permissions', [PermissionController::class, 'index']);
@@ -78,5 +138,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('notification-rules/{id}', [NotificationRuleController::class, 'update']);
 
         Route::get('audit-logs', [AuditLogController::class, 'index']);
+
+        // Mailboxes (Outlook OAuth + sync)
+        Route::get('mailboxes',                           [MailboxController::class, 'index']);
+        Route::post('mailboxes/oauth/start',              [MailboxController::class, 'startOAuth']);
+        Route::get('mailboxes/oauth/check',               [MailboxController::class, 'checkOAuth']);
+        Route::post('mailboxes/{mailbox}/sync',           [MailboxController::class, 'sync']);
+        Route::get('mailboxes/{mailbox}/sync-logs',       [MailboxController::class, 'syncLogs']);
+        Route::delete('mailboxes/{mailbox}',              [MailboxController::class, 'destroy']);
     });
+
+    // Emails (readable by any authenticated user)
+    Route::get('emails',                                  [EmailController::class, 'index']);
+
+    // Email filters
+    Route::get('email-filters',                           [EmailFilterController::class, 'index']);
+    Route::post('email-filters',                          [EmailFilterController::class, 'store']);
+    Route::patch('email-filters/{emailFilter}',           [EmailFilterController::class, 'update']);
+    Route::delete('email-filters/{emailFilter}',          [EmailFilterController::class, 'destroy']);
 });

@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { setSession, setToken } from "@/lib/auth";
 import type { Role } from "@/lib/auth";
@@ -160,7 +159,7 @@ function AuthPage() {
     }, 600);
   }
 
-  async function sendOtp(e: React.FormEvent) {
+  async function handleEmailStepSubmit(e: React.FormEvent) {
     e.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -174,6 +173,41 @@ function AuthPage() {
       return;
     }
 
+    // Password mode: sign in directly, no OTP needed
+    if (loginMode === "otp-and-password") {
+      if (!password) {
+        toast.error("Enter your password");
+        return;
+      }
+      setLoading(true);
+      try {
+        const data = await apiFetch<{
+          token: string;
+          user: { id: number; name: string; email: string; role: string };
+        }>("auth/login", {
+          method: "POST",
+          body: { email: normalizedEmail, password },
+        });
+        setToken(data.token);
+        setSession({
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.name,
+          role: data.user.role as Role,
+          loggedInAt: new Date().toISOString(),
+          token: data.token,
+        });
+        toast.success("Welcome to OrderWatch");
+        navigate({ to: "/app" });
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Invalid credentials");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // OTP-only mode: validate email then request OTP
     if (emailValidation.status !== "valid" || latestEmailRef.current !== normalizedEmail) {
       try {
         setEmailValidation({ status: "checking" });
@@ -205,7 +239,6 @@ function AuthPage() {
       latestEmailRef.current = normalizedEmail;
       toast.success(`Verification code sent to ${normalizedEmail}`);
       setOtp("");
-      setPassword("");
       setStep("otp");
       startCountdown();
     } catch (err: unknown) {
@@ -237,10 +270,6 @@ function AuthPage() {
       toast.error("Enter the 6-digit code");
       return;
     }
-    if (loginMode === "otp-and-password" && !password) {
-      toast.error("Enter your password");
-      return;
-    }
     setLoading(true);
     try {
       const data = await apiFetch<{
@@ -248,12 +277,7 @@ function AuthPage() {
         user: { id: number; name: string; email: string; role: string };
       }>("auth/otp/verify", {
         method: "POST",
-        body: {
-          email: email.trim().toLowerCase(),
-          otp,
-          login_mode: loginMode,
-          ...(loginMode === "otp-and-password" ? { password } : {}),
-        },
+        body: { email: email.trim().toLowerCase(), otp, login_mode: "otp-only" },
       });
       setToken(data.token);
       setSession({
@@ -289,6 +313,7 @@ function AuthPage() {
     emailValidation.status === "error";
 
   const canRequestOtp = emailValidation.status === "valid" && !loading;
+  const canSignInWithPassword = emailValidation.status === "valid" && password.trim().length > 0 && !loading;
 
   return (
     <div className="relative grid min-h-screen lg:grid-cols-2">
@@ -348,34 +373,43 @@ function AuthPage() {
           </div>
 
           {step === "email" ? (
-            <form onSubmit={sendOtp} className="space-y-5">
+            <form onSubmit={handleEmailStepSubmit} className="space-y-5">
               <div>
                 <h2 className="text-xl font-semibold">Sign in</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Use your Kim-Fay email. We'll send you a 6-digit verification code.
+                  Choose how you'd like to sign in to OrderWatch.
                 </p>
               </div>
 
-              {/* Mode toggle */}
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="login-mode-toggle"
-                  checked={loginMode === "otp-and-password"}
-                  onCheckedChange={(checked) =>
-                    setLoginMode(checked ? "otp-and-password" : "otp-only")
-                  }
-                />
-                <Label
-                  htmlFor="login-mode-toggle"
-                  className="cursor-pointer text-sm text-muted-foreground select-none"
+              {/* Mode tabs */}
+              <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/40 p-1">
+                <button
+                  type="button"
+                  onClick={() => setLoginMode("otp-only")}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                    loginMode === "otp-only"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  OTP + Password
-                </Label>
+                  Login via OTP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginMode("otp-and-password")}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                    loginMode === "otp-and-password"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Login via Password
+                </button>
               </div>
 
               {/* Email field with real-time validation */}
               <div className="space-y-1.5">
-                <Label htmlFor="email">Work email</Label>
+                <Label htmlFor="email">Email (Username)</Label>
                 <div className="relative">
                   <Input
                     id="email"
@@ -409,19 +443,38 @@ function AuthPage() {
                 )}
               </div>
 
+              {loginMode === "otp-and-password" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Your account password"
+                  />
+                </div>
+              )}
+
               <Button
                 type="submit"
                 className="w-full"
-                disabled={!canRequestOtp}
+                disabled={loginMode === "otp-and-password" ? !canSignInWithPassword : !canRequestOtp}
               >
-                {loading ? "Sending…" : emailValidation.status === "checking" ? "Checking email…" : (
-                  <>Send verification code <ArrowRight className="ml-1 h-4 w-4" /></>
-                )}
+                {loading
+                  ? loginMode === "otp-and-password" ? "Signing in…" : "Sending…"
+                  : emailValidation.status === "checking"
+                    ? "Checking email…"
+                    : loginMode === "otp-and-password"
+                      ? <>Sign in <ArrowRight className="ml-1 h-4 w-4" /></>
+                      : <>Send verification code <ArrowRight className="ml-1 h-4 w-4" /></>
+                }
               </Button>
               <p className="text-center text-[11px] text-muted-foreground">
                 {loginMode === "otp-only"
                   ? "Passwordless · OTP expires in 15 minutes"
-                  : "OTP + Password · OTP expires in 15 minutes"}
+                  : "Secured with your account password"}
               </p>
             </form>
           ) : (
@@ -456,36 +509,8 @@ function AuthPage() {
                 </InputOTPGroup>
               </InputOTP>
 
-              {loginMode === "otp-and-password" && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Your account password"
-                  />
-                </div>
-              )}
-
               {/* Actions row */}
               <div className="flex items-center justify-between text-sm">
-                <button
-                  type="button"
-                  className="font-medium text-primary hover:underline"
-                  onClick={() => {
-                    if (timerRef.current) clearInterval(timerRef.current);
-                    setLoginMode(loginMode === "otp-only" ? "otp-and-password" : "otp-only");
-                    setStep("email");
-                    setOtp("");
-                    setPassword("");
-                  }}
-                >
-                  {loginMode === "otp-only" ? "Sign in using password" : "Sign in using OTP only"}
-                </button>
-
                 {secondsLeft > 0 ? (
                   <span className="text-muted-foreground">
                     Resend in{" "}

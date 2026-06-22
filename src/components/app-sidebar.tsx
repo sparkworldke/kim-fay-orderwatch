@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   PackageSearch,
+  PackageCheck,
   AlertTriangle,
   Users,
   Sparkles,
@@ -9,6 +10,7 @@ import {
   Bell,
   Settings,
   UserCircle,
+  Inbox,
 } from "lucide-react";
 import {
   Sidebar,
@@ -35,9 +37,11 @@ const NAV = [
     { title: "AI Insights", url: "/app/ai-insights", icon: Sparkles },
     { title: "Reports", url: "/app/reports", icon: FileBarChart },
     { title: "Notifications", url: "/app/notifications", icon: Bell },
+    { title: "Mailbox", url: "/app/mailbox", icon: Inbox },
   ]},
   { group: "System", items: [
     { title: "Administration", url: "/app/administration", icon: Settings },
+    { title: "Sales Order Imports", url: "/app/so-imports", icon: PackageCheck },
     { title: "Profile", url: "/app/profile", icon: UserCircle },
   ]},
 ] as const;

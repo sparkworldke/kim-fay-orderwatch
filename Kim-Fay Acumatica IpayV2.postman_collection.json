@@ -1,0 +1,269 @@
+{
+  "info": {
+    "name": "Kim-Fay Acumatica IpayV2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",  "value": "https://kimfay.acumatica.com" },
+    { "key": "endpoint",  "value": "IpayV2" },
+    { "key": "version",   "value": "22.200.001" },
+    { "key": "token",     "value": "" }
+  ],
+  "item": [
+
+    {
+      "name": "── AUTH ──────────────────────────────",
+      "item": [
+        {
+          "name": "1. Get Token (saves to {{token}})",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('token', json.access_token);",
+                  "  console.log('Token saved:', json.access_token.substring(0, 30) + '...');",
+                  "} else {",
+                  "  console.error('No access_token in response', json);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type",    "value": "password" },
+                { "key": "client_id",     "value": "B86BC41A-1183-A796-BD0E-64DB1C8F8103@Kim-Fay Limited" },
+                { "key": "client_secret", "value": "RaRhquF5o-e4bO5x2cU9Nw" },
+                { "key": "username",      "value": "ipay" },
+                { "key": "password",      "value": "DN3!724@Nms" },
+                { "key": "scope",         "value": "api" }
+              ]
+            },
+            "url": "{{base_url}}/identity/connect/token"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "── CUSTOMER ──────────────────────────",
+      "item": [
+
+        {
+          "name": "C1. Customer — All (IpayV2, page 1)",
+          "description": "Fetch first 100 customers from IpayV2. If this returns 403 the ipay user lacks Customer read permission on this endpoint — try C5 (Default) instead.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/{{endpoint}}/{{version}}/Customer/?$top=100&$skip=0",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "{{endpoint}}", "{{version}}", "Customer", ""],
+              "query": [
+                { "key": "$top",  "value": "100" },
+                { "key": "$skip", "value": "0" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "C2. Customer — By CustomerID (IpayV2)",
+          "description": "Fetch a single customer by Acumatica CustomerID.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/{{endpoint}}/{{version}}/Customer/?$filter=CustomerID eq 'CUST103052'",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "{{endpoint}}", "{{version}}", "Customer", ""],
+              "query": [
+                { "key": "$filter", "value": "CustomerID eq 'CUST103052'" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "C3. Customer — By Name (IpayV2)",
+          "description": "Search customers whose name contains a keyword.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/{{endpoint}}/{{version}}/Customer/?$filter=contains(CustomerName,'Naivas')&$top=20",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "{{endpoint}}", "{{version}}", "Customer", ""],
+              "query": [
+                { "key": "$filter", "value": "contains(CustomerName,'Naivas')" },
+                { "key": "$top",    "value": "20" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "C4. Customer — Active Only (IpayV2)",
+          "description": "List only Active status customers.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/{{endpoint}}/{{version}}/Customer/?$filter=Status eq 'Active'&$top=100&$skip=0",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "{{endpoint}}", "{{version}}", "Customer", ""],
+              "query": [
+                { "key": "$filter", "value": "Status eq 'Active'" },
+                { "key": "$top",    "value": "100" },
+                { "key": "$skip",   "value": "0" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "C5. Customer — All (Default endpoint, page 1)",
+          "description": "Try the standard Acumatica Default endpoint. Use if IpayV2 returns 403. Requires the API user to have access to the Default endpoint.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/Default/{{version}}/Customer/?$top=100&$skip=0",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "Default", "{{version}}", "Customer", ""],
+              "query": [
+                { "key": "$top",  "value": "100" },
+                { "key": "$skip", "value": "0" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "C6. Customer — By ID (Default endpoint)",
+          "description": "Single customer from Default endpoint with address expansion.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/Default/{{version}}/Customer/?$filter=CustomerID eq 'CUST103052'&$expand=BillingAddress,ShippingAddress,PrimaryContact",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "Default", "{{version}}", "Customer", ""],
+              "query": [
+                { "key": "$filter",  "value": "CustomerID eq 'CUST103052'" },
+                { "key": "$expand",  "value": "BillingAddress,ShippingAddress,PrimaryContact" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "C7. Customer — Modified Since (Default endpoint)",
+          "description": "Incremental sync — fetch customers modified in the last 24 hours.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/Default/{{version}}/Customer/?$filter=LastModifiedDateTime ge datetimeoffset'2026-06-19T00:00:00'&$top=100&$skip=0",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "Default", "{{version}}", "Customer", ""],
+              "query": [
+                { "key": "$filter", "value": "LastModifiedDateTime ge datetimeoffset'2026-06-19T00:00:00'" },
+                { "key": "$top",    "value": "100" },
+                { "key": "$skip",   "value": "0" }
+              ]
+            }
+          }
+        }
+
+      ]
+    },
+
+    {
+      "name": "── SALES ORDER ───────────────────────",
+      "item": [
+
+        {
+          "name": "SO1. SalesOrder — By Order Number",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/{{endpoint}}/{{version}}/SalesOrder/?$filter=OrderNbr eq 'SO358387'&$expand=CustomerDetails,DocumentDetails,PaymentDetails",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "{{endpoint}}", "{{version}}", "SalesOrder", ""],
+              "query": [
+                { "key": "$filter",  "value": "OrderNbr eq 'SO358387'" },
+                { "key": "$expand",  "value": "CustomerDetails,DocumentDetails,PaymentDetails" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "SO2. SalesOrder — By Customer ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/{{endpoint}}/{{version}}/SalesOrder/?$filter=CustomerID eq 'CUST101239'&$expand=CustomerDetails,DocumentDetails,PaymentDetails&$top=10&$skip=0",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "{{endpoint}}", "{{version}}", "SalesOrder", ""],
+              "query": [
+                { "key": "$filter",  "value": "CustomerID eq 'CUST101239'" },
+                { "key": "$expand",  "value": "CustomerDetails,DocumentDetails,PaymentDetails" },
+                { "key": "$top",     "value": "10" },
+                { "key": "$skip",    "value": "0" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "SO3. SalesOrder — By Date Range",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/{{endpoint}}/{{version}}/SalesOrder/?$filter=Date ge datetimeoffset'2026-06-18T00:00:00' and Date le datetimeoffset'2026-06-18T23:59:59'&$expand=CustomerDetails,DocumentDetails,PaymentDetails&$top=100&$skip=0",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "{{endpoint}}", "{{version}}", "SalesOrder", ""],
+              "query": [
+                { "key": "$filter",  "value": "Date ge datetimeoffset'2026-06-18T00:00:00' and Date le datetimeoffset'2026-06-18T23:59:59'" },
+                { "key": "$expand",  "value": "CustomerDetails,DocumentDetails,PaymentDetails" },
+                { "key": "$top",     "value": "100" },
+                { "key": "$skip",    "value": "0" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "SO4. SalesOrder — Probe (1 record, no expand)",
+          "description": "Returns raw field names. Use to discover what fields this endpoint exposes.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/entity/{{endpoint}}/{{version}}/SalesOrder/?$top=1",
+              "host": ["{{base_url}}"],
+              "path": ["entity", "{{endpoint}}", "{{version}}", "SalesOrder", ""],
+              "query": [
+                { "key": "$top", "value": "1" }
+              ]
+            }
+          }
+        }
+
+      ]
+    }
+
+  ]
+}

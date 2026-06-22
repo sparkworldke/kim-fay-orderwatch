@@ -1,261 +1,390 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
-  PackageCheck,
-  Inbox,
-  Percent,
-  AlertOctagon,
-  Wallet,
-  AlertTriangle,
-  Flame,
-  Receipt,
-  Sparkles,
+  CheckCircle2, Clock, Package, RefreshCw,
+  ShoppingCart, TrendingUp, XCircle,
 } from "lucide-react";
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
+  Area, AreaChart, CartesianGrid, Legend,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { KpiCard } from "@/components/kpi-card";
-import { StatusBadge, SlaBadge, PriorityBadge } from "@/components/status-badge";
-import { ORDERS, TREND, getKpis, ACTIVITY, ESCALATIONS, AI_RECOMMENDATIONS } from "@/lib/demo-data";
-import { formatKES, formatNumber } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { apiFetch } from "@/lib/api";
 
 export const Route = createFileRoute("/app/")({
   head: () => ({ meta: [{ title: "Dashboard — Kim-Fay OrderWatch" }] }),
   component: DashboardPage,
 });
 
-const chartAxis = { stroke: "var(--color-muted-foreground)", fontSize: 11 } as const;
-const tooltipStyle = {
-  background: "var(--color-popover)",
-  border: "1px solid var(--color-border)",
-  borderRadius: 6,
-  fontSize: 12,
-  color: "var(--color-popover-foreground)",
-} as const;
+// -------------------------------------------------------------------------
+// Types
+// -------------------------------------------------------------------------
 
-function ChartCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border bg-card p-4 shadow-[var(--shadow-panel)]">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
-      </div>
-      <div className="h-44">
-        <ResponsiveContainer width="100%" height="100%">
-          {children as React.ReactElement}
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
+interface KpiData {
+  total: number;
+  completed: number;
+  shipping: number;
+  pending_approval: number;
+  rejected: number;
+  on_hold: number;
+  open: number;
+  back_order: number;
+  date_from: string;
+  date_to: string;
 }
 
+interface TrendDay {
+  day: string;
+  total: number;
+  completed: number;
+  shipping: number;
+  pending_approval: number;
+  rejected: number;
+  on_hold: number;
+  open: number;
+}
+
+interface TrendData {
+  current: TrendDay[];
+  previous: TrendDay[] | null;
+}
+
+// -------------------------------------------------------------------------
+// Hooks
+// -------------------------------------------------------------------------
+
+function useKpis(dateFrom: string, dateTo: string) {
+  return useQuery({
+    queryKey: ["dashboard-kpis", dateFrom, dateTo],
+    queryFn: () =>
+      apiFetch<KpiData>(`dashboard/kpis?date_from=${dateFrom}&date_to=${dateTo}`),
+  });
+}
+
+function useTrend(dateFrom: string, dateTo: string, compare: boolean) {
+  return useQuery({
+    queryKey: ["dashboard-trend", dateFrom, dateTo, compare],
+    queryFn: () =>
+      apiFetch<TrendData>(
+        `dashboard/trend?date_from=${dateFrom}&date_to=${dateTo}&compare=${compare ? 1 : 0}`
+      ),
+  });
+}
+
+// -------------------------------------------------------------------------
+// Helpers
+// -------------------------------------------------------------------------
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function startOfMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function fmtDay(iso: string) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-KE", { day: "numeric", month: "short" });
+}
+
+// -------------------------------------------------------------------------
+// Stat card config
+// -------------------------------------------------------------------------
+
+type StatKey = "total" | "completed" | "shipping" | "pending_approval" | "rejected" | "on_hold";
+
+const STATS: {
+  key: StatKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  bg: string;
+  border: string;
+  statusFilter?: string;
+}[] = [
+  {
+    key: "total",
+    label: "Total Orders",
+    icon: Package,
+    color: "text-blue-700 dark:text-blue-300",
+    bg: "bg-blue-50 dark:bg-blue-950/40",
+    border: "border-blue-200 dark:border-blue-800",
+  },
+  {
+    key: "completed",
+    label: "Completed",
+    icon: CheckCircle2,
+    color: "text-green-700 dark:text-green-300",
+    bg: "bg-green-50 dark:bg-green-950/40",
+    border: "border-green-200 dark:border-green-800",
+    statusFilter: "Completed",
+  },
+  {
+    key: "pending_approval",
+    label: "Pending Approval",
+    icon: Clock,
+    color: "text-amber-700 dark:text-amber-300",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    border: "border-amber-200 dark:border-amber-800",
+    statusFilter: "Pending Approval",
+  },
+  {
+    key: "shipping",
+    label: "Shipping",
+    icon: TrendingUp,
+    color: "text-purple-700 dark:text-purple-300",
+    bg: "bg-purple-50 dark:bg-purple-950/40",
+    border: "border-purple-200 dark:border-purple-800",
+    statusFilter: "Shipping",
+  },
+  {
+    key: "rejected",
+    label: "Rejected",
+    icon: XCircle,
+    color: "text-red-700 dark:text-red-300",
+    bg: "bg-red-50 dark:bg-red-950/40",
+    border: "border-red-200 dark:border-red-800",
+    statusFilter: "Rejected",
+  },
+  {
+    key: "on_hold",
+    label: "On Hold",
+    icon: ShoppingCart,
+    color: "text-orange-700 dark:text-orange-300",
+    bg: "bg-orange-50 dark:bg-orange-950/40",
+    border: "border-orange-200 dark:border-orange-800",
+    statusFilter: "On Hold",
+  },
+];
+
+const CHART_COLORS: Record<StatKey, string> = {
+  total:            "var(--color-chart-1, #3b82f6)",
+  completed:        "#22c55e",
+  pending_approval: "#f59e0b",
+  shipping:         "#a855f7",
+  rejected:         "#ef4444",
+  on_hold:          "#f97316",
+};
+
+const tooltipStyle = {
+  background: "var(--color-popover, #fff)",
+  border: "1px solid var(--color-border, #e5e7eb)",
+  borderRadius: 6,
+  fontSize: 12,
+} as const;
+
+const axisStyle = { stroke: "var(--color-muted-foreground, #9ca3af)", fontSize: 11 } as const;
+
+// -------------------------------------------------------------------------
+// Page
+// -------------------------------------------------------------------------
+
 function DashboardPage() {
-  const k = getKpis();
-  const outstanding = ORDERS.filter((o) => o.status !== "Matched").slice(0, 6);
-  const critical = ORDERS.filter((o) => o.priority === "Critical" && o.status !== "Matched").slice(0, 5);
+  const navigate = useNavigate();
+  const [dateFrom, setDateFrom] = useState(startOfMonth);
+  const [dateTo, setDateTo]     = useState(today);
+  const [compare, setCompare]   = useState(false);
+  const [activeStats, setActiveStats] = useState<StatKey[]>(
+    ["total", "completed", "pending_approval", "shipping", "rejected", "on_hold"]
+  );
+
+  const kpis  = useKpis(dateFrom, dateTo);
+  const trend = useTrend(dateFrom, dateTo, compare);
+
+  function goToOrders(statusFilter?: string) {
+    const params: Record<string, string> = {
+      date_from: dateFrom,
+      date_to:   dateTo,
+    };
+    if (statusFilter) params.status = statusFilter;
+    navigate({ to: "/app/orders", search: params as any });
+  }
+
+  function toggleStat(key: StatKey) {
+    setActiveStats((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+
+  const kpi = kpis.data;
+
+  // Merge current + previous into a single array for Recharts
+  const chartData = (() => {
+    if (!trend.data?.current) return [];
+    const map: Record<string, Record<string, number | string>> = {};
+    for (const d of trend.data.current) {
+      map[d.day] = { day: d.day, label: fmtDay(d.day), ...d };
+    }
+    if (trend.data.previous) {
+      for (let i = 0; i < trend.data.previous.length; i++) {
+        const d = trend.data.previous[i];
+        const currentDay = trend.data.current[i]?.day ?? d.day;
+        if (map[currentDay]) {
+          map[currentDay].prev_total            = d.total;
+          map[currentDay].prev_completed        = d.completed;
+          map[currentDay].prev_pending_approval = d.pending_approval;
+          map[currentDay].prev_shipping         = d.shipping;
+          map[currentDay].prev_rejected         = d.rejected;
+          map[currentDay].prev_on_hold          = d.on_hold;
+        }
+      }
+    }
+    return Object.values(map).sort((a, b) =>
+      String(a.day).localeCompare(String(b.day))
+    );
+  })();
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Operations Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Every Order. Accounted For. — Live across Outlook, Acumatica & AI insights.
-          </p>
+          <p className="text-sm text-muted-foreground">Live order status — Acumatica</p>
         </div>
-        <div className="text-[11px] text-muted-foreground">
-          Last refresh: {new Date().toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}
-        </div>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-4">
-        <KpiCard label="Orders Received Today" value={formatNumber(k.received)} delta={k.receivedDelta} icon={Inbox} />
-        <KpiCard label="Orders Captured" value={formatNumber(k.captured)} delta={k.capturedDelta} icon={PackageCheck} />
-        <KpiCard label="Capture Rate" value={`${k.captureRate}%`} delta={k.captureRateDelta} deltaSuffix="pts" icon={Percent} />
-        <KpiCard label="Revenue At Risk" value={formatKES(k.revenueAtRisk, { compact: true })} icon={AlertOctagon} invertDelta />
-        <KpiCard label="Revenue Captured" value={formatKES(k.revenueCaptured, { compact: true })} icon={Wallet} />
-        <KpiCard label="Outstanding Orders" value={formatNumber(k.outstanding)} icon={AlertTriangle} />
-        <KpiCard label="Critical Orders" value={formatNumber(k.critical)} icon={Flame} />
-        <KpiCard label="Avg Order Value" value={formatKES(k.aov, { compact: true })} icon={Receipt} />
-      </div>
-
-      {/* Charts */}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <ChartCard title="Order Volume Trend" hint="Last 14 days">
-          <AreaChart data={TREND}>
-            <defs>
-              <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.5} />
-                <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="date" {...chartAxis} />
-            <YAxis {...chartAxis} />
-            <Tooltip contentStyle={tooltipStyle} />
-            <Area type="monotone" dataKey="received" stroke="var(--color-chart-1)" fill="url(#g1)" />
-            <Area type="monotone" dataKey="captured" stroke="var(--color-chart-2)" fill="transparent" />
-          </AreaChart>
-        </ChartCard>
-
-        <ChartCard title="Revenue Trend" hint="KES, captured">
-          <BarChart data={TREND}>
-            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="date" {...chartAxis} />
-            <YAxis {...chartAxis} tickFormatter={(v) => `${(v / 1_000_000).toFixed(1)}M`} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatKES(v, { compact: true })} />
-            <Bar dataKey="revenue" fill="var(--color-chart-1)" radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ChartCard>
-
-        <ChartCard title="Capture Rate Trend" hint="%">
-          <LineChart data={TREND}>
-            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="date" {...chartAxis} />
-            <YAxis {...chartAxis} domain={[80, 100]} />
-            <Tooltip contentStyle={tooltipStyle} />
-            <Line type="monotone" dataKey="captureRate" stroke="var(--color-chart-2)" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ChartCard>
-
-        <ChartCard title="SLA Compliance Trend" hint="%">
-          <LineChart data={TREND}>
-            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="date" {...chartAxis} />
-            <YAxis {...chartAxis} domain={[80, 100]} />
-            <Tooltip contentStyle={tooltipStyle} />
-            <Line type="monotone" dataKey="sla" stroke="var(--color-chart-3)" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ChartCard>
-
-        <ChartCard title="Revenue At Risk" hint="KES, daily">
-          <AreaChart data={TREND}>
-            <defs>
-              <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--color-chart-4)" stopOpacity={0.6} />
-                <stop offset="100%" stopColor="var(--color-chart-4)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="date" {...chartAxis} />
-            <YAxis {...chartAxis} tickFormatter={(v) => `${(v / 1_000_000).toFixed(1)}M`} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatKES(v, { compact: true })} />
-            <Area type="monotone" dataKey="revenueAtRisk" stroke="var(--color-chart-4)" fill="url(#g2)" />
-          </AreaChart>
-        </ChartCard>
-
-        <div className="rounded-lg border bg-card p-4 shadow-[var(--shadow-panel)]">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-primary" /> AI Recommendations</h3>
-            <span className="text-[11px] text-muted-foreground">12:00 cycle</span>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="grid gap-1">
+            <Label className="text-xs">From</Label>
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 w-36 text-xs" />
           </div>
-          <ul className="space-y-3">
-            {AI_RECOMMENDATIONS.map((r) => (
-              <li key={r.title} className="rounded-md border bg-muted/30 p-3">
-                <div className="text-sm font-medium">{r.title}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{r.rationale}</div>
-                <div className="mt-1.5 inline-flex rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                  {r.impact}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      {/* Widgets */}
-      <div className="grid gap-3 lg:grid-cols-3">
-        <div className="rounded-lg border bg-card shadow-[var(--shadow-panel)] lg:col-span-2">
-          <div className="flex items-center justify-between border-b px-4 py-2.5">
-            <h3 className="text-sm font-semibold">Outstanding Orders</h3>
-            <span className="text-[11px] text-muted-foreground">Top {outstanding.length} of {ORDERS.filter(o => o.status !== "Matched").length}</span>
+          <div className="grid gap-1">
+            <Label className="text-xs">To</Label>
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 w-36 text-xs" />
           </div>
-          <table className="w-full text-sm">
-            <thead className="bg-muted/30 text-[11px] uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2 text-left font-semibold">PO</th>
-                <th className="px-4 py-2 text-left font-semibold">Customer</th>
-                <th className="px-4 py-2 text-right font-semibold">Value</th>
-                <th className="px-4 py-2 text-left font-semibold">Status</th>
-                <th className="px-4 py-2 text-left font-semibold">SLA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {outstanding.map((o) => (
-                <tr key={o.id} className="border-t">
-                  <td className="px-4 py-2 font-mono text-xs">{o.poNumber}</td>
-                  <td className="px-4 py-2">{o.customer}</td>
-                  <td className="px-4 py-2 text-right font-mono tabular-nums">{formatKES(o.orderValue, { compact: true })}</td>
-                  <td className="px-4 py-2"><StatusBadge status={o.status} /></td>
-                  <td className="px-4 py-2"><SlaBadge status={o.slaStatus} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="rounded-lg border bg-card p-4 shadow-[var(--shadow-panel)]">
-          <h3 className="mb-3 text-sm font-semibold">Critical Orders</h3>
-          <ul className="space-y-2.5">
-            {critical.map((o) => (
-              <li key={o.id} className="flex items-start justify-between gap-2 border-b pb-2 last:border-0">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{o.customer}</div>
-                  <div className="truncate font-mono text-[11px] text-muted-foreground">{o.poNumber}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-mono text-sm tabular-nums">{formatKES(o.orderValue, { compact: true })}</div>
-                  <PriorityBadge priority={o.priority} />
-                </div>
-              </li>
-            ))}
-          </ul>
+          <Button variant="outline" size="sm" className="h-8" onClick={() => { kpis.refetch(); trend.refetch(); }}>
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+          <div className="flex items-center gap-2 rounded-md border px-3 h-8">
+            <Switch id="compare-toggle" checked={compare} onCheckedChange={setCompare} />
+            <Label htmlFor="compare-toggle" className="cursor-pointer text-xs select-none whitespace-nowrap">
+              Compare prev. period
+            </Label>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-lg border bg-card p-4 shadow-[var(--shadow-panel)]">
-          <h3 className="mb-3 text-sm font-semibold">Recent Activity</h3>
-          <ul className="space-y-2.5">
-            {ACTIVITY.map((a, i) => (
-              <li key={i} className="flex gap-3 text-sm">
-                <span className="w-12 shrink-0 font-mono text-xs text-muted-foreground">{a.time}</span>
-                <span className="text-foreground/90">{a.text}</span>
-              </li>
+      {/* Stat cards */}
+      {kpis.isLoading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {STATS.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => goToOrders(s.statusFilter)}
+              className={`group rounded-lg border p-4 text-left transition-all hover:shadow-md active:scale-[0.98] ${s.bg} ${s.border}`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-[11px] font-semibold uppercase tracking-wide ${s.color} opacity-80`}>
+                  {s.label}
+                </span>
+                <s.icon className={`h-4 w-4 ${s.color} opacity-60`} />
+              </div>
+              <div className={`text-2xl font-bold tabular-nums ${s.color}`}>
+                {kpi ? (kpi[s.key] ?? 0).toLocaleString() : "—"}
+              </div>
+              <div className="mt-1 text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                View orders →
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Trend chart */}
+      <div className="rounded-lg border bg-card p-4 shadow-[var(--shadow-panel)]">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Order Volume Trend</h3>
+            <p className="text-xs text-muted-foreground">
+              {fmtDay(dateFrom)} — {fmtDay(dateTo)}
+              {compare && <span className="ml-2 text-muted-foreground/70">(dashed = previous period)</span>}
+            </p>
+          </div>
+          {/* Series toggles */}
+          <div className="flex flex-wrap gap-2">
+            {STATS.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => toggleStat(s.key)}
+                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all ${
+                  activeStats.includes(s.key)
+                    ? `${s.bg} ${s.border} ${s.color}`
+                    : "border-muted bg-muted/30 text-muted-foreground line-through"
+                }`}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ background: CHART_COLORS[s.key] }}
+                />
+                {s.label}
+              </button>
             ))}
-          </ul>
+          </div>
         </div>
 
-        <div className="rounded-lg border bg-card p-4 shadow-[var(--shadow-panel)]">
-          <h3 className="mb-3 text-sm font-semibold">Recent Escalations</h3>
-          <ul className="space-y-2.5">
-            {ESCALATIONS.map((e) => (
-              <li key={e.id} className="flex items-start justify-between gap-3 border-b pb-2 last:border-0">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-mono text-xs text-muted-foreground">{e.id}</span>
-                    <span className="font-medium">{e.customer}</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground">{e.reason} · {e.owner}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-mono text-sm tabular-nums">{formatKES(e.value, { compact: true })}</div>
-                  <div className="font-mono text-[11px] text-muted-foreground">{e.po}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {trend.isLoading ? (
+          <Skeleton className="h-64 w-full" />
+        ) : (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <defs>
+                  {STATS.map((s) => (
+                    <linearGradient key={s.key} id={`grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_COLORS[s.key]} stopOpacity={0.25} />
+                      <stop offset="95%" stopColor={CHART_COLORS[s.key]} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" {...axisStyle} tick={{ fontSize: 10 }} />
+                <YAxis {...axisStyle} allowDecimals={false} width={32} />
+                <Tooltip contentStyle={tooltipStyle} />
+                {STATS.filter((s) => activeStats.includes(s.key)).map((s) => (
+                  <Area
+                    key={s.key}
+                    type="monotone"
+                    dataKey={s.key}
+                    name={s.label}
+                    stroke={CHART_COLORS[s.key]}
+                    fill={`url(#grad-${s.key})`}
+                    strokeWidth={s.key === "total" ? 2 : 1.5}
+                    dot={false}
+                    activeDot={{ r: 3 }}
+                  />
+                ))}
+                {compare &&
+                  STATS.filter((s) => activeStats.includes(s.key)).map((s) => (
+                    <Area
+                      key={`prev-${s.key}`}
+                      type="monotone"
+                      dataKey={`prev_${s.key}`}
+                      name={`${s.label} (prev)`}
+                      stroke={CHART_COLORS[s.key]}
+                      fill="transparent"
+                      strokeWidth={1}
+                      strokeDasharray="4 2"
+                      dot={false}
+                      activeDot={false}
+                    />
+                  ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
     </div>
   );

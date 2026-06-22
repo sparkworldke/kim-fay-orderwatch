@@ -60,16 +60,16 @@ class AcumaticaService
             }
         }
 
-        if (array_key_exists('password', $data) && $data['password'] !== '') {
+        if (array_key_exists('password', $data) && $data['password'] !== null && $data['password'] !== '') {
             $config->password_encrypted = $this->encryption->encrypt($data['password']);
         }
 
         if (array_key_exists('client_id', $data)) {
-            $config->client_id_encrypted = $data['client_id'] !== '' ? $this->encryption->encrypt($data['client_id']) : null;
+            $config->client_id_encrypted = ($data['client_id'] !== null && $data['client_id'] !== '') ? $this->encryption->encrypt($data['client_id']) : null;
         }
 
         if (array_key_exists('client_secret', $data)) {
-            $config->client_secret_encrypted = $data['client_secret'] !== '' ? $this->encryption->encrypt($data['client_secret']) : null;
+            $config->client_secret_encrypted = ($data['client_secret'] !== null && $data['client_secret'] !== '') ? $this->encryption->encrypt($data['client_secret']) : null;
         }
 
         $config->save();

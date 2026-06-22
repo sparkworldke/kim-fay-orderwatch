@@ -13,10 +13,12 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppSoImportsRouteImport } from './routes/app.so-imports'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppProfileRouteImport } from './routes/app.profile'
 import { Route as AppOrdersRouteImport } from './routes/app.orders'
 import { Route as AppNotificationsRouteImport } from './routes/app.notifications'
+import { Route as AppMailboxRouteImport } from './routes/app.mailbox'
 import { Route as AppDiscrepanciesRouteImport } from './routes/app.discrepancies'
 import { Route as AppCustomersRouteImport } from './routes/app.customers'
 import { Route as AppAiInsightsRouteImport } from './routes/app.ai-insights'
@@ -42,6 +44,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSoImportsRoute = AppSoImportsRouteImport.update({
+  id: '/so-imports',
+  path: '/so-imports',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -60,6 +67,11 @@ const AppOrdersRoute = AppOrdersRouteImport.update({
 const AppNotificationsRoute = AppNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMailboxRoute = AppMailboxRouteImport.update({
+  id: '/mailbox',
+  path: '/mailbox',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDiscrepanciesRoute = AppDiscrepanciesRouteImport.update({
@@ -91,10 +103,12 @@ export interface FileRoutesByFullPath {
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/mailbox': typeof AppMailboxRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/so-imports': typeof AppSoImportsRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
@@ -104,10 +118,12 @@ export interface FileRoutesByTo {
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/mailbox': typeof AppMailboxRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/so-imports': typeof AppSoImportsRoute
   '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -119,10 +135,12 @@ export interface FileRoutesById {
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/mailbox': typeof AppMailboxRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/so-imports': typeof AppSoImportsRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
@@ -135,10 +153,12 @@ export interface FileRouteTypes {
     | '/app/ai-insights'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/mailbox'
     | '/app/notifications'
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
+    | '/app/so-imports'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -148,10 +168,12 @@ export interface FileRouteTypes {
     | '/app/ai-insights'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/mailbox'
     | '/app/notifications'
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
+    | '/app/so-imports'
     | '/app'
   id:
     | '__root__'
@@ -162,10 +184,12 @@ export interface FileRouteTypes {
     | '/app/ai-insights'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/mailbox'
     | '/app/notifications'
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
+    | '/app/so-imports'
     | '/app/'
   fileRoutesById: FileRoutesById
 }
@@ -205,6 +229,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/so-imports': {
+      id: '/app/so-imports'
+      path: '/so-imports'
+      fullPath: '/app/so-imports'
+      preLoaderRoute: typeof AppSoImportsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/reports': {
       id: '/app/reports'
       path: '/reports'
@@ -231,6 +262,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/app/notifications'
       preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/mailbox': {
+      id: '/app/mailbox'
+      path: '/mailbox'
+      fullPath: '/app/mailbox'
+      preLoaderRoute: typeof AppMailboxRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/discrepancies': {
@@ -269,10 +307,12 @@ interface AppRouteChildren {
   AppAiInsightsRoute: typeof AppAiInsightsRoute
   AppCustomersRoute: typeof AppCustomersRoute
   AppDiscrepanciesRoute: typeof AppDiscrepanciesRoute
+  AppMailboxRoute: typeof AppMailboxRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppOrdersRoute: typeof AppOrdersRoute
   AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppSoImportsRoute: typeof AppSoImportsRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -281,10 +321,12 @@ const AppRouteChildren: AppRouteChildren = {
   AppAiInsightsRoute: AppAiInsightsRoute,
   AppCustomersRoute: AppCustomersRoute,
   AppDiscrepanciesRoute: AppDiscrepanciesRoute,
+  AppMailboxRoute: AppMailboxRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppOrdersRoute: AppOrdersRoute,
   AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,
+  AppSoImportsRoute: AppSoImportsRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
