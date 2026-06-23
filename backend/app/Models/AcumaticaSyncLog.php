@@ -8,6 +8,7 @@ class AcumaticaSyncLog extends Model
 {
     protected $fillable = [
         'sync_type',
+        'cron_run_log_id',
         'started_at',
         'ended_at',
         'record_count',

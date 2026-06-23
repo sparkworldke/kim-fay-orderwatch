@@ -11,7 +11,7 @@ class EmailController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Email::orderByDesc('received_at');
+        $query = Email::with(['mailboxFolder.rules'])->orderByDesc('received_at');
 
         if ($request->filled('mailbox_id')) {
             $query->where('mailbox_account_id', $request->integer('mailbox_id'));

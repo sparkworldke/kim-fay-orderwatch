@@ -9,6 +9,7 @@ class OrderMatchRun extends Model
 {
     protected $fillable = [
         'triggered_by_user_id',
+        'cron_run_log_id',
         'started_at',
         'ended_at',
         'status',

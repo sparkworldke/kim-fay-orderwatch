@@ -127,6 +127,16 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        // Dedicated daily channel for mailbox sync events — keeps sync noise
+        // separate from the main Laravel log for easy monitoring & log rotation.
+        'mailbox_sync' => [
+            'driver'              => 'daily',
+            'path'                => storage_path('logs/mailbox-sync.log'),
+            'level'               => 'debug',
+            'days'                => 30,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

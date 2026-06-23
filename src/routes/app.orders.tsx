@@ -46,6 +46,8 @@ const ORDER_STATUSES = ["Open", "Completed", "Cancelled", "Back Order", "Credit 
 
 const MATCH_STATUSES = [
   { value: "matched",   label: "Matched" },
+  { value: "matched_discrepancies", label: "Matched with Discrepancies" },
+  { value: "needs_review", label: "Needs Review" },
   { value: "unmatched", label: "Unmatched" },
   { value: "duplicate", label: "Duplicate" },
   { value: "escalated", label: "Escalated" },
@@ -427,6 +429,8 @@ function OrderStatCards({
 
 const MATCH_MAP: Record<AcumaticaSalesOrder["match_status"], { label: string; cls: string }> = {
   matched:   { label: "Matched",   cls: "border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300" },
+  matched_discrepancies: { label: "Matched with Discrepancies", cls: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300" },
+  needs_review: { label: "Needs Review", cls: "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-300" },
   unmatched: { label: "Unmatched", cls: "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300" },
   duplicate: { label: "Duplicate", cls: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300" },
   escalated: { label: "Escalated", cls: "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300" },

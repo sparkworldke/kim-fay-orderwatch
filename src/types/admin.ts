@@ -81,7 +81,7 @@ export interface AcumaticaSalesOrder {
   customer_name: string | null;
   customer_order: string | null;
   status: string | null;
-  match_status: "pending" | "matched" | "unmatched" | "duplicate" | "escalated" | "missing";
+  match_status: "pending" | "matched" | "matched_discrepancies" | "needs_review" | "unmatched" | "duplicate" | "escalated" | "missing";
   flag_source: "acumatica" | "email" | null;
   rejection_reason: string | null;
   on_hold_reason: string | null;
@@ -179,4 +179,121 @@ export interface AdminHealth {
 export interface ServiceHealth {
   status: string;
   last_checked_at: string | null;
+}
+
+export interface CronRunLog {
+  id: number;
+  cron_job_id: number;
+  status: "running" | "success" | "partial" | "failed" | "skipped";
+  trigger_source: "scheduler" | "manual" | "queue";
+  started_at: string;
+  ended_at: string | null;
+  duration_ms: number | null;
+  emails_checked: number;
+  emails_processed: number;
+  sales_orders_checked: number;
+  sales_orders_processed: number;
+  matches_created: number;
+  matched_with_discrepancies_count: number;
+  needs_review_count: number;
+  unmatched_count: number;
+  skipped_count: number;
+  error_count: number;
+  step_status: Record<string, { status: string; duration_ms: number; metrics: Record<string, number>; errors?: string[] }> | null;
+  error_summary: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface AiPromptLog {
+  id: number;
+  user_id: number | null;
+  user_role: string | null;
+  user: { id: number; name: string; email: string } | null;
+  prompt: string;
+  intent: string | null;
+  domains: string[] | null;
+  formulas_used: Record<string, string> | null;
+  ai_message: string | null;
+  cards_returned: unknown[] | null;
+  sources: string[] | null;
+  provider: string | null;
+  response_time_ms: number | null;
+  status: "success" | "failed";
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface AiPromptLogStats {
+  total: number;
+  success: number;
+  failed: number;
+  avg_response_ms: number;
+  by_intent: Record<string, number>;
+  by_provider: Record<string, number>;
+}
+
+export interface DailyReportRun {
+  id: number;
+  report_date: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  sent_at: string | null;
+  status: string;
+  ai_status: string | null;
+  delivery_status: string | null;
+  recipient_count: number;
+  duration_ms: number | null;
+  error_summary: string | null;
+  has_payload: boolean;
+}
+
+export interface DailyReportConfig {
+  id: number;
+  name: string;
+  is_enabled: boolean;
+  send_time: string;
+  timezone: string;
+  recipients: string[];
+  reply_to: string[];
+  subject_template: string;
+  include_ai_insights: boolean;
+  include_comparison: boolean;
+  include_mtd: boolean;
+  include_customer_highlights: boolean;
+  last_sent_at: string | null;
+  last_sent_status: string | null;
+  last_delivery_status: string | null;
+  last_run: DailyReportRun | null;
+  command_reference: string;
+  scheduler_reference: string;
+}
+
+export interface CronJob {
+  id: number;
+  job_key: string;
+  name: string;
+  description: string | null;
+  is_enabled: boolean;
+  frequency_label: string;
+  cron_expression: string;
+  trigger_type: string;
+  command: string;
+  last_run_at: string | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_run_status: string | null;
+  last_duration_ms: number | null;
+  next_run_at: string | null;
+  settings: {
+    email_sync_enabled: boolean;
+    acumatica_sync_enabled: boolean;
+    matching_enabled: boolean;
+    sales_order_lookback_days: number;
+    deterministic_auto_link: boolean;
+    ai_auto_link: boolean;
+  };
+  notes: string | null;
+  command_reference: string;
+  scheduler_reference: string;
+  runs: CronRunLog[];
 }

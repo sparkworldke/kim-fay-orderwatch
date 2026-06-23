@@ -19,16 +19,17 @@ class AcumaticaSalesOrderSyncService
     // Date-range sync
     // -------------------------------------------------------------------------
 
-    public function syncDateRange(string $dateFrom, string $dateTo, ?int $triggeredByUserId = null): AcumaticaSyncLog
+    public function syncDateRange(string $dateFrom, string $dateTo, ?int $triggeredByUserId = null, string $triggerType = 'manual', ?int $cronRunLogId = null): AcumaticaSyncLog
     {
         $run = AcumaticaSyncLog::create([
             'sync_type'            => 'sales_orders',
+            'cron_run_log_id'      => $cronRunLogId,
             'started_at'           => now(),
             'status'               => 'running',
             'record_count'         => 0,
             'success_count'        => 0,
             'failed_count'         => 0,
-            'trigger_type'         => 'manual',
+            'trigger_type'         => $triggerType,
             'triggered_by_user_id' => $triggeredByUserId,
             'filters'              => ['date_from' => $dateFrom, 'date_to' => $dateTo],
         ]);

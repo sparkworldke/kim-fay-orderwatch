@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EmailFilter extends Model
 {
@@ -40,5 +41,10 @@ class EmailFilter extends Model
         } else {
             $this->attributes['conditions'] = json_encode([]);
         }
+    }
+
+    public function syncLogs(): HasMany
+    {
+        return $this->hasMany(MailboxSyncLog::class);
     }
 }

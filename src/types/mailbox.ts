@@ -20,7 +20,42 @@ export interface EmailMessage {
   is_read: boolean;
   received_at: string | null;
   folder: string;
+  ingestion_classification: "po_processing" | "needs_review" | "stored_non_order" | null;
+  ingestion_reason_codes: string[] | null;
+  ingestion_decision_sources: string[] | null;
+  mailbox_folder?: { display_name: string; rules: FolderRuleMapping[] } | null;
   created_at: string;
+}
+
+export interface FolderRuleMapping {
+  id: number;
+  existing_rule_name: string;
+  customer_id: number | null;
+  is_enabled: boolean;
+  is_trusted: boolean;
+  notes: string | null;
+}
+
+export interface MailboxFolder {
+  id: number;
+  mailbox_account_id: number;
+  external_folder_id: string;
+  display_name: string;
+  parent_display_name: string | null;
+  total_item_count: number;
+  unread_item_count: number;
+  is_sync_enabled: boolean;
+  is_order_folder: boolean;
+  customer_id: number | null;
+  trust_level: "untrusted" | "standard" | "trusted_order";
+  sync_priority: number;
+  is_active: boolean;
+  last_discovered_at: string | null;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+  suggested_order_folder: boolean;
+  rules: FolderRuleMapping[];
+  customer: { id: number; acumatica_id: string; name: string } | null;
 }
 
 export type EmailFilterType =
@@ -78,6 +113,28 @@ export interface SyncLog {
   started_at: string;
   ended_at: string | null;
   emails_fetched: number;
-  status: "running" | "completed" | "failed";
+  emails_created: number;
+  emails_updated: number;
+  emails_skipped: number;
+  emails_deleted: number;
+  emails_failed: number;
+  status: "running" | "completed" | "failed" | "stopped";
   error_message: string | null;
+  sync_scope: {
+    type: "all" | "rule";
+    filter_id: number | null;
+    filter_name: string | null;
+  };
+  reason_counts: Array<{
+    code: string;
+    label: string;
+    count: number;
+  }>;
+  decision_counts: Array<{
+    classification: string;
+    reason_code: string;
+    label: string;
+    folder_name: string | null;
+    count: number;
+  }>;
 }

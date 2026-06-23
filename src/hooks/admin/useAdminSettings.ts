@@ -3,12 +3,19 @@ import { toast } from "sonner";
 import { apiFetch, ApiError } from "@/lib/api";
 import type {
   AcumaticaCustomerSummary,
+  AcumaticaSalesOrder,
   AcumaticaResponse,
   AcumaticaSyncLog,
   AdminHealth,
+  AiPromptLog,
+  AiPromptLogStats,
   AiProviderStatus,
   AuditLogEntry,
   DeadLetter,
+  CronJob,
+  CronRunLog,
+  DailyReportConfig,
+  DailyReportRun,
   NotificationRule,
   PaginatedResponse,
   Permission,
@@ -381,9 +388,174 @@ export function useMatchHistory() {
   });
 }
 
+export interface MatchEvidence {
+  po_number: string;
+  source: string;
+  method: string;
+  confidence: number;
+  raw_match: string;
+}
+
+export interface MatchReviewEmail {
+  id: number;
+  subject: string | null;
+  from_email: string | null;
+  received_at: string | null;
+  extracted_po_number: string | null;
+  match_classification: "needs_review" | "matched_discrepancies" | "not_matched";
+  match_sources: string[] | null;
+  match_evidence: MatchEvidence[] | null;
+  match_conflicts: Array<{ field: string; email_value: string; acumatica_value: string; reason: string }> | null;
+  match_reason_codes: string[] | null;
+  match_rule_version: string | null;
+  matched_order: AcumaticaSalesOrder | null;
+  attachments: Array<{ id: number; name: string | null; extraction_status: string; extraction_confidence: number | null; extraction_error: string | null }>;
+}
+
+export function usePendingMatchReviews() {
+  return useQuery({
+    queryKey: [...adminKey, "match-reviews"],
+    queryFn: () => apiFetch<PaginatedResponse<MatchReviewEmail>>("admin/order-matching/pending-manual"),
+  });
+}
+
+export function useReviewMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ emailId, decision, reason }: { emailId: number; decision: "approved" | "rejected" | "acknowledged"; reason: string }) =>
+      apiFetch<MatchReviewEmail>(`admin/order-matching/${emailId}/review`, { method: "POST", body: { decision, reason } }),
+    onSuccess: () => {
+      toast.success("Match review recorded.");
+      qc.invalidateQueries({ queryKey: [...adminKey, "match-reviews"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
+}
+
 export function useAuditLogs() {
   return useQuery({
     queryKey: [...adminKey, "audit-logs"],
     queryFn: () => apiFetch<PaginatedResponse<AuditLogEntry>>("admin/audit-logs"),
+  });
+}
+
+export function useCronJobs() {
+  return useQuery({
+    queryKey: [...adminKey, "cron-jobs"],
+    queryFn: () => apiFetch<CronJob[]>("admin/cron-jobs"),
+    refetchInterval: 5000,
+  });
+}
+
+export function useCronRuns(jobId: number | null, status: "all" | "failures" | "successes" = "all") {
+  return useQuery({
+    queryKey: [...adminKey, "cron-jobs", jobId, "runs", status],
+    queryFn: () => apiFetch<PaginatedResponse<CronRunLog>>(`admin/cron-jobs/${jobId}/runs?status=${status}`),
+    enabled: jobId !== null,
+    refetchInterval: 5000,
+  });
+}
+
+export function useUpdateCronJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number; is_enabled?: boolean; notes?: string | null; settings?: Partial<CronJob["settings"]> }) =>
+      apiFetch<CronJob>(`admin/cron-jobs/${id}`, { method: "PATCH", body }),
+    onSuccess: () => {
+      toast.success("Cron settings saved.");
+      qc.invalidateQueries({ queryKey: [...adminKey, "cron-jobs"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useRunCronJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<{ message: string }>(`admin/cron-jobs/${id}/run`, { method: "POST" }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      setTimeout(() => qc.invalidateQueries({ queryKey: [...adminKey, "cron-jobs"] }), 500);
+    },
+    onError: showError,
+  });
+}
+
+export function useAiPromptLogs(params?: { intent?: string; status?: string; start_date?: string; end_date?: string }) {
+  const search = new URLSearchParams();
+  if (params?.intent)     search.set("intent",     params.intent);
+  if (params?.status)     search.set("status",      params.status);
+  if (params?.start_date) search.set("start_date",  params.start_date);
+  if (params?.end_date)   search.set("end_date",    params.end_date);
+  const qs = search.toString() ? `?${search.toString()}` : "";
+
+  return useQuery({
+    queryKey: [...adminKey, "ai-prompt-logs", params],
+    queryFn: () => apiFetch<PaginatedResponse<AiPromptLog>>(`admin/ai-prompt-logs${qs}`),
+  });
+}
+
+export function useAiPromptLogStats() {
+  return useQuery({
+    queryKey: [...adminKey, "ai-prompt-logs", "stats"],
+    queryFn: () => apiFetch<AiPromptLogStats>("admin/ai-prompt-logs/stats"),
+  });
+}
+
+export function useDailyReportConfig() {
+  return useQuery({
+    queryKey: [...adminKey, "daily-reports", "config"],
+    queryFn: () => apiFetch<DailyReportConfig>("admin/daily-reports/config"),
+  });
+}
+
+export function useDailyReportRuns() {
+  return useQuery({
+    queryKey: [...adminKey, "daily-reports", "runs"],
+    queryFn: () => apiFetch<PaginatedResponse<DailyReportRun>>("admin/daily-reports/runs"),
+    refetchInterval: 10000,
+  });
+}
+
+export function useUpdateDailyReportConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<DailyReportConfig> & { recipients?: string[]; reply_to?: string[] }) =>
+      apiFetch<DailyReportConfig>("admin/daily-reports/config", { method: "PUT", body }),
+    onSuccess: () => {
+      toast.success("Daily report settings saved.");
+      qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
+      qc.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useTestDailyReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (recipients?: string[]) =>
+      apiFetch<{ message: string; run: DailyReportRun }>("admin/daily-reports/test-send", {
+        method: "POST",
+        body: recipients ? { recipients } : {},
+      }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useResendDailyReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ message: string; run: DailyReportRun }>("admin/daily-reports/resend-last", { method: "POST" }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
+    },
+    onError: showError,
   });
 }

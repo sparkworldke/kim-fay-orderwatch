@@ -9,6 +9,7 @@ use App\Models\MailboxAccount;
 use App\Services\Email\EmailFilterEngine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class EmailFilterController extends Controller
 {
@@ -50,18 +51,33 @@ class EmailFilterController extends Controller
 
     public function sync(EmailFilter $emailFilter): JsonResponse
     {
-        $mailboxes = MailboxAccount::where('status', 'connected')->get();
+        // Include 'error' accounts — a previous failed sync sets status to 'error'
+        // but the OAuth credentials are still valid. Syncing will reset to 'connected'
+        // on success, or leave as 'error' if the underlying problem persists.
+        $mailboxes = MailboxAccount::whereIn('status', ['connected', 'error'])->get();
 
         if ($mailboxes->isEmpty()) {
-            return response()->json(['message' => 'No connected mailboxes to sync.'], 422);
+            return response()->json(['message' => 'No mailbox accounts found. Connect an Outlook account in the Accounts tab first.'], 422);
         }
 
-        foreach ($mailboxes as $mailbox) {
-            SyncMailboxJob::dispatchSync($mailbox->id, $emailFilter->id);
-        }
+        $filterId = $emailFilter->id;
+        $ids      = $mailboxes->pluck('id')->all();
+
+        defer(function () use ($ids, $filterId) {
+            foreach ($ids as $id) {
+                SyncMailboxJob::dispatchSync($id, $filterId);
+            }
+        });
+
+        Log::channel('mailbox_sync')->info('Filter sync dispatched', [
+            'filter_id'     => $emailFilter->id,
+            'filter_name'   => $emailFilter->name,
+            'mailbox_count' => $mailboxes->count(),
+            'triggered_at'  => now()->toISOString(),
+        ]);
 
         return response()->json([
-            'message' => "Sync completed for \"{$emailFilter->name}\" across {$mailboxes->count()} mailbox(es).",
+            'message' => "Sync queued for \"{$emailFilter->name}\" across {$mailboxes->count()} mailbox(es). Emails will import in the background.",
         ]);
     }
 

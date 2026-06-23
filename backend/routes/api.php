@@ -11,6 +11,11 @@ use App\Http\Controllers\Api\Admin\RoleController;
 use App\Http\Controllers\Api\AcumaticaImportController;
 use App\Http\Controllers\Api\Admin\EmailImportConfigController;
 use App\Http\Controllers\Api\Admin\OrderMatchingController;
+use App\Http\Controllers\Api\Admin\MailboxFolderController;
+use App\Http\Controllers\Api\Admin\AiPromptLogController;
+use App\Http\Controllers\Api\Admin\CronJobController;
+use App\Http\Controllers\Api\Admin\DailyReportController;
+use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
@@ -124,6 +129,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('order-matching/override-po',        [OrderMatchingController::class, 'overridePo']);
         Route::get('order-matching/history',             [OrderMatchingController::class, 'history']);
         Route::get('order-matching/pending-manual',      [OrderMatchingController::class, 'pendingManual']);
+        Route::post('order-matching/{email}/review',      [OrderMatchingController::class, 'review']);
         Route::get('acumatica/orders/{orderNbr}',        [AcumaticaController::class, 'previewOrder']);
 
         // Data truncation (admin only)
@@ -138,16 +144,46 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('notification-rules/{id}', [NotificationRuleController::class, 'update']);
 
         Route::get('audit-logs', [AuditLogController::class, 'index']);
+        Route::get('cron-jobs', [CronJobController::class, 'index']);
+        Route::get('cron-jobs/{cronJob}', [CronJobController::class, 'show']);
+        Route::patch('cron-jobs/{cronJob}', [CronJobController::class, 'update']);
+        Route::post('cron-jobs/{cronJob}/run', [CronJobController::class, 'run']);
+        Route::get('cron-jobs/{cronJob}/runs', [CronJobController::class, 'runs']);
+
+        // Daily management report
+        Route::get('daily-reports/config', [DailyReportController::class, 'show']);
+        Route::put('daily-reports/config', [DailyReportController::class, 'update']);
+        Route::post('daily-reports/test-send', [DailyReportController::class, 'testSend']);
+        Route::post('daily-reports/resend-last', [DailyReportController::class, 'resendLast']);
+        Route::get('daily-reports/runs', [DailyReportController::class, 'runs']);
+
+        // AI prompt logs
+        Route::get('ai-prompt-logs',       [AiPromptLogController::class, 'index']);
+        Route::get('ai-prompt-logs/stats', [AiPromptLogController::class, 'stats']);
 
         // Mailboxes (Outlook OAuth + sync)
         Route::get('mailboxes',                           [MailboxController::class, 'index']);
         Route::post('mailboxes/oauth/start',              [MailboxController::class, 'startOAuth']);
-        Route::get('mailboxes/oauth/check',               [MailboxController::class, 'checkOAuth']);
+        Route::match(['get', 'post'], 'mailboxes/oauth/check', [MailboxController::class, 'checkOAuth']);
         Route::match(['put', 'patch'], 'mailboxes/{mailbox}', [MailboxController::class, 'update']);
+        Route::post('mailboxes/sync-all',                 [MailboxController::class, 'syncAll']);
         Route::post('mailboxes/{mailbox}/sync',           [MailboxController::class, 'sync']);
+        Route::post('mailboxes/{mailbox}/sync-logs/{logId}/stop', [MailboxController::class, 'stopSync']);
         Route::get('mailboxes/{mailbox}/sync-logs',       [MailboxController::class, 'syncLogs']);
+        Route::get('mailboxes/{mailbox}/folders',         [MailboxFolderController::class, 'index']);
+        Route::post('mailboxes/{mailbox}/folders/discover', [MailboxFolderController::class, 'discover']);
+        Route::patch('mailbox-folders/{folder}',          [MailboxFolderController::class, 'update']);
+        Route::post('mailbox-folders/{folder}/test',      [MailboxFolderController::class, 'test']);
+        Route::post('mailbox-rule-mappings',              [MailboxFolderController::class, 'storeRule']);
+        Route::patch('mailbox-rule-mappings/{rule}',      [MailboxFolderController::class, 'updateRule']);
+        Route::delete('mailbox-rule-mappings/{rule}',     [MailboxFolderController::class, 'destroyRule']);
+        Route::get('ingestion-reviews',                   [MailboxFolderController::class, 'reviews']);
+        Route::post('ingestion-reviews/{email}',          [MailboxFolderController::class, 'review']);
         Route::delete('mailboxes/{mailbox}',              [MailboxController::class, 'destroy']);
     });
+
+    // AI chat — available to all authenticated users
+    Route::post('ai/chat', [AiChatController::class, 'chat']);
 
     // Emails (readable by any authenticated user)
     Route::get('emails',                                  [EmailController::class, 'index']);

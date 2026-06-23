@@ -6,9 +6,11 @@ use App\Models\Email;
 use App\Models\EmailFilter;
 use App\Models\MailboxAccount;
 use App\Models\MailboxSyncLog;
+use App\Models\MailboxSyncItemLog;
 use App\Models\User;
 use App\Services\Email\OutlookEmailService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class EmailSyncTest extends TestCase
@@ -18,16 +20,16 @@ class EmailSyncTest extends TestCase
     private function adminUser(): User
     {
         return User::factory()->create([
-            'role'           => 'Administrator',
+            'role' => 'Administrator',
             'is_super_admin' => true,
-            'is_active'      => true,
+            'is_active' => true,
         ]);
     }
 
     private function regularUser(): User
     {
         return User::factory()->create([
-            'role'      => 'Viewer',
+            'role' => 'Viewer',
             'is_active' => true,
         ]);
     }
@@ -35,12 +37,12 @@ class EmailSyncTest extends TestCase
     private function mailbox(): MailboxAccount
     {
         return MailboxAccount::create([
-            'email'                    => 'inbox@example.com',
-            'display_name'             => 'Test Inbox',
-            'access_token_encrypted'   => 'encrypted-access-token',
-            'refresh_token_encrypted'  => 'encrypted-refresh-token',
-            'token_expires_at'         => now()->addHour(),
-            'status'                   => 'connected',
+            'email' => 'inbox@example.com',
+            'display_name' => 'Test Inbox',
+            'access_token_encrypted' => 'encrypted-access-token',
+            'refresh_token_encrypted' => 'encrypted-refresh-token',
+            'token_expires_at' => now()->addHour(),
+            'status' => 'connected',
         ]);
     }
 
@@ -132,14 +134,16 @@ class EmailSyncTest extends TestCase
         $this->mock(OutlookEmailService::class, function ($mock) use ($mailbox) {
             $mock->shouldReceive('syncEmails')
                 ->once()
-                ->withArgs(fn (MailboxAccount $account, ?int $filterId) => $account->is($mailbox) && $filterId === null)
+                ->withArgs(fn (MailboxAccount $account, ?int $filterId, MailboxSyncLog $syncLog) => $account->is($mailbox)
+                    && $filterId === null
+                    && $syncLog->mailbox_account_id === $mailbox->id)
                 ->andReturn(3);
         });
 
         $this->actingAs($this->adminUser(), 'sanctum')
             ->postJson("/api/admin/mailboxes/{$mailbox->id}/sync")
             ->assertOk()
-            ->assertJsonFragment(['message' => 'Sync completed.']);
+            ->assertJsonFragment(['message' => 'Sync started. Emails will be imported in the background.']);
 
         $log = MailboxSyncLog::latest('id')->first();
 
@@ -147,6 +151,104 @@ class EmailSyncTest extends TestCase
         $this->assertSame($mailbox->id, $log->mailbox_account_id);
         $this->assertSame('completed', $log->status);
         $this->assertSame(3, $log->emails_fetched);
+        $this->assertNull($log->email_filter_id);
+    }
+
+    public function test_rule_sync_records_filter_identity(): void
+    {
+        $mailbox = $this->mailbox();
+        $filter = EmailFilter::create([
+            'name' => 'Naivas PO rule',
+            'conditions' => $this->singleCondition('sender_domain', 'naivas.net'),
+            'is_active' => true,
+        ]);
+        $this->mock(OutlookEmailService::class, function ($mock) use ($mailbox, $filter) {
+            $mock->shouldReceive('syncEmails')
+                ->once()
+                ->withArgs(fn (MailboxAccount $account, ?int $filterId, MailboxSyncLog $syncLog) => $account->is($mailbox)
+                    && $filterId === $filter->id
+                    && $syncLog->email_filter_id === $filter->id)
+                ->andReturn(0);
+        });
+
+        $this->actingAs($this->adminUser(), 'sanctum')
+            ->postJson("/api/email-filters/{$filter->id}/sync")
+            ->assertOk();
+
+        $this->assertDatabaseHas('mailbox_sync_logs', [
+            'mailbox_account_id' => $mailbox->id,
+            'email_filter_id' => $filter->id,
+            'status' => 'completed',
+        ]);
+    }
+
+    public function test_sync_logs_return_privacy_safe_aggregated_skip_reasons(): void
+    {
+        $mailbox = $this->mailbox();
+        $filter = EmailFilter::create([
+            'name' => 'Naivas PO rule',
+            'conditions' => $this->singleCondition('sender_domain', 'naivas.net'),
+            'is_active' => true,
+        ]);
+        $ruleRun = MailboxSyncLog::create([
+            'mailbox_account_id' => $mailbox->id,
+            'email_filter_id' => $filter->id,
+            'started_at' => now()->subMinute(),
+            'ended_at' => now(),
+            'emails_fetched' => 5,
+            'emails_skipped' => 5,
+            'status' => 'completed',
+        ]);
+        foreach ([
+            ['filter_not_matched', 'private-message-1'],
+            ['filter_not_matched', 'private-message-2'],
+            ['filter_not_matched', 'private-message-3'],
+            ['unchanged', 'private-message-4'],
+            ['unchanged', 'private-message-5'],
+        ] as [$reason, $messageId]) {
+            MailboxSyncItemLog::create([
+                'mailbox_sync_log_id' => $ruleRun->id,
+                'message_id' => $messageId,
+                'outcome' => 'skipped',
+                'reason' => $reason,
+                'attempts' => 1,
+                'duration_ms' => 1,
+                'processed_at' => now(),
+            ]);
+        }
+        $historicalRun = MailboxSyncLog::create([
+            'mailbox_account_id' => $mailbox->id,
+            'started_at' => now()->subMinutes(2),
+            'ended_at' => now()->subMinute(),
+            'emails_fetched' => 1,
+            'emails_skipped' => 1,
+            'status' => 'completed',
+        ]);
+        MailboxSyncItemLog::create([
+            'mailbox_sync_log_id' => $historicalRun->id,
+            'message_id' => 'private-message-6',
+            'outcome' => 'skipped',
+            'reason' => 'filter_not_matched',
+            'attempts' => 1,
+            'duration_ms' => 1,
+            'processed_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->adminUser(), 'sanctum')
+            ->getJson("/api/admin/mailboxes/{$mailbox->id}/sync-logs")
+            ->assertOk();
+
+        $runs = collect($response->json())->keyBy('id');
+        $this->assertSame('rule', $runs[$ruleRun->id]['sync_scope']['type']);
+        $this->assertSame('Naivas PO rule', $runs[$ruleRun->id]['sync_scope']['filter_name']);
+        $this->assertEqualsCanonicalizing([
+            ['code' => 'filter_not_matched', 'label' => 'Does not match "Naivas PO rule"', 'count' => 3],
+            ['code' => 'unchanged', 'label' => 'Already imported; no changes', 'count' => 2],
+        ], $runs[$ruleRun->id]['reason_counts']);
+        $this->assertSame('all', $runs[$historicalRun->id]['sync_scope']['type']);
+        $this->assertSame('Does not match the selected email rule', $runs[$historicalRun->id]['reason_counts'][0]['label']);
+        $this->assertStringNotContainsString('private-message', $response->getContent());
+        $this->assertArrayNotHasKey('item_logs', $runs[$ruleRun->id]);
     }
 
     // --- Email listing ---
@@ -157,11 +259,11 @@ class EmailSyncTest extends TestCase
 
         Email::create([
             'mailbox_account_id' => $mailbox->id,
-            'message_id'         => 'msg-001',
-            'subject'            => 'Hello World',
-            'from_email'         => 'sender@test.com',
-            'from_name'          => 'Sender',
-            'received_at'        => now(),
+            'message_id' => 'msg-001',
+            'subject' => 'Hello World',
+            'from_email' => 'sender@test.com',
+            'from_name' => 'Sender',
+            'received_at' => now(),
         ]);
 
         $response = $this->actingAs($this->regularUser(), 'sanctum')
@@ -175,11 +277,11 @@ class EmailSyncTest extends TestCase
     {
         $mailbox1 = $this->mailbox();
         $mailbox2 = MailboxAccount::create([
-            'email'                    => 'other@example.com',
-            'display_name'             => 'Other',
-            'access_token_encrypted'   => 'tok',
-            'refresh_token_encrypted'  => 'ref',
-            'status'                   => 'connected',
+            'email' => 'other@example.com',
+            'display_name' => 'Other',
+            'access_token_encrypted' => 'tok',
+            'refresh_token_encrypted' => 'ref',
+            'status' => 'connected',
         ]);
 
         Email::create(['mailbox_account_id' => $mailbox1->id, 'message_id' => 'msg-a', 'subject' => 'A', 'from_email' => 'a@a.com', 'received_at' => now()]);
@@ -334,5 +436,62 @@ class EmailSyncTest extends TestCase
 
         $this->assertArrayHasKey('auth_url', $response->json());
         $this->assertStringContainsString('login.microsoftonline.com', $response->json('auth_url'));
+    }
+
+    public function test_admin_can_run_oauth_diagnostics_with_post(): void
+    {
+        config([
+            'services.microsoft.client_id' => 'client-id',
+            'services.microsoft.client_secret' => 'client-secret',
+            'services.microsoft.tenant_id' => 'tenant-id',
+            'services.microsoft.redirect_uri' => 'https://example.com/oauth/callback',
+        ]);
+
+        Http::fake([
+            'https://login.microsoftonline.com/*/v2.0/.well-known/openid-configuration' => Http::response([], 200),
+            'https://login.microsoftonline.com/*/oauth2/v2.0/token' => Http::response([
+                'error' => 'invalid_grant',
+                'error_description' => 'The probe code is intentionally invalid.',
+            ], 400),
+        ]);
+
+        $this->actingAs($this->adminUser(), 'sanctum')
+            ->postJson('/api/admin/mailboxes/oauth/check')
+            ->assertOk()
+            ->assertJsonPath('overall_ok', true)
+            ->assertJsonPath('checks.app_registration.ok', true)
+            ->assertJsonStructure(['checks', 'mailbox_tokens', 'checked_at']);
+    }
+
+    public function test_oauth_callback_preserves_existing_mailbox_and_displays_graph_email(): void
+    {
+        config([
+            'services.microsoft.client_id' => 'client-id',
+            'services.microsoft.client_secret' => 'client-secret',
+            'services.microsoft.tenant_id' => 'tenant-id',
+            'services.microsoft.redirect_uri' => 'https://example.com/oauth/callback',
+        ]);
+
+        $existing = $this->mailbox();
+
+        Http::fake([
+            'https://login.microsoftonline.com/*/oauth2/v2.0/token' => Http::response([
+                'access_token' => 'access-token',
+                'refresh_token' => 'refresh-token',
+                'expires_in' => 3600,
+            ]),
+            'https://graph.microsoft.com/v1.0/me*' => Http::response([
+                'displayName' => 'Order Watch',
+                'mail' => strtoupper($existing->email),
+            ]),
+        ]);
+
+        $account = app(OutlookEmailService::class)->handleCallback('valid-code');
+
+        $this->assertSame($existing->id, $account->id);
+        $this->assertSame($existing->email, $account->email);
+        $this->assertSame('Order Watch', $account->display_name);
+        $this->assertSame('connected', $account->status);
+        $this->assertDatabaseCount('mailbox_accounts', 1);
     }
 }

@@ -142,6 +142,34 @@ class PoNumberExtractorTest extends TestCase
         $this->assertNull($result);
     }
 
+    public function test_guarded_generic_po_preserves_leading_zeroes_and_separators(): void
+    {
+        $result = $this->extractor->extract('buyer@example.com', 'Re: PO 004512 attached');
+        $this->assertSame('004512', $result?->poNumber);
+
+        $hyphenated = $this->extractor->extract('buyer@example.com', 'Purchase Order: AB-004512');
+        $this->assertSame('AB-004512', $hyphenated?->poNumber);
+    }
+
+    public function test_guarded_generic_po_requires_complete_token_boundaries(): void
+    {
+        $candidates = $this->extractor->extractAll('buyer@example.com', [
+            'subject' => 'Reference XPO0045129 is not an explicitly labelled PO',
+        ]);
+        $this->assertSame([], $candidates);
+    }
+
+    public function test_extract_all_retains_conflicting_po_candidates_and_sources(): void
+    {
+        $candidates = $this->extractor->extractAll('buyer@example.com', [
+            'subject' => 'PO 004512 attached',
+            'body' => 'Correction: PO 004513',
+        ]);
+
+        $this->assertSame(['004512', '004513'], collect($candidates)->pluck('po_number')->unique()->values()->all());
+        $this->assertSame(['subject', 'body'], collect($candidates)->pluck('source')->unique()->values()->all());
+    }
+
     public function test_po_normalised_to_uppercase(): void
     {
         // Even if a pattern returns lowercase, normalised PO is uppercase

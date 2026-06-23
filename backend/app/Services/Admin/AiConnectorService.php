@@ -31,6 +31,35 @@ class AiConnectorService
         ];
     }
 
+    /**
+     * Return the plaintext key for a provider, checking DB first then env.
+     * Returns null when neither source has a key configured.
+     */
+    public function getKey(string $provider): ?string
+    {
+        $record = AiApiKey::where('provider', $provider)->first();
+        $envKey = $this->envKey($provider);
+        $raw    = $record ? $this->encryption->decrypt($record->key_encrypted) : env($envKey);
+
+        return (is_string($raw) && $raw !== '') ? $raw : null;
+    }
+
+    /**
+     * Returns [provider, key] for the first configured provider in preference order,
+     * or ['openai', null] when nothing is configured.
+     */
+    public function resolveKey(array $preferenceOrder = ['openai', 'anthropic']): array
+    {
+        foreach ($preferenceOrder as $provider) {
+            $key = $this->getKey($provider);
+            if ($key !== null) {
+                return [$provider, $key];
+            }
+        }
+
+        return ['openai', null];
+    }
+
     public function store(string $provider, string $key, ?int $userId): AiApiKey
     {
         return AiApiKey::updateOrCreate(

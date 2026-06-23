@@ -6,6 +6,7 @@ import type {
   EmailFilter,
   EmailMessage,
   MailboxAccount,
+  MailboxFolder,
   PaginatedEmails,
   SyncLog,
   UpdateEmailFilterPayload,
@@ -14,9 +15,14 @@ import type {
 const MAILBOXES_KEY = ["mailboxes"] as const;
 const EMAILS_KEY = ["emails"] as const;
 const FILTERS_KEY = ["email-filters"] as const;
+const FOLDERS_KEY = ["mailbox-folders"] as const;
 
 function showError(error: unknown) {
-  toast.error(error instanceof ApiError ? error.message : "Request failed");
+  toast.error(
+    error instanceof ApiError
+      ? error.message
+      : "The request could not be completed. Please try again.",
+  );
 }
 
 // --- Mailboxes ---
@@ -31,7 +37,8 @@ export function useMailboxAccounts(enabled = true) {
 
 export function useStartOAuth() {
   return useMutation({
-    mutationFn: () => apiFetch<{ auth_url: string }>("admin/mailboxes/oauth/start", { method: "POST" }),
+    mutationFn: () =>
+      apiFetch<{ auth_url: string }>("admin/mailboxes/oauth/start", { method: "POST" }),
     onSuccess: ({ auth_url }) => {
       window.location.href = auth_url;
     },
@@ -48,7 +55,7 @@ export interface OAuthCheckResult {
 
 export function useCheckOAuth() {
   return useMutation({
-    mutationFn: () => apiFetch<OAuthCheckResult>("admin/mailboxes/oauth/check"),
+    mutationFn: () => apiFetch<OAuthCheckResult>("admin/mailboxes/oauth/check", { method: "POST" }),
     onError: showError,
   });
 }
@@ -67,15 +74,30 @@ export function useUpdateMailbox() {
   });
 }
 
+export function useSyncAllMailboxes() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ message: string }>("admin/mailboxes/sync-all", { method: "POST" }),
+    onSuccess: (data) => {
+      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: MAILBOXES_KEY });
+    },
+    onError: showError,
+  });
+}
+
 export function useSyncMailbox() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: number) => apiFetch<{ message: string }>(`admin/mailboxes/${id}/sync`, { method: "POST" }),
+    mutationFn: (id: number) =>
+      apiFetch<{ message: string }>(`admin/mailboxes/${id}/sync`, { method: "POST" }),
     onSuccess: (_data, id) => {
-      toast.success("Sync completed.");
+      toast.success("Sync started — emails will be imported in the background.");
       queryClient.invalidateQueries({ queryKey: MAILBOXES_KEY });
-      // Immediately refresh logs so the "running" state appears without waiting for the poll
+      // Refresh logs shortly so the "running" entry appears
       queryClient.invalidateQueries({ queryKey: [...MAILBOXES_KEY, id, "sync-logs"] });
     },
     onError: showError,
@@ -86,7 +108,8 @@ export function useDisconnectMailbox() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: number) => apiFetch<{ message: string }>(`admin/mailboxes/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) =>
+      apiFetch<{ message: string }>(`admin/mailboxes/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       toast.success("Mailbox disconnected.");
       queryClient.invalidateQueries({ queryKey: MAILBOXES_KEY });
@@ -103,6 +126,91 @@ export function useMailboxSyncLogs(mailboxId: number | null) {
     enabled: mailboxId !== null,
     // Poll every 5 s so running syncs update live; stops automatically when disabled
     refetchInterval: 5000,
+  });
+}
+
+export function useMailboxFolders(mailboxId: number | null) {
+  return useQuery({
+    queryKey: [...FOLDERS_KEY, mailboxId],
+    queryFn: () => apiFetch<MailboxFolder[]>(`admin/mailboxes/${mailboxId}/folders`),
+    enabled: mailboxId !== null,
+  });
+}
+
+export function useDiscoverMailboxFolders() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (mailboxId: number) => apiFetch<MailboxFolder[]>(`admin/mailboxes/${mailboxId}/folders/discover`, { method: "POST" }),
+    onSuccess: (_data, mailboxId) => {
+      toast.success("Outlook folders refreshed.");
+      queryClient.invalidateQueries({ queryKey: [...FOLDERS_KEY, mailboxId] });
+    },
+    onError: showError,
+  });
+}
+
+export function useUpdateMailboxFolder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: Partial<MailboxFolder> & { id: number }) =>
+      apiFetch<MailboxFolder>(`admin/mailbox-folders/${id}`, { method: "PATCH", body }),
+    onSuccess: (folder) => queryClient.invalidateQueries({ queryKey: [...FOLDERS_KEY, folder.mailbox_account_id] }),
+    onError: showError,
+  });
+}
+
+export function useSaveFolderRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id?: number; mailbox_folder_id: number; existing_rule_name: string; is_enabled: boolean; is_trusted: boolean }) => {
+      const { id, ...body } = payload;
+      return apiFetch(id ? `admin/mailbox-rule-mappings/${id}` : "admin/mailbox-rule-mappings", {
+        method: id ? "PATCH" : "POST", body,
+      });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: FOLDERS_KEY }),
+    onError: showError,
+  });
+}
+
+export function useDeleteFolderRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiFetch(`admin/mailbox-rule-mappings/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success("Rule mapping removed.");
+      queryClient.invalidateQueries({ queryKey: FOLDERS_KEY });
+    },
+    onError: showError,
+  });
+}
+
+export function useTestMailboxFolder() {
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<{ ok: boolean; message: string; recent_message_count: number }>(`admin/mailbox-folders/${id}/test`, { method: "POST" }),
+    onSuccess: (result) => toast.success(`${result.message} ${result.recent_message_count} recent message(s) sampled.`),
+    onError: showError,
+  });
+}
+
+export function useIngestionReviews() {
+  return useQuery({
+    queryKey: ["ingestion-reviews"],
+    queryFn: () => apiFetch<{ data: EmailMessage[] }>("admin/ingestion-reviews"),
+  });
+}
+
+export function useReviewIngestion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ emailId, decision, reason }: { emailId: number; decision: "approved" | "rejected"; reason: string }) =>
+      apiFetch(`admin/ingestion-reviews/${emailId}`, { method: "POST", body: { decision, reason } }),
+    onSuccess: () => {
+      toast.success("Ingestion review recorded.");
+      queryClient.invalidateQueries({ queryKey: ["ingestion-reviews"] });
+      queryClient.invalidateQueries({ queryKey: EMAILS_KEY });
+    },
+    onError: showError,
   });
 }
 
@@ -181,11 +289,26 @@ export function useSyncRule() {
   });
 }
 
+export function useStopSync() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ mailboxId, logId }: { mailboxId: number; logId: number }) =>
+      apiFetch<{ message: string }>(`admin/mailboxes/${mailboxId}/sync-logs/${logId}/stop`, { method: "POST" }),
+    onSuccess: (data, { mailboxId }) => {
+      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: [...MAILBOXES_KEY, mailboxId, "sync-logs"] });
+    },
+    onError: showError,
+  });
+}
+
 export function useDeleteEmailFilter() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: number) => apiFetch<{ message: string }>(`email-filters/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) =>
+      apiFetch<{ message: string }>(`email-filters/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       toast.success("Filter deleted.");
       queryClient.invalidateQueries({ queryKey: FILTERS_KEY });

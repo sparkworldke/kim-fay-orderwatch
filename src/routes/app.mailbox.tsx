@@ -2,12 +2,16 @@ import { createFileRoute, useSearch } from "@tanstack/react-router";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Filter,
+  FolderTree,
   Inbox,
   Loader2,
   Mail,
   MailOpen,
   Minus,
+  OctagonX,
   Plus,
   RefreshCw,
   Search,
@@ -43,8 +47,17 @@ import {
   useEmailFilters,
   useEmails,
   useMailboxAccounts,
+  useMailboxFolders,
+  useDiscoverMailboxFolders,
+  useUpdateMailboxFolder,
+  useSaveFolderRule,
+  useDeleteFolderRule,
+  useTestMailboxFolder,
+  useIngestionReviews,
+  useReviewIngestion,
   useMailboxSyncLogs,
   useStartOAuth,
+  useStopSync,
   useSyncMailbox,
   useSyncRule,
   useUpdateEmailFilter,
@@ -52,6 +65,7 @@ import {
 } from "@/hooks/mailbox/useMailbox";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
+import { useCustomers } from "@/hooks/useCustomers";
 import type { CreateEmailFilterPayload, EmailFilter, EmailFilterCondition, EmailFilterType, EmailMessage, MailboxAccount, SyncLog } from "@/types/mailbox";
 
 export const Route = createFileRoute("/app/mailbox")({
@@ -97,6 +111,12 @@ function MailboxPage() {
             Filter Rules
           </TabsTrigger>
           {isAdmin && (
+            <TabsTrigger value="folders" className="gap-1.5">
+              <FolderTree className="h-3.5 w-3.5" />
+              Folders & Rules
+            </TabsTrigger>
+          )}
+          {isAdmin && (
             <TabsTrigger value="accounts" className="gap-1.5">
               <Settings className="h-3.5 w-3.5" />
               Accounts
@@ -111,11 +131,117 @@ function MailboxPage() {
           <FilterRulesPanel />
         </TabsContent>
         {isAdmin && (
+          <TabsContent value="folders">
+            <FoldersRulesPanel />
+          </TabsContent>
+        )}
+        {isAdmin && (
           <TabsContent value="accounts">
             <AccountsPanel />
           </TabsContent>
         )}
       </Tabs>
+    </div>
+  );
+}
+
+function FoldersRulesPanel() {
+  const { data: mailboxes = [] } = useMailboxAccounts();
+  const [mailboxId, setMailboxId] = useState<number | null>(null);
+  const [ruleDrafts, setRuleDrafts] = useState<Record<number, string>>({});
+  const [reviewReasons, setReviewReasons] = useState<Record<number, string>>({});
+  useEffect(() => {
+    if (mailboxId === null && mailboxes.length) setMailboxId(mailboxes[0].id);
+  }, [mailboxId, mailboxes]);
+  const folders = useMailboxFolders(mailboxId);
+  const discover = useDiscoverMailboxFolders();
+  const updateFolder = useUpdateMailboxFolder();
+  const saveRule = useSaveFolderRule();
+  const deleteRule = useDeleteFolderRule();
+  const testFolder = useTestMailboxFolder();
+  const customers = useCustomers({ per_page: 200 });
+  const reviews = useIngestionReviews();
+  const review = useReviewIngestion();
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Outlook folders and existing rules</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">Inbox is always synced. Other folders require explicit enablement; names are never trusted automatically.</p>
+            </div>
+            <div className="flex gap-2">
+              <Select value={mailboxId ? String(mailboxId) : ""} onValueChange={(value) => setMailboxId(Number(value))}>
+                <SelectTrigger className="w-56"><SelectValue placeholder="Select mailbox" /></SelectTrigger>
+                <SelectContent>{mailboxes.map((mailbox) => <SelectItem key={mailbox.id} value={String(mailbox.id)}>{mailbox.email}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button variant="outline" disabled={!mailboxId || discover.isPending} onClick={() => mailboxId && discover.mutate(mailboxId)}>
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${discover.isPending ? "animate-spin" : ""}`} />Discover folders
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {folders.isLoading && <Skeleton className="h-32" />}
+          {folders.data?.length === 0 && <p className="text-sm text-muted-foreground">No folders discovered yet.</p>}
+          <div className="space-y-3">
+            {folders.data?.map((folder) => {
+              const rule = folder.rules[0];
+              const ruleName = ruleDrafts[folder.id] ?? rule?.existing_rule_name ?? "";
+              const isInbox = folder.display_name.toLowerCase() === "inbox";
+              return (
+                <div key={folder.id} className="rounded-md border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 font-medium">
+                        {folder.parent_display_name && <span className="text-muted-foreground">{folder.parent_display_name} /</span>}{folder.display_name}
+                        {folder.suggested_order_folder && <Badge variant="outline">Order-folder suggestion</Badge>}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">{folder.total_item_count} messages · {folder.unread_item_count} unread · {folder.last_synced_at ? `synced ${new Date(folder.last_synced_at).toLocaleString("en-KE")}` : "never synced"}</div>
+                      {folder.last_sync_error && <div className="mt-1 text-xs text-destructive">{folder.last_sync_error}</div>}
+                    </div>
+                    <Button size="sm" variant="ghost" disabled={testFolder.isPending} onClick={() => testFolder.mutate(folder.id)}>Test folder</Button>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <label className="flex items-center gap-2 text-xs"><Switch checked={folder.is_sync_enabled} disabled={isInbox} onCheckedChange={(value) => updateFolder.mutate({ id: folder.id, is_sync_enabled: value })} />Sync enabled</label>
+                    <label className="flex items-center gap-2 text-xs"><Switch checked={folder.is_order_folder} onCheckedChange={(value) => updateFolder.mutate({ id: folder.id, is_order_folder: value })} />Order folder</label>
+                    <Select value={folder.trust_level} onValueChange={(value) => updateFolder.mutate({ id: folder.id, trust_level: value as typeof folder.trust_level })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="untrusted">Untrusted</SelectItem><SelectItem value="standard">Standard</SelectItem><SelectItem value="trusted_order">Trusted order</SelectItem></SelectContent>
+                    </Select>
+                    <Select value={folder.customer_id ? String(folder.customer_id) : "none"} onValueChange={(value) => updateFolder.mutate({ id: folder.id, customer_id: value === "none" ? null : Number(value) })}>
+                      <SelectTrigger><SelectValue placeholder="Map customer" /></SelectTrigger><SelectContent><SelectItem value="none">No customer mapping</SelectItem>{customers.data?.data.map((customer) => <SelectItem key={customer.id} value={String(customer.id)}>{customer.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Input type="number" min={0} max={1000} value={folder.sync_priority} onChange={(event) => updateFolder.mutate({ id: folder.id, sync_priority: Number(event.target.value) })} title="Lower priority syncs first" />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Input className="min-w-64 flex-1" placeholder="Existing Outlook rule name (manual metadata)" value={ruleName} onChange={(event) => setRuleDrafts((current) => ({ ...current, [folder.id]: event.target.value }))} />
+                    {rule && <label className="flex items-center gap-2 text-xs"><Switch checked={rule.is_enabled} onCheckedChange={(value) => saveRule.mutate({ id: rule.id, mailbox_folder_id: folder.id, existing_rule_name: ruleName, is_enabled: value, is_trusted: rule.is_trusted })} />Enabled</label>}
+                    <label className="flex items-center gap-2 text-xs"><Switch checked={rule?.is_trusted ?? false} onCheckedChange={(value) => rule && saveRule.mutate({ id: rule.id, mailbox_folder_id: folder.id, existing_rule_name: ruleName, is_enabled: rule.is_enabled, is_trusted: value })} />Trusted metadata</label>
+                    <Button size="sm" disabled={ruleName.trim().length < 2 || saveRule.isPending} onClick={() => saveRule.mutate({ id: rule?.id, mailbox_folder_id: folder.id, existing_rule_name: ruleName.trim(), is_enabled: rule?.is_enabled ?? true, is_trusted: rule?.is_trusted ?? false })}>Save rule name</Button>
+                    {rule && <Button size="sm" variant="ghost" className="text-destructive" disabled={deleteRule.isPending} onClick={() => deleteRule.mutate(rule.id)}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Ingestion review</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {reviews.data?.data.length === 0 && <p className="text-sm text-muted-foreground">No folder-context emails need review.</p>}
+          {reviews.data?.data.map((email) => (
+            <div key={email.id} className="rounded border p-3 text-sm">
+              <div className="font-medium">{email.subject || "(no subject)"}</div>
+              <div className="text-xs text-muted-foreground">{email.mailbox_folder?.display_name || email.folder} · {(email.ingestion_reason_codes || []).join(", ")}</div>
+              <div className="mt-2 flex flex-wrap gap-2"><Input className="min-w-64 flex-1" placeholder="Required review reason" value={reviewReasons[email.id] || ""} onChange={(event) => setReviewReasons((current) => ({ ...current, [email.id]: event.target.value }))} /><Button size="sm" disabled={(reviewReasons[email.id] || "").trim().length < 3} onClick={() => review.mutate({ emailId: email.id, decision: "approved", reason: reviewReasons[email.id] })}>Approve for PO processing</Button><Button size="sm" variant="outline" disabled={(reviewReasons[email.id] || "").trim().length < 3} onClick={() => review.mutate({ emailId: email.id, decision: "rejected", reason: reviewReasons[email.id] })}>Mark non-order</Button></div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -260,6 +386,15 @@ function EmailRow({ email }: { email: EmailMessage }) {
           {email.from_email && (
             <div className="mt-0.5 text-xs text-muted-foreground">{email.from_email}</div>
           )}
+          <div className="mt-1 flex flex-wrap gap-1">
+            <Badge variant="outline" className="text-[10px]">{email.folder}</Badge>
+            {email.ingestion_classification && (
+              <Badge variant={email.ingestion_classification === "po_processing" ? "default" : "secondary"} className="text-[10px]">
+                {email.ingestion_classification.replaceAll("_", " ")}
+              </Badge>
+            )}
+            {email.mailbox_folder?.rules?.[0] && <Badge variant="outline" className="text-[10px]">Rule: {email.mailbox_folder.rules[0].existing_rule_name}</Badge>}
+          </div>
           {expanded && email.body_preview && (
             <p className="mt-2 text-xs text-muted-foreground leading-relaxed border-t pt-2">
               {email.body_preview}
@@ -295,7 +430,7 @@ function FilterRulesPanel() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-0.5">
           <p className="text-sm text-muted-foreground">
-            Rules control which emails are imported during sync — an email is kept if it matches <strong>at least one</strong> active rule.
+            A normal inbox sync imports every email. Rules help organize stored messages; using a rule card&apos;s Sync button performs an intentionally filtered import.
           </p>
           <p className="text-xs text-muted-foreground">
             Each card shows a real-time count of already-synced emails that match the rule.
@@ -848,6 +983,26 @@ function ConditionRowField({
           </div>
           {errors.value && <p className="text-xs text-destructive">{errors.value}</p>}
           {errors.value_to && <p className="text-xs text-destructive">{errors.value_to}</p>}
+
+          {/* Warn when the end date is in the past — this causes ALL emails to be skipped */}
+          {condition.value_to && condition.value_to < new Date().toISOString().slice(0, 10) && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50/60 px-2.5 py-2 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div className="flex-1 text-[11px]">
+                <span className="font-medium">This date range has expired.</span>
+                {" "}Emails received after {condition.value_to} will all be skipped by this condition.
+                {showRemove && (
+                  <button
+                    type="button"
+                    className="ml-1 underline underline-offset-2 hover:no-underline"
+                    onClick={onRemove}
+                  >
+                    Remove this condition
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -1052,14 +1207,16 @@ function MailboxSyncLogs({ logs }: { logs: SyncLog[] }) {
       </div>
       <div className="divide-y">
         {logs.map((log) => (
-          <SyncLogRow key={log.id} log={log} />
+          <SyncLogRow key={log.id} log={log} mailboxId={log.mailbox_account_id} />
         ))}
       </div>
     </div>
   );
 }
 
-function SyncLogRow({ log }: { log: SyncLog }) {
+function SyncLogRow({ log, mailboxId }: { log: SyncLog; mailboxId: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const stopSync = useStopSync();
   const started = new Date(log.started_at);
   const duration =
     log.ended_at
@@ -1076,31 +1233,102 @@ function SyncLogRow({ log }: { log: SyncLog }) {
   });
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 text-xs">
-      {log.status === "running"   && <Loader2    className="h-3 w-3 animate-spin text-blue-500 shrink-0" />}
+    <div className="text-xs">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+      {log.status === "running"   && <Loader2      className="h-3 w-3 animate-spin text-blue-500 shrink-0" />}
       {log.status === "completed" && <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />}
-      {log.status === "failed"    && <XCircle    className="h-3 w-3 text-destructive shrink-0" />}
+      {log.status === "failed"    && <XCircle      className="h-3 w-3 text-destructive shrink-0" />}
+      {log.status === "stopped"   && <OctagonX     className="h-3 w-3 text-amber-500 shrink-0" />}
 
       <span className="shrink-0 text-muted-foreground w-32">{fmtDate}</span>
 
-      <span className="flex-1 truncate">
-        {log.status === "running" && (
-          <span className="text-blue-500 font-medium">Importing emails…</span>
-        )}
-        {log.status === "completed" && (
-          <span className="text-green-600">
-            {log.emails_fetched} email{log.emails_fetched !== 1 ? "s" : ""} imported
-          </span>
-        )}
-        {log.status === "failed" && (
-          <span className="text-destructive" title={log.error_message ?? undefined}>
-            {log.error_message ? log.error_message.slice(0, 80) : "Sync failed"}
-          </span>
-        )}
+      <Badge variant="outline" className="h-5 text-[10px]">
+        {log.sync_scope.type === "rule" ? log.sync_scope.filter_name || "Deleted rule" : "Full inbox"}
+      </Badge>
+
+      <span className="min-w-0 flex-1 text-muted-foreground">
+        <span className="font-medium text-foreground">{log.emails_fetched} fetched</span>
+        {" · "}{log.emails_created} created
+        {" · "}{log.emails_updated} updated
+        {" · "}<span className={log.emails_skipped ? "text-amber-600" : ""}>{log.emails_skipped} skipped</span>
+        {log.emails_failed > 0 && <>{" · "}<span className="text-destructive">{log.emails_failed} failed</span></>}
       </span>
 
       {duration !== null && (
         <span className="shrink-0 text-muted-foreground">{duration}s</span>
+      )}
+
+      {log.status === "running" && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 gap-1 px-2 text-[10px] text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+          disabled={stopSync.isPending}
+          onClick={() => stopSync.mutate({ mailboxId, logId: log.id })}
+          title="Stop this sync after the current batch"
+        >
+          <OctagonX className="h-3 w-3" />
+          {stopSync.isPending ? "Stopping…" : "Stop"}
+        </Button>
+      )}
+
+      <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-[10px]" onClick={() => setExpanded((value) => !value)}>
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        {expanded ? "Hide details" : "View details"}
+      </Button>
+      </div>
+
+      {log.status === "failed" && log.error_message && (
+        <div className="border-t px-3 py-2 text-destructive">{log.error_message}</div>
+      )}
+
+      {expanded && (
+        <div className="border-t bg-background/70 px-3 py-3">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {[
+              ["Fetched", log.emails_fetched],
+              ["Created", log.emails_created],
+              ["Updated", log.emails_updated],
+              ["Skipped", log.emails_skipped],
+              ["Deleted", log.emails_deleted],
+              ["Failed", log.emails_failed],
+            ].map(([label, count]) => (
+              <div key={label} className="rounded border bg-muted/20 p-2 text-center">
+                <div className="font-semibold tabular-nums">{count}</div>
+                <div className="text-[10px] text-muted-foreground">{label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Skipped reasons</div>
+            {log.reason_counts.length > 0 ? (
+              <div className="mt-1 space-y-1">
+                {log.reason_counts.map((reason) => (
+                  <div key={reason.code} className="flex items-center justify-between gap-3 rounded bg-muted/30 px-2 py-1.5">
+                    <span>{reason.label}</span>
+                    <Badge variant="secondary" className="tabular-nums">{reason.count}</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-muted-foreground">No skipped emails in this run.</p>
+            )}
+          </div>
+          {log.decision_counts.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ingestion decisions</div>
+              <div className="mt-1 space-y-1">
+                {log.decision_counts.map((decision) => (
+                  <div key={`${decision.classification}-${decision.reason_code}-${decision.folder_name || "none"}`} className="flex items-center justify-between gap-3 rounded bg-muted/30 px-2 py-1.5">
+                    <span>{decision.label}{decision.folder_name ? ` · ${decision.folder_name}` : ""}</span>
+                    <Badge variant="secondary" className="tabular-nums">{decision.count}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\Admin\EncryptionService;
+use App\Services\Email\EmailFilterEngine;
 use App\Services\Email\OutlookEmailService;
 use Illuminate\Support\Facades\Http;
 use Mockery;
@@ -24,7 +25,8 @@ class OutlookEmailServiceTest extends TestCase
         ]);
 
         $encryption    = Mockery::mock(EncryptionService::class);
-        $this->service = new OutlookEmailService($encryption);
+        $filterEngine  = Mockery::mock(EmailFilterEngine::class);
+        $this->service = new OutlookEmailService($encryption, $filterEngine);
     }
 
     public function test_get_auth_url_contains_required_oauth_parameters(): void

@@ -8,16 +8,30 @@ export type Role =
   | "Executive";
 
 export interface Session {
-  id: number;          // user ID from the API
+  id: number; // user ID from the API
   email: string;
   name: string;
   role: Role;
   loggedInAt: string;
-  token: string;       // Sanctum Bearer token
+  token: string; // Sanctum Bearer token
 }
 
 const KEY = "kf_session";
 const TOKEN_KEY = "kf_token";
+const TOKEN_COOKIE = "kf_token";
+const TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+
+function setTokenCookie(token: string) {
+  if (typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${TOKEN_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+}
+
+function clearTokenCookie() {
+  if (typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${TOKEN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+}
 
 export function getSession(): Session | null {
   if (typeof window === "undefined") return null;
@@ -47,10 +61,15 @@ export function getToken(): string | null {
 
 export function setToken(t: string) {
   window.localStorage.setItem(TOKEN_KEY, t);
+  // TanStack Start's request middleware cannot read localStorage. Mirroring the
+  // bearer token into a same-site cookie lets it reject protected document
+  // requests before any application HTML is rendered.
+  setTokenCookie(t);
 }
 
 export function clearToken() {
   window.localStorage.removeItem(TOKEN_KEY);
+  clearTokenCookie();
 }
 
 export function inferRole(email: string): Role {
@@ -87,6 +106,9 @@ export function useAuth() {
     session,
     isAuthenticated: !!session,
     token: getToken(),
-    logout: () => { clearSession(); clearToken(); },
+    logout: () => {
+      clearSession();
+      clearToken();
+    },
   };
 }

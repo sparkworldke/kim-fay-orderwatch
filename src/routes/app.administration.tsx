@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, AlertTriangle, Database, FlaskConical, History, KeyRound, Mail, Plus, RefreshCw, Search, ShieldCheck, ToggleLeft, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, Bot, ChevronDown, ChevronRight, Clock, Copy, Database, FlaskConical, History, KeyRound, Mail, Play, Plus, RefreshCw, Search, ShieldCheck, ToggleLeft, Trash2, X } from "lucide-react";
 import { useEffect, useState, type ComponentType, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,13 @@ import {
   useAiKeys,
   useAuditLogs,
   useDeadLetters,
+  useCronJobs,
+  useCronRuns,
+  useDailyReportConfig,
+  useDailyReportRuns,
+  useResendDailyReport,
+  useTestDailyReport,
+  useUpdateDailyReportConfig,
   useDeleteAiKey,
   useDeleteEmailImportConfig,
   useEmailImportConfigs,
@@ -23,10 +30,15 @@ import {
   useMatchOrders,
   useNotificationRules,
   usePermissions,
+  usePendingMatchReviews,
   usePreviewCustomer,
   usePreviewOrder,
   useReconciliation,
   useRoles,
+  useAiPromptLogs,
+  useAiPromptLogStats,
+  useRunCronJob,
+  useReviewMatch,
   useSaveAiKey,
   useSaveEmailImportConfig,
   useSyncCustomerOrders,
@@ -36,6 +48,7 @@ import {
   useTestSender,
   useToggleNotificationRule,
   useUpdateAcumatica,
+  useUpdateCronJob,
   useUpdateReconciliationStatus,
   useValidateAcumatica,
   type EmailImportConfig,
@@ -67,8 +80,11 @@ function AdminPage() {
           <TabsTrigger value="roles">Roles</TabsTrigger>
           <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="notifications">Notification Rules</TabsTrigger>
+          <TabsTrigger value="daily-notifications">Daily Notifications</TabsTrigger>
           <TabsTrigger value="email-import">Email Import</TabsTrigger>
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
+          <TabsTrigger value="cron-jobs">Cron Jobs</TabsTrigger>
+          <TabsTrigger value="ai-logs">AI Logs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="acumatica"><AcumaticaPanel /></TabsContent>
@@ -78,9 +94,122 @@ function AdminPage() {
         <TabsContent value="roles"><RolesPanel /></TabsContent>
         <TabsContent value="permissions"><PermissionsPanel /></TabsContent>
         <TabsContent value="notifications"><NotificationRulesPanel /></TabsContent>
+        <TabsContent value="daily-notifications"><DailyNotificationsPanel /></TabsContent>
         <TabsContent value="email-import"><EmailImportPanel /></TabsContent>
         <TabsContent value="audit"><AuditLogsPanel /></TabsContent>
+        <TabsContent value="cron-jobs"><CronJobsPanel /></TabsContent>
+        <TabsContent value="ai-logs"><AiLogsPanel /></TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function CronJobsPanel() {
+  const jobs = useCronJobs();
+  const job = jobs.data?.[0] ?? null;
+  const [filter, setFilter] = useState<"all" | "failures" | "successes">("all");
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const runs = useCronRuns(job?.id ?? null, filter);
+  const update = useUpdateCronJob();
+  const runNow = useRunCronJob();
+
+  if (jobs.isLoading) return <PanelSkeleton />;
+  if (jobs.isError || !job) return <ErrorBlock message="Cron configuration could not be loaded." onRetry={() => jobs.refetch()} />;
+  const settings = job.settings;
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Hourly Email ↔ Sales Order Auto Match" icon={Clock}>
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={job.last_run_status || "never run"} />
+              <Badge variant="outline">{job.frequency_label}</Badge>
+              <code className="rounded bg-muted px-2 py-1 text-xs">{job.cron_expression}</code>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{job.description}</p>
+            <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+              <div>Last run: {job.last_run_at ? new Date(job.last_run_at).toLocaleString("en-KE") : "Never"}</div>
+              <div>Last duration: {job.last_duration_ms !== null ? `${(job.last_duration_ms / 1000).toFixed(1)}s` : "—"}</div>
+              <div>Next expected: {job.next_run_at ? new Date(job.next_run_at).toLocaleString("en-KE") : "—"}</div>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <label className="flex items-center gap-2 rounded border px-3 py-2 text-sm">
+              <Switch checked={job.is_enabled} onCheckedChange={(value) => update.mutate({ id: job.id, is_enabled: value })} />Enabled
+            </label>
+            <Button disabled={runNow.isPending || !job.is_enabled} onClick={() => runNow.mutate(job.id)}>
+              <Play className="mr-1.5 h-3.5 w-3.5" />{runNow.isPending ? "Starting…" : "Run Now"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-md border p-3">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">Scheduler command</div>
+          <div className="mt-1 flex items-center gap-2">
+            <code className="flex-1 overflow-x-auto rounded bg-muted px-2 py-1.5 text-xs">{job.command_reference}</code>
+            <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(job.command_reference).then(() => toast.success("Command copied."))}><Copy className="h-3.5 w-3.5" /></Button>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">For production, invoke <code>php artisan schedule:run</code> every minute using Windows Task Scheduler or server cron.</p>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {([
+            ["email_sync_enabled", "Outlook folder sync"],
+            ["acumatica_sync_enabled", "Acumatica order sync"],
+            ["matching_enabled", "Guarded matching"],
+          ] as const).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 rounded border p-3 text-sm">
+              <Switch checked={settings[key]} onCheckedChange={(value) => update.mutate({ id: job.id, settings: { [key]: value } })} />{label}
+            </label>
+          ))}
+          <label className="rounded border p-2 text-xs">
+            <span className="text-muted-foreground">Sales Order lookback days</span>
+            <Input className="mt-1 h-8" type="number" min={1} max={90} defaultValue={settings.sales_order_lookback_days} onBlur={(event) => update.mutate({ id: job.id, settings: { sales_order_lookback_days: Number(event.target.value) } })} />
+          </label>
+        </div>
+        <div className="mt-3 rounded border border-green-200 bg-green-50 p-2 text-xs text-green-800 dark:border-green-900 dark:bg-green-950/30 dark:text-green-200">
+          Guardrail active: only exact deterministic customer PO matches auto-link. AI and contextual matches always require review.
+        </div>
+      </Panel>
+
+      <Panel title="Cron Run History" icon={History}>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {(["all", "failures", "successes"] as const).map((value) => <Button key={value} size="sm" variant={filter === value ? "default" : "outline"} onClick={() => setFilter(value)} className="capitalize">{value}</Button>)}
+          <Button size="sm" variant="ghost" onClick={() => runs.refetch()}><RefreshCw className={`mr-1 h-3.5 w-3.5 ${runs.isFetching ? "animate-spin" : ""}`} />Refresh</Button>
+        </div>
+        {runs.isLoading && <PanelSkeleton />}
+        {runs.data?.data.length === 0 && <p className="text-sm text-muted-foreground">No cron runs for this filter.</p>}
+        <div className="space-y-2">
+          {runs.data?.data.map((run) => (
+            <div key={run.id} className="rounded-md border text-sm">
+              <button type="button" className="flex w-full flex-wrap items-center gap-3 p-3 text-left" onClick={() => setExpanded(expanded === run.id ? null : run.id)}>
+                {expanded === run.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <StatusBadge status={run.status} />
+                <span>{new Date(run.started_at).toLocaleString("en-KE")}</span>
+                <Badge variant="outline" className="capitalize">{run.trigger_source}</Badge>
+                <span className="ml-auto text-xs text-muted-foreground">{run.duration_ms !== null ? `${(run.duration_ms / 1000).toFixed(1)}s` : "Running"}</span>
+              </button>
+              <div className="grid grid-cols-3 gap-1 border-t bg-muted/20 p-2 text-center text-xs sm:grid-cols-6">
+                <div><strong>{run.emails_processed}</strong><br />Emails</div><div><strong>{run.sales_orders_processed}</strong><br />Orders</div><div><strong>{run.matches_created}</strong><br />Matched</div><div><strong>{run.needs_review_count}</strong><br />Review</div><div><strong>{run.unmatched_count}</strong><br />Unmatched</div><div><strong>{run.error_count}</strong><br />Errors</div>
+              </div>
+              {expanded === run.id && (
+                <div className="space-y-3 border-t p-3">
+                  {run.error_summary && <div className="whitespace-pre-wrap rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-200">{run.error_summary}</div>}
+                  {Object.entries(run.step_status || {}).map(([name, step]) => (
+                    <div key={name} className="rounded border p-2">
+                      <div className="flex items-center justify-between"><span className="font-medium capitalize">{name.replaceAll("_", " ")}</span><span className="text-xs capitalize text-muted-foreground">{step.status} · {(step.duration_ms / 1000).toFixed(1)}s</span></div>
+                      <div className="mt-1 flex flex-wrap gap-2">{Object.entries(step.metrics || {}).map(([metric, count]) => <Badge key={metric} variant="secondary">{metric.replaceAll("_", " ")}: {count}</Badge>)}</div>
+                      {step.errors?.map((error, index) => <div key={index} className="mt-1 text-xs text-destructive">{error}</div>)}
+                    </div>
+                  ))}
+                  <div className="grid gap-1 text-xs sm:grid-cols-4"><div>Discrepancies: {run.matched_with_discrepancies_count}</div><div>Skipped: {run.skipped_count}</div><div>Checked emails: {run.emails_checked}</div><div>Checked orders: {run.sales_orders_checked}</div></div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -658,6 +787,150 @@ function PermissionsPanel() {
   );
 }
 
+function DailyNotificationsPanel() {
+  const config = useDailyReportConfig();
+  const runs = useDailyReportRuns();
+  const update = useUpdateDailyReportConfig();
+  const testSend = useTestDailyReport();
+  const resend = useResendDailyReport();
+  const [recipientsText, setRecipientsText] = useState("");
+  const [replyToText, setReplyToText] = useState("");
+
+  useEffect(() => {
+    if (config.data?.recipients) {
+      setRecipientsText(config.data.recipients.join("\n"));
+    }
+    if (config.data?.reply_to) {
+      setReplyToText(config.data.reply_to.join("\n"));
+    }
+  }, [config.data?.recipients, config.data?.reply_to]);
+
+  if (config.isLoading) return <PanelSkeleton />;
+  if (config.isError || !config.data) return <ErrorBlock message="Daily report settings could not be loaded." onRetry={() => config.refetch()} />;
+
+  const data = config.data;
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Daily Management Email" icon={Mail}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={data.is_enabled ? "active" : "paused"} />
+              <Badge variant="outline">Daily at {data.send_time}</Badge>
+              <Badge variant="outline">{data.timezone}</Badge>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sends a management briefing covering yesterday&apos;s order performance, MTD position, day-over-day comparison, and AI-generated insights.
+            </p>
+            <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
+              <div>Last sent: {formatDate(data.last_sent_at) || "Never"}</div>
+              <div>Last status: {data.last_sent_status || "—"} · Delivery: {data.last_delivery_status || "—"}</div>
+              <div>Reply-To: {data.reply_to.length ? data.reply_to.join(", ") : "Not configured"}</div>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 rounded border px-3 py-2 text-sm">
+            <Switch checked={data.is_enabled} onCheckedChange={(value) => update.mutate({ is_enabled: value })} />Enabled
+          </label>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <Field label="Send time (HH:MM)" value={data.send_time} onChange={(value) => update.mutate({ send_time: value })} placeholder="08:00" />
+          <Field label="Timezone" value={data.timezone} onChange={(value) => update.mutate({ timezone: value })} placeholder="Africa/Nairobi" />
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label>Subject template</Label>
+            <Input value={data.subject_template} onBlur={(event) => update.mutate({ subject_template: event.target.value })} />
+            <p className="text-xs text-muted-foreground">Use {"{report_date}"} for the formatted report date.</p>
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label>Reply-To / To addresses</Label>
+            <textarea
+              className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={replyToText}
+              onChange={(event) => setReplyToText(event.target.value)}
+              onBlur={() => update.mutate({ reply_to: replyToText.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean) })}
+              placeholder="Add one email per line"
+            />
+            <p className="text-xs text-muted-foreground">
+              Primary recipients for the report. Replies are directed to these addresses. Configure any addresses here — nothing is hardcoded.
+            </p>
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label>CC recipients (one email per line)</Label>
+            <textarea
+              className="min-h-[96px] w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={recipientsText}
+              onChange={(event) => setRecipientsText(event.target.value)}
+              onBlur={() => update.mutate({ recipients: recipientsText.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean) })}
+            />
+            <p className="text-xs text-muted-foreground">Management and operations contacts copied on each daily report.</p>
+          </div>
+          <div className="sm:col-span-2">
+            <Button
+              variant="outline"
+              disabled={update.isPending}
+              onClick={() => update.mutate({
+                reply_to: replyToText.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean),
+                recipients: recipientsText.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean),
+              })}
+            >
+              {update.isPending ? "Saving…" : "Save email routing"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {([
+            ["include_ai_insights", "AI insights"],
+            ["include_mtd", "MTD snapshot"],
+            ["include_comparison", "Day-over-day comparison"],
+            ["include_customer_highlights", "Customer highlights"],
+          ] as const).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 rounded border p-3 text-sm">
+              <Switch checked={data[key]} onCheckedChange={(value) => update.mutate({ [key]: value })} />{label}
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button variant="outline" disabled={testSend.isPending} onClick={() => testSend.mutate()}>
+            <FlaskConical className="mr-1.5 h-3.5 w-3.5" />{testSend.isPending ? "Sending…" : "Test Send"}
+          </Button>
+          <Button variant="outline" disabled={resend.isPending} onClick={() => resend.mutate()}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />{resend.isPending ? "Resending…" : "Resend Last Report"}
+          </Button>
+        </div>
+
+        <div className="mt-4 rounded-md border p-3">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">Scheduler command</div>
+          <div className="mt-1 flex items-center gap-2">
+            <code className="flex-1 overflow-x-auto rounded bg-muted px-2 py-1.5 text-xs">{data.command_reference}</code>
+            <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(data.command_reference).then(() => toast.success("Command copied."))}><Copy className="h-3.5 w-3.5" /></Button>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{data.scheduler_reference}</p>
+        </div>
+      </Panel>
+
+      <Panel title="Report Run History" icon={History}>
+        {runs.isLoading && <PanelSkeleton />}
+        {runs.data?.data.length === 0 && <p className="text-sm text-muted-foreground">No report runs yet.</p>}
+        <MiniTable
+          headers={["Report Date", "Status", "AI", "Delivery", "Recipients", "Duration", "Sent At"]}
+          rows={(runs.data?.data ?? []).map((run) => [
+            run.report_date ?? "—",
+            run.status,
+            run.ai_status ?? "—",
+            run.delivery_status ?? "—",
+            String(run.recipient_count),
+            run.duration_ms !== null ? `${(run.duration_ms / 1000).toFixed(1)}s` : "—",
+            formatDate(run.sent_at) || "—",
+          ])}
+        />
+      </Panel>
+    </div>
+  );
+}
+
 function NotificationRulesPanel() {
   const { data, isLoading, isError, refetch } = useNotificationRules();
   const toggle = useToggleNotificationRule();
@@ -785,6 +1058,8 @@ function EmailImportPanel() {
         )}
       </Panel>
 
+      <MatchReviewQueue />
+
       {/* Sender configurations */}
       <Panel title="Allowed Email Senders" icon={Mail}>
         <p className="mb-3 text-sm text-muted-foreground">
@@ -887,6 +1162,85 @@ function EmailImportPanel() {
   );
 }
 
+function MatchReviewQueue() {
+  const reviews = usePendingMatchReviews();
+  const review = useReviewMatch();
+  const [reasons, setReasons] = useState<Record<number, string>>({});
+
+  return (
+    <Panel title="PO / Email Match Review" icon={ShieldCheck}>
+      <p className="mb-3 text-sm text-muted-foreground">
+        Guarded matches remain here until a reviewer records a decision and reason. Evidence is shown exactly as captured.
+      </p>
+      {reviews.isLoading && <PanelSkeleton />}
+      {reviews.isError && <ErrorBlock message="Match reviews could not be loaded." onRetry={() => reviews.refetch()} />}
+      {reviews.data?.data.length === 0 && <p className="text-sm text-muted-foreground">No matches need review.</p>}
+      <div className="space-y-3">
+        {reviews.data?.data.map((email) => (
+          <div key={email.id} className="rounded-md border p-3 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div className="font-medium">{email.subject || "(no subject)"}</div>
+                <div className="text-xs text-muted-foreground">{email.from_email || "Unknown sender"} · {email.received_at ? new Date(email.received_at).toLocaleString("en-KE") : "Unknown date"}</div>
+              </div>
+              <Badge variant="outline" className="capitalize">{email.match_classification.replaceAll("_", " ")}</Badge>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="text-xs font-semibold uppercase text-muted-foreground">Identifier evidence</div>
+                <div className="mt-1 font-mono text-sm">{email.extracted_po_number || "No single PO selected"}</div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {(email.match_sources || []).map((source) => <Badge key={source} variant="secondary">{source.replaceAll("_", " ")}</Badge>)}
+                </div>
+                {(email.match_evidence || []).map((item, index) => (
+                  <div key={`${item.source}-${index}`} className="mt-2 rounded bg-muted/40 p-2 text-xs">
+                    <span className="font-mono font-medium">{item.po_number}</span> · {item.source} · {item.confidence}%
+                    <div className="mt-1 break-words text-muted-foreground">Raw: {item.raw_match}</div>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase text-muted-foreground">Conflicts and reasons</div>
+                {(email.match_reason_codes || []).map((code) => <div key={code} className="mt-1 text-xs">• {code.replaceAll("_", " ")}</div>)}
+                {(email.match_conflicts || []).map((conflict) => (
+                  <div key={conflict.field} className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                    <strong>{conflict.field}</strong>: email “{conflict.email_value}” vs Acumatica “{conflict.acumatica_value}”
+                  </div>
+                ))}
+                {(email.attachments || []).map((attachment) => (
+                  <div key={attachment.id} className="mt-2 text-xs text-muted-foreground">
+                    Attachment: {attachment.name || "unnamed"} · {attachment.extraction_status}
+                    {attachment.extraction_error ? ` (${attachment.extraction_error})` : ""}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Input
+                className="min-w-[260px] flex-1"
+                placeholder="Required review reason"
+                value={reasons[email.id] || ""}
+                onChange={(event) => setReasons((current) => ({ ...current, [email.id]: event.target.value }))}
+              />
+              {(["approved", "acknowledged", "rejected"] as const).map((decision) => (
+                <Button
+                  key={decision}
+                  size="sm"
+                  variant={decision === "approved" ? "default" : "outline"}
+                  disabled={review.isPending || (reasons[email.id] || "").trim().length < 3}
+                  onClick={() => review.mutate({ emailId: email.id, decision, reason: reasons[email.id].trim() })}
+                >
+                  {decision[0].toUpperCase() + decision.slice(1)}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 // -------------------------------------------------------------------------
 // Shared primitives
 // -------------------------------------------------------------------------
@@ -932,7 +1286,7 @@ function MiniTable({ headers, rows, empty = "No records found.", className = "" 
 
 function StatusBadge({ status }: { status: string }) {
   const normalized = status.toLowerCase();
-  const tone = normalized === "connected" || normalized === "healthy" || normalized === "completed"
+  const tone = normalized === "connected" || normalized === "healthy" || normalized === "completed" || normalized === "success"
     ? "border-success/40 bg-success/10 text-success"
     : normalized === "error" || normalized === "failed"
       ? "border-destructive/40 bg-destructive/10 text-destructive"
@@ -977,4 +1331,193 @@ function formatDate(value: string | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString("en-KE", { timeZone: "Africa/Nairobi" });
+}
+
+// ── AI Logs Panel ──────────────────────────────────────────────────────────────
+
+function AiLogsPanel() {
+  const [intentFilter, setIntentFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "success" | "failed">("");
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const stats = useAiPromptLogStats();
+  const logs  = useAiPromptLogs({
+    intent: intentFilter || undefined,
+    status: statusFilter || undefined,
+  });
+
+  const INTENT_LABELS: Record<string, string> = {
+    order_summary:    "Orders",
+    email_summary:    "Emails",
+    match_summary:    "Matches",
+    customer_summary: "Customers",
+    cron_summary:     "Cron",
+    comparison:       "Comparison",
+    risk_summary:     "Risk",
+    general:          "General",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Bot className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold">AI Prompt Logs</h2>
+        </div>
+
+        {/* Stats strip */}
+        {stats.data && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Total Prompts",   value: stats.data.total },
+              { label: "Successful",      value: stats.data.success },
+              { label: "Failed",          value: stats.data.failed },
+              { label: "Avg Response",    value: `${stats.data.avg_response_ms}ms` },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-md border bg-muted/30 px-3 py-2">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+                <p className="text-lg font-bold">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Intent breakdown */}
+        {stats.data && Object.keys(stats.data.by_intent).length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(stats.data.by_intent).map(([intent, count]) => (
+              <Badge key={intent} variant="secondary" className="text-[10px]">
+                {INTENT_LABELS[intent] ?? intent}: {count}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2">
+          <select
+            className="rounded-md border bg-background px-2 py-1.5 text-sm"
+            value={intentFilter}
+            onChange={(e) => setIntentFilter(e.target.value)}
+          >
+            <option value="">All intents</option>
+            {Object.entries(INTENT_LABELS).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+          <select
+            className="rounded-md border bg-background px-2 py-1.5 text-sm"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "" | "success" | "failed")}
+          >
+            <option value="">All statuses</option>
+            <option value="success">Success</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Log table */}
+      {logs.isLoading ? (
+        <PanelSkeleton />
+      ) : logs.isError ? (
+        <ErrorBlock message="Failed to load AI logs." onRetry={() => logs.refetch()} />
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left">Time</th>
+                <th className="px-3 py-2 text-left">User</th>
+                <th className="px-3 py-2 text-left">Intent</th>
+                <th className="px-3 py-2 text-left">Provider</th>
+                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Response ms</th>
+                <th className="px-3 py-2 text-left">Prompt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!logs.data?.data?.length ? (
+                <tr>
+                  <td className="px-3 py-4 text-muted-foreground" colSpan={7}>
+                    No AI prompts logged yet.
+                  </td>
+                </tr>
+              ) : logs.data.data.map((log) => (
+                <>
+                  <tr
+                    key={log.id}
+                    className="border-t hover:bg-muted/30 cursor-pointer"
+                    onClick={() => setExpanded(expanded === log.id ? null : log.id)}
+                  >
+                    <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
+                      {formatDate(log.created_at)}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {log.user?.name ?? "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {log.intent ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {INTENT_LABELS[log.intent] ?? log.intent}
+                        </Badge>
+                      ) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs capitalize">{log.provider ?? "—"}</td>
+                    <td className="px-3 py-2">
+                      <StatusBadge status={log.status} />
+                    </td>
+                    <td className="px-3 py-2 text-xs tabular-nums">
+                      {log.response_time_ms ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 max-w-[220px] truncate text-xs text-muted-foreground">
+                      {log.prompt}
+                    </td>
+                  </tr>
+                  {expanded === log.id && (
+                    <tr key={`${log.id}-expanded`} className="border-t bg-muted/20">
+                      <td colSpan={7} className="px-4 py-3 space-y-2">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Prompt</p>
+                          <p className="text-sm">{log.prompt}</p>
+                        </div>
+                        {log.ai_message && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">AI Response</p>
+                            <p className="text-sm whitespace-pre-wrap">{log.ai_message}</p>
+                          </div>
+                        )}
+                        {log.domains && (
+                          <div className="flex gap-1 flex-wrap">
+                            <span className="text-[10px] text-muted-foreground mr-1">Domains:</span>
+                            {log.domains.map((d) => (
+                              <Badge key={d} variant="outline" className="text-[10px] h-4">{d}</Badge>
+                            ))}
+                          </div>
+                        )}
+                        {log.sources && (
+                          <div className="flex gap-1 flex-wrap">
+                            <span className="text-[10px] text-muted-foreground mr-1">Sources:</span>
+                            {log.sources.map((s) => (
+                              <Badge key={s} variant="outline" className="text-[10px] h-4">{s}</Badge>
+                            ))}
+                          </div>
+                        )}
+                        {log.error_message && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-destructive mb-0.5">Error</p>
+                            <p className="text-sm text-destructive">{log.error_message}</p>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }

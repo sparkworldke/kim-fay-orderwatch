@@ -64,6 +64,9 @@ class PoNumberExtractorService
      * Patterns tried when no sender rule matches — ordered most-specific first.
      */
     private const GENERIC_PATTERNS = [
+        // Explicit labels only. The digit look-ahead prevents matching prose such as "PO attached".
+        '/(?<![A-Z0-9-])PO\s*(?:NUMBER|NO\.?|#)?\s*[:#-]?\s*(?=[A-Z0-9-]*\d)([A-Z0-9][A-Z0-9-]{3,99})(?![A-Z0-9-])/i',
+        '/(?<![A-Z0-9-])PURCHASE\s+ORDER\s*(?:NUMBER|NO\.?|#)?\s*[:#-]?\s*(?=[A-Z0-9-]*\d)([A-Z0-9][A-Z0-9-]{3,99})(?![A-Z0-9-])/i',
         '/Purchase order Confirmation:\s*(P\d{6,12})/i',
         '/PURCHASE ORDER\s*#\s*(\d{3}-\d{5,10})/i',
         '/Order\s+No[\s.&]+Date\s*[-–]\s*(\d{10,15})/i',
@@ -92,25 +95,90 @@ class PoNumberExtractorService
         ?string $bodyText = null,
         ?string $pdfText  = null,
     ): ?ExtractionResult {
+        $candidates = $this->extractAll($senderEmail, [
+            'subject' => $subject,
+            'body' => $bodyText,
+            'attachment_content' => $pdfText,
+        ]);
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        $candidate = $candidates[0];
+        return new ExtractionResult(
+            $candidate['po_number'],
+            $candidate['method'],
+            $candidate['confidence'],
+            $candidate['raw_match'],
+        );
+    }
+
+    /**
+     * Return every candidate occurrence with its provenance. Deterministic candidates
+     * are always returned before AI suggestions; punctuation and leading zeroes are preserved.
+     *
+     * @param array<string, string|null> $sources
+     * @return array<int, array{po_number:string,source:string,method:string,confidence:int,raw_match:string,deterministic:bool}>
+     */
+    public function extractAll(string $senderEmail, array $sources): array
+    {
+        $found = $this->extractDeterministicAll($senderEmail, $sources);
+        if ($found !== []) {
+            return $found;
+        }
+
+        $ai = $this->tryAi(
+            $senderEmail,
+            (string) ($sources['subject'] ?? ''),
+            $sources['body'] ?? null,
+            $sources['attachment_content'] ?? null,
+        );
+
+        return $ai ? [[
+            'po_number' => $this->normalise($ai->poNumber),
+            'source' => 'ai_context',
+            'method' => $ai->method,
+            'confidence' => min($ai->confidence, 79),
+            'raw_match' => (string) $ai->rawMatch,
+            'deterministic' => false,
+        ]] : [];
+    }
+
+    /** Deterministic-only scan used by ingestion; never invokes an AI provider. */
+    public function extractDeterministicAll(string $senderEmail, array $sources): array
+    {
         $patterns = $this->resolvePatterns($senderEmail);
+        $found = [];
 
-        // 1. Subject line
-        if ($result = $this->tryPatterns($subject, $patterns, 'subject_pattern')) {
-            return $result;
+        foreach ($sources as $source => $text) {
+            if (! is_string($text) || trim($text) === '') {
+                continue;
+            }
+
+            foreach ($patterns as $pattern) {
+                if (preg_match_all($pattern, $text, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE) === false) {
+                    continue;
+                }
+
+                foreach ($matches as $match) {
+                    $capture = isset($match[1]) && ($match[1][0] ?? '') !== '' ? $match[1][0] : $match[0][0];
+                    $raw = $match[0][0];
+                    $po = $this->normalise($capture);
+                    $key = $po.'|'.$source.'|'.($match[0][1] ?? 0);
+                    $found[$key] = [
+                        'po_number' => $po,
+                        'source' => $source,
+                        'method' => $source.'_pattern',
+                        'confidence' => 100,
+                        'raw_match' => $raw,
+                        'deterministic' => true,
+                    ];
+                }
+            }
         }
 
-        // 2. Body preview
-        if ($bodyText && ($result = $this->tryPatterns($bodyText, $patterns, 'body_pattern'))) {
-            return $result;
-        }
-
-        // 3. PDF OCR text
-        if ($pdfText && ($result = $this->tryPatterns($pdfText, $patterns, 'pdf_pattern'))) {
-            return $result;
-        }
-
-        // 4. AI fallback
-        return $this->tryAi($senderEmail, $subject, $bodyText, $pdfText);
+        return array_values($found);
     }
 
     /** Extract from subject only (fast path used for bulk runs). */

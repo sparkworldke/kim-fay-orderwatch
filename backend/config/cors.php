@@ -26,6 +26,7 @@ return [
         'http://localhost',
         'https://orderwatch.fayshop.co.ke',
         'https://kim-fay-orderwatch.tools',
+        'https://orderwatchkimfay.nairobidental.workers.dev',
     ],
 
     'allowed_origins_patterns' => [],

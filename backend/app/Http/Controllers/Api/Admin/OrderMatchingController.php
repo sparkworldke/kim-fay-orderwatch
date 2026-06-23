@@ -45,6 +45,8 @@ class OrderMatchingController extends Controller
     {
         $extraction = $this->matching->runPoExtraction();
         $run        = $this->matching->runOrderMatching($request->user()?->id);
+        $run->update(['po_extracted' => $extraction['extracted']]);
+        $run->refresh();
 
         $message = $run->status === 'completed'
             ? "Done: {$extraction['extracted']} POs extracted, {$run->matched} matched, {$run->duplicate} duplicate."
@@ -63,10 +65,11 @@ class OrderMatchingController extends Controller
         $validated = $request->validate([
             'email_id'  => ['required', 'integer', 'exists:emails,id'],
             'po_number' => ['required', 'string', 'max:100'],
+            'reason'    => ['required', 'string', 'min:3', 'max:2000'],
         ]);
 
         $email = Email::findOrFail($validated['email_id']);
-        $order = $this->matching->manualPoOverride($email, $validated['po_number']);
+        $order = $this->matching->manualPoOverride($email, $validated['po_number'], $request->user()->id, $validated['reason']);
 
         return response()->json([
             'message' => $order
@@ -87,11 +90,28 @@ class OrderMatchingController extends Controller
     /** Emails pending manual PO entry (extraction attempted but no PO found). */
     public function pendingManual(Request $request): JsonResponse
     {
-        $emails = Email::where('po_extraction_attempted', true)
-            ->whereNull('extracted_po_number')
+        $emails = Email::with(['attachments', 'matchedOrder', 'matchAttempts' => fn ($query) => $query->latest('created_at')->limit(10)])
+            ->where('po_extraction_attempted', true)
+            ->whereIn('match_classification', ['needs_review', 'matched_discrepancies', 'not_matched'])
+            ->whereNull('reviewer_decision')
             ->orderByDesc('received_at')
             ->paginate(50);
 
         return response()->json($emails);
+    }
+
+    public function review(Request $request, Email $email): JsonResponse
+    {
+        $validated = $request->validate([
+            'decision' => ['required', 'string', 'in:approved,rejected,acknowledged'],
+            'reason' => ['required', 'string', 'min:3', 'max:2000'],
+        ]);
+
+        return response()->json($this->matching->review(
+            $email,
+            $validated['decision'],
+            $validated['reason'],
+            $request->user()->id,
+        ));
     }
 }

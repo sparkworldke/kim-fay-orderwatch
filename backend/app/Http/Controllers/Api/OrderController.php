@@ -149,7 +149,7 @@ class OrderController extends Controller
             ->firstOrFail();
 
         $validated = $request->validate([
-            'match_status'     => ['sometimes', 'string', 'in:pending,matched,unmatched,duplicate,escalated,missing'],
+            'match_status'     => ['sometimes', 'string', 'in:pending,matched,matched_discrepancies,needs_review,unmatched,duplicate,escalated,missing'],
             'flag_source'      => ['sometimes', 'nullable', 'string', 'in:acumatica,email'],
             'rejection_reason' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'on_hold_reason'   => ['sometimes', 'nullable', 'string', 'max:2000'],

@@ -9,10 +9,15 @@ class CronRunLog extends Model
 {
     protected $fillable = [
         'cron_job_id',
+        'triggered_by_user_id',
         'scheduled_at',
         'started_at',
         'ended_at',
         'status',
+        'trigger_source', 'duration_ms', 'emails_checked', 'emails_processed',
+        'sales_orders_checked', 'sales_orders_processed', 'matches_created',
+        'matched_with_discrepancies_count', 'needs_review_count', 'unmatched_count',
+        'skipped_count', 'error_count', 'step_status', 'error_summary', 'metadata',
         'output',
     ];
 
@@ -22,6 +27,8 @@ class CronRunLog extends Model
             'scheduled_at' => 'datetime',
             'started_at'   => 'datetime',
             'ended_at'     => 'datetime',
+            'step_status'  => 'array',
+            'metadata'     => 'array',
         ];
     }
 

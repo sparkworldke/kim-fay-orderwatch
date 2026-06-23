@@ -32,4 +32,14 @@ class MailboxAccount extends Model
     {
         return $this->hasMany(MailboxSyncLog::class);
     }
+
+    public function folders(): HasMany
+    {
+        return $this->hasMany(MailboxFolder::class);
+    }
+
+    public function ruleMappings(): HasMany
+    {
+        return $this->hasMany(MailboxRuleMapping::class);
+    }
 }
