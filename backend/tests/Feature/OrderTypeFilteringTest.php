@@ -105,6 +105,25 @@ class OrderTypeFilteringTest extends TestCase
             ->assertJsonCount(1, 'items.data');
     }
 
+    public function test_orders_endpoint_supports_production_date_range_query(): void
+    {
+        $user = User::factory()->create();
+
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-RANGE',
+            'order_type'          => 'SO',
+            'order_date'          => '2026-06-15',
+            'status'              => 'Open',
+            'match_status'        => 'pending',
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/orders?date_from=2026-06-01&date_to=2026-06-25&order_type=SO&sort=latest&page=1&per_page=50')
+            ->assertOk()
+            ->assertJsonPath('data.0.acumatica_order_nbr', 'SO-RANGE')
+            ->assertJsonCount(1, 'data');
+    }
+
     public function test_orders_endpoint_ignores_non_so_order_type_filter(): void
     {
         $user = User::factory()->create();

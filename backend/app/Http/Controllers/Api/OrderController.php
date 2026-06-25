@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class OrderController extends Controller
 {
@@ -24,33 +25,7 @@ class OrderController extends Controller
         $query = $this->scopedOrderQuery($request)
             ->leftJoin('acumatica_customers as ac', 'acumatica_sales_orders.customer_acumatica_id', '=', 'ac.acumatica_id')
             ->withCount('lines')
-            ->select([
-                'acumatica_sales_orders.id',
-                'acumatica_sales_orders.acumatica_order_nbr',
-                'acumatica_sales_orders.order_type',
-                'acumatica_sales_orders.customer_acumatica_id',
-                // Resolve name: use order's own field first, fall back to customers table
-                DB::raw('COALESCE(acumatica_sales_orders.customer_name, ac.name) as customer_name'),
-                'acumatica_sales_orders.customer_order',
-                'acumatica_sales_orders.status',
-                'acumatica_sales_orders.match_status',
-                'acumatica_sales_orders.flag_source',
-                'acumatica_sales_orders.order_date',
-                'acumatica_sales_orders.ship_date',
-                'acumatica_sales_orders.requested_on',
-                'acumatica_sales_orders.last_modified_at',
-                'acumatica_sales_orders.approved_at',
-                'acumatica_sales_orders.approved_by_id',
-                'acumatica_sales_orders.shipped_at',
-                'acumatica_sales_orders.completed_at',
-                'acumatica_sales_orders.order_total',
-                'acumatica_sales_orders.currency_id',
-                'acumatica_sales_orders.rejection_reason',
-                'acumatica_sales_orders.on_hold_reason',
-                'acumatica_sales_orders.email_subject',
-                'acumatica_sales_orders.email_received_at',
-                'acumatica_sales_orders.synced_at',
-            ])
+            ->select($this->orderIndexColumns())
             ->when(
             $request->input('sort', 'latest') === 'oldest',
             fn ($q) => $q->orderBy('acumatica_sales_orders.order_date', 'asc'),
@@ -254,16 +229,7 @@ class OrderController extends Controller
         }
 
         $orderIds = $orders->pluck('id')->filter()->values();
-        $emailsByOrder = Email::query()
-            ->whereIn('matched_order_id', $orderIds)
-            ->where(function ($query) {
-                $query->where('match_classification', 'matched_discrepancies')
-                    ->orWhereNotNull('match_conflicts');
-            })
-            ->orderByDesc('updated_at')
-            ->get(['matched_order_id', 'extracted_po_number', 'canonical_po', 'match_conflicts'])
-            ->unique('matched_order_id')
-            ->keyBy('matched_order_id');
+        $emailsByOrder = $this->loadMatchEmailsByOrder($orderIds);
 
         return $orders->map(function ($order) use ($emailsByOrder) {
             $email = $emailsByOrder->get($order->id);
@@ -311,5 +277,79 @@ class OrderController extends Controller
         }
 
         return null;
+    }
+
+    /** @return list<string|object> */
+    private function orderIndexColumns(): array
+    {
+        $columns = [
+            'acumatica_sales_orders.id',
+            'acumatica_sales_orders.acumatica_order_nbr',
+            'acumatica_sales_orders.order_type',
+            'acumatica_sales_orders.customer_acumatica_id',
+            DB::raw('COALESCE(acumatica_sales_orders.customer_name, ac.name) as customer_name'),
+            'acumatica_sales_orders.customer_order',
+            'acumatica_sales_orders.status',
+            'acumatica_sales_orders.match_status',
+            'acumatica_sales_orders.flag_source',
+            'acumatica_sales_orders.order_date',
+            'acumatica_sales_orders.ship_date',
+            'acumatica_sales_orders.requested_on',
+            'acumatica_sales_orders.last_modified_at',
+            'acumatica_sales_orders.approved_at',
+            'acumatica_sales_orders.shipped_at',
+            'acumatica_sales_orders.completed_at',
+            'acumatica_sales_orders.order_total',
+            'acumatica_sales_orders.currency_id',
+            'acumatica_sales_orders.rejection_reason',
+            'acumatica_sales_orders.on_hold_reason',
+            'acumatica_sales_orders.email_subject',
+            'acumatica_sales_orders.email_received_at',
+            'acumatica_sales_orders.synced_at',
+        ];
+
+        if (Schema::hasColumn('acumatica_sales_orders', 'approved_by_id')) {
+            $columns[] = 'acumatica_sales_orders.approved_by_id';
+        }
+
+        return $columns;
+    }
+
+    /**
+     * @param  Collection<int, int|string>  $orderIds
+     * @return Collection<int|string, Email>
+     */
+    private function loadMatchEmailsByOrder(Collection $orderIds): Collection
+    {
+        if ($orderIds->isEmpty() || ! Schema::hasColumn('emails', 'matched_order_id')) {
+            return collect();
+        }
+
+        $emailColumns = ['matched_order_id', 'extracted_po_number'];
+        if (Schema::hasColumn('emails', 'canonical_po')) {
+            $emailColumns[] = 'canonical_po';
+        }
+        if (Schema::hasColumn('emails', 'match_conflicts')) {
+            $emailColumns[] = 'match_conflicts';
+        }
+
+        $query = Email::query()->whereIn('matched_order_id', $orderIds);
+
+        if (Schema::hasColumn('emails', 'match_classification') && Schema::hasColumn('emails', 'match_conflicts')) {
+            $query->where(function ($builder) {
+                $builder->where('match_classification', 'matched_discrepancies')
+                    ->orWhereNotNull('match_conflicts');
+            });
+        } elseif (Schema::hasColumn('emails', 'match_classification')) {
+            $query->where('match_classification', 'matched_discrepancies');
+        } elseif (Schema::hasColumn('emails', 'match_conflicts')) {
+            $query->whereNotNull('match_conflicts');
+        }
+
+        return $query
+            ->orderByDesc('updated_at')
+            ->get($emailColumns)
+            ->unique('matched_order_id')
+            ->keyBy('matched_order_id');
     }
 }

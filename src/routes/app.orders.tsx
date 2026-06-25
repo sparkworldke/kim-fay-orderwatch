@@ -7,7 +7,7 @@ import {
   GitMerge,
   RefreshCw,
 } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -291,9 +291,8 @@ function OrdersPage() {
                 {orders.map((order) => {
                   const expanded = expandedIds.has(order.id);
                   return (
-                    <>
+                    <Fragment key={order.id}>
                       <tr
-                        key={order.id}
                         className={`cursor-pointer transition-colors hover:bg-muted/20 ${expanded ? "bg-muted/10" : ""}`}
                         onClick={() => toggleExpand(order.id)}
                       >
@@ -352,7 +351,7 @@ function OrdersPage() {
 
                       {/* Expanded detail row */}
                       {expanded && (
-                        <tr key={`${order.id}-expand`} className="bg-muted/5 border-b">
+                        <tr className="bg-muted/5 border-b">
                           <td />
                           <td colSpan={9} className="px-3 pb-4 pt-2">
                             {order.match_status === "matched_discrepancies" && (
@@ -392,7 +391,7 @@ function OrdersPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
