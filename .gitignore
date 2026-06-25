@@ -26,6 +26,8 @@ dist-ssr
 !.env.example
 backend/.env
 backend/.env.*
+cred.credentials
+.credentials
 
 # Archives & local artifacts
 backend/backend.zip
