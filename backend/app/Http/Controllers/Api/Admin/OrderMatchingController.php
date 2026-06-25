@@ -32,9 +32,11 @@ class OrderMatchingController extends Controller
     {
         $run = $this->matching->runOrderMatching($request->user()?->id);
 
+        $needsReview = (int) ($run->needs_review ?? $run->duplicate ?? 0);
+
         return response()->json([
             'message' => $run->status === 'completed'
-                ? "Matching complete: {$run->matched} matched, {$run->duplicate} duplicate, {$run->missing_in_acumatica} missing in Acumatica."
+                ? "Matching complete: {$run->matched} matched, {$needsReview} need review, {$run->missing_in_acumatica} missing in Acumatica."
                 : "Matching failed: {$run->error_message}",
             'run' => $run,
         ], $run->status === 'failed' ? 422 : 200);
@@ -43,13 +45,18 @@ class OrderMatchingController extends Controller
     /** Run both extraction + matching in one shot. */
     public function runAll(Request $request): JsonResponse
     {
+        @set_time_limit(300);
+
         $extraction = $this->matching->runPoExtraction();
         $run        = $this->matching->runOrderMatching($request->user()?->id);
         $run->update(['po_extracted' => $extraction['extracted']]);
         $run->refresh();
 
+        $needsReview = (int) ($run->needs_review ?? $run->duplicate ?? 0);
+        $processed = (int) $extraction['processed'];
+
         $message = $run->status === 'completed'
-            ? "Done: {$extraction['extracted']} POs extracted, {$run->matched} matched, {$run->duplicate} duplicate."
+            ? "Done: {$extraction['extracted']} POs extracted ({$processed} emails scanned), {$run->matched} matched, {$needsReview} need review."
             : "Extraction succeeded but matching failed: {$run->error_message}";
 
         return response()->json([

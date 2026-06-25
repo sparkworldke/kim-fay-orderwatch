@@ -2,12 +2,30 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AcumaticaSalesOrder extends Model
 {
+    public const TYPE_SALES_ORDER = 'SO';
+    public const TYPE_QUOTE = 'QT';
+    public const TYPE_CREDIT_NOTE = 'RC';
+    public const TYPE_CREDIT_MEMO = 'CM';
+    public const TYPE_PICK_LIST = 'PL';
+
+    /** Dashboard, Orders, Fill Rate, Order Match — SO only. */
+    public const IN_SCOPE_ORDER_TYPES = [self::TYPE_SALES_ORDER];
+
+    /** Credit Notes & More menu — non-SO sales documents. */
+    public const CREDIT_NOTES_AND_MORE_TYPES = [
+        self::TYPE_QUOTE,
+        self::TYPE_CREDIT_NOTE,
+        self::TYPE_CREDIT_MEMO,
+        self::TYPE_PICK_LIST,
+    ];
+
     protected $fillable = [
         'acumatica_order_nbr',
         'order_type',
@@ -26,6 +44,7 @@ class AcumaticaSalesOrder extends Model
         'raw_payload',
         'synced_at',
         'approved_at',
+        'approved_by_id',
         'shipped_at',
         'completed_at',
         'match_status',
@@ -62,5 +81,88 @@ class AcumaticaSalesOrder extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(AcumaticaCustomer::class, 'customer_acumatica_id', 'acumatica_id');
+    }
+
+    public function matchedEmails(): HasMany
+    {
+        return $this->hasMany(Email::class, 'matched_order_id');
+    }
+
+    /** Sales orders only — excludes quotes (QT) and credit notes (RC). */
+    public function scopeSalesOrdersOnly(Builder $query): Builder
+    {
+        return $query->where('order_type', self::TYPE_SALES_ORDER);
+    }
+
+    public function scopeCreditNotesAndMore(Builder $query): Builder
+    {
+        return $query->whereIn('order_type', self::CREDIT_NOTES_AND_MORE_TYPES);
+    }
+
+    public function scopeOfOrderType(Builder $query, ?string $type): Builder
+    {
+        $type = strtoupper(trim((string) $type));
+
+        if ($type === '' || $type === 'ALL') {
+            return $query;
+        }
+
+        if ($type === 'CREDIT_NOTES_MORE') {
+            return $query->creditNotesAndMore();
+        }
+
+        if ($type === 'OTHER') {
+            return $query->whereNotIn('order_type', array_merge(
+                [self::TYPE_SALES_ORDER],
+                self::CREDIT_NOTES_AND_MORE_TYPES,
+                ['QO'],
+            ));
+        }
+
+        $normalized = self::normalizeOrderType($type) ?? $type;
+
+        if ($normalized === self::TYPE_QUOTE) {
+            return $query->whereIn('order_type', [self::TYPE_QUOTE, 'QO']);
+        }
+
+        return $query->where('order_type', $normalized);
+    }
+
+    public static function normalizeOrderType(?string $orderType): ?string
+    {
+        if ($orderType === null || $orderType === '') {
+            return null;
+        }
+
+        $normalized = strtoupper(trim($orderType));
+
+        return match ($normalized) {
+            'QO' => self::TYPE_QUOTE,
+            default => $normalized,
+        };
+    }
+
+    public static function inferOrderType(?string $orderNbr, ?string $orderType = null): string
+    {
+        $type = self::normalizeOrderType($orderType) ?? '';
+        $known = [
+            self::TYPE_SALES_ORDER,
+            self::TYPE_QUOTE,
+            self::TYPE_CREDIT_NOTE,
+            self::TYPE_CREDIT_MEMO,
+            self::TYPE_PICK_LIST,
+        ];
+
+        if (in_array($type, $known, true)) {
+            return $type;
+        }
+
+        $prefix = strtoupper(substr(preg_replace('/\s+/', '', (string) $orderNbr), 0, 2));
+
+        return match ($prefix) {
+            'QO' => self::TYPE_QUOTE,
+            self::TYPE_QUOTE, self::TYPE_CREDIT_NOTE, self::TYPE_CREDIT_MEMO, self::TYPE_PICK_LIST => $prefix,
+            default => self::TYPE_SALES_ORDER,
+        };
     }
 }

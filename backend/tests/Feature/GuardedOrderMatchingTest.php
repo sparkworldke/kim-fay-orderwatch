@@ -7,6 +7,7 @@ use App\Models\Email;
 use App\Models\EmailImportConfig;
 use App\Models\EmailMatchAttempt;
 use App\Models\MailboxAccount;
+use App\Models\User;
 use App\Services\Email\OrderMatchingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -76,6 +77,25 @@ class GuardedOrderMatchingTest extends TestCase
         $this->assertSame('total', $email->match_conflicts[0]['field']);
     }
 
+    public function test_orders_api_returns_match_discrepancy_details(): void
+    {
+        $user = User::factory()->create();
+        $order = $this->order('SO-DISC', '004512', ['order_total' => 1000, 'currency_id' => 'KES']);
+        $this->email('PO 004512', 'Currency: KES Total: 1250.00');
+
+        $this->matching->runPoExtraction();
+        $this->matching->runOrderMatching();
+
+        $this->actingAs($user)
+            ->getJson('/api/orders?match_status=matched_discrepancies')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $order->id)
+            ->assertJsonPath('data.0.matched_po_number', '004512')
+            ->assertJsonPath('data.0.match_conflicts.0.field', 'total')
+            ->assertJsonPath('data.0.match_conflicts.0.email_value', '1250.00')
+            ->assertJsonPath('data.0.match_conflicts.0.acumatica_value', '1000.00');
+    }
+
     public function test_duplicate_customer_order_is_ambiguous_and_never_selects_first(): void
     {
         $this->order('SO001', '004512');
@@ -140,6 +160,35 @@ class GuardedOrderMatchingTest extends TestCase
         $this->assertSame('needs_review', $current->fresh()->match_classification);
         $this->assertContains('thread_only_evidence', $current->fresh()->match_reason_codes);
         $this->assertNull($current->fresh()->matched_order_id);
+    }
+
+    public function test_sales_order_outside_72_hour_window_is_not_matched(): void
+    {
+        $this->order('SO001', '004512', ['order_date' => now()->subDays(5)]);
+        $email = $this->email('PO 004512 attached');
+
+        $this->matching->runPoExtraction();
+        $this->matching->runOrderMatching();
+
+        $email->refresh();
+        $this->assertSame('004512', $email->extracted_po_number);
+        $this->assertSame('not_matched', $email->match_classification);
+        $this->assertNull($email->matched_order_id);
+        $this->assertContains('po_not_found_in_acumatica', $email->match_reason_codes);
+    }
+
+    public function test_duplicate_customer_order_outside_window_matches_recent_sales_order(): void
+    {
+        $recent = $this->order('SO001', '004512');
+        $this->order('SO002', '004512', ['order_date' => now()->subDays(10)]);
+        $email = $this->email('PO 004512');
+
+        $this->matching->runPoExtraction();
+        $this->matching->runOrderMatching();
+
+        $email->refresh();
+        $this->assertSame('matched', $email->match_classification);
+        $this->assertSame($recent->id, $email->matched_order_id);
     }
 
     private function email(string $subject, ?string $body = null): Email

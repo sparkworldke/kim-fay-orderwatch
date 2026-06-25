@@ -20,6 +20,22 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Environment & secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+
+# Archives & local artifacts
+backend/backend.zip
+changes/
+terminals/
+mcps/
+
+# OS / tooling
+Thumbs.db
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

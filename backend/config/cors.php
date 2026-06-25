@@ -24,9 +24,12 @@ return [
         'http://localhost:3000',
         'http://localhost:8080',  // TanStack Start dev server
         'http://localhost',
+        'http://kim-fay-orderwatch.test',
+        'http://kim-fay-orderwatch.test:8080',
         'https://orderwatch.fayshop.co.ke',
         'https://kim-fay-orderwatch.tools',
         'https://orderwatchkimfay.nairobidental.workers.dev',
+        'https://dating.sparkworld.co.ke',
     ],
 
     'allowed_origins_patterns' => [],

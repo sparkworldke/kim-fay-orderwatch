@@ -8,6 +8,8 @@ export const API_BASE_URL: string =
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   token?: string | null;
+  /** Abort the request after this many milliseconds (default: 120s). */
+  timeoutMs?: number;
 };
 
 export class ApiError extends Error {
@@ -72,7 +74,7 @@ export function getApiErrorSummary(): Record<string, number> {
 
 export async function apiFetch<T = unknown>(
   path: string,
-  { body, token, headers, ...rest }: RequestOptions = {},
+  { body, token, headers, timeoutMs = 120_000, ...rest }: RequestOptions = {},
 ): Promise<T> {
   const url = `${API_BASE_URL}/${path.replace(/^\/+/, "")}`;
   const method = (rest.method ?? "GET").toUpperCase();
@@ -92,14 +94,21 @@ export async function apiFetch<T = unknown>(
     ...(headers as Record<string, string> | undefined),
   };
 
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller && typeof window !== "undefined"
+    ? window.setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+
   let res: Response;
   try {
     res = await fetch(url, {
       ...rest,
       headers: finalHeaders,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller?.signal,
     });
   } catch (networkErr) {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
     // Network failure — no HTTP response at all (DNS failure, timeout, CORS preflight blocked, etc.)
     const entry: ApiErrorEntry = {
       ts: new Date().toISOString(),
@@ -111,8 +120,13 @@ export async function apiFetch<T = unknown>(
     };
     persistErrorLog(entry);
     console.error("[api] Network error", entry);
-    throw networkErr;
+    const message = networkErr instanceof Error && networkErr.name === "AbortError"
+      ? `Request timed out after ${Math.round(timeoutMs / 1000)}s — the server may still be processing. Try again shortly.`
+      : networkErr instanceof Error ? networkErr.message : String(networkErr);
+    throw new Error(message);
   }
+
+  if (timeoutId !== null) window.clearTimeout(timeoutId);
 
   // Global 401 handler — clear stale session + token, notify listeners, and bail
   if (res.status === 401 && typeof window !== "undefined") {

@@ -370,7 +370,7 @@ export function useMatchOrders() {
     mutationFn: () =>
       apiFetch<{ message: string; extraction: { processed: number; extracted: number }; match_run: OrderMatchRun }>(
         "admin/order-matching/run-all",
-        { method: "POST" },
+        { method: "POST", timeoutMs: 300_000 },
       ),
     onSuccess: (result) => {
       toast.success(result.message);

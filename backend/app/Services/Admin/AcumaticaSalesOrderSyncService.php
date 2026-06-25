@@ -59,6 +59,34 @@ class AcumaticaSalesOrderSyncService
         return $run->fresh();
     }
 
+    public function syncCreditNotesAndMore(string $dateFrom, string $dateTo, ?int $triggeredByUserId = null): AcumaticaSyncLog
+    {
+        $run = AcumaticaSyncLog::create([
+            'sync_type'            => 'credit_notes_and_more',
+            'started_at'           => now(),
+            'status'               => 'running',
+            'record_count'         => 0,
+            'success_count'        => 0,
+            'failed_count'         => 0,
+            'trigger_type'         => 'manual',
+            'triggered_by_user_id' => $triggeredByUserId,
+            'filters'              => ['date_from' => $dateFrom, 'date_to' => $dateTo],
+        ]);
+
+        try {
+            $orders = $this->client->fetchAllCreditNotesAndMoreByDateRange($dateFrom, $dateTo);
+            $run    = $this->processOrders($orders, $run);
+        } catch (Throwable $e) {
+            $run->update([
+                'ended_at'      => now(),
+                'status'        => 'failed',
+                'error_message' => $e->getMessage(),
+            ]);
+        }
+
+        return $run->fresh();
+    }
+
     // -------------------------------------------------------------------------
     // Selective customer sync
     // -------------------------------------------------------------------------
@@ -182,50 +210,32 @@ class AcumaticaSalesOrderSyncService
 
         $status       = $this->str($raw['Status'] ?? null);
         $lastModified = $this->datetime($raw['LastModifiedDateTime'] ?? $raw['LastModified'] ?? null);
-        $shipDate     = $this->datetime($raw['ShipDate'] ?? null);
 
-        // ── Approval date ─────────────────────────────────────────────────────
-        // Try dedicated Acumatica fields first, then fall back to LastModifiedDateTime
-        // when status indicates the order has passed approval.
         $approvedAt = $this->datetime(
-            $raw['ApprovedDateTime']    ??
-            $raw['LastApprovalDate']    ??
-            $raw['ApprovalDate']        ??
+            $raw['ApprovedDateTime'] ??
+            $raw['LastApprovalDate'] ??
+            $raw['ApprovalDate'] ??
             null
         );
-        if (! $approvedAt && $lastModified && in_array($status, ['Open', 'Shipping', 'Completed', 'Pending Approval'], true)) {
-            // LastModifiedDateTime is the closest proxy for when approval happened
-            $approvedAt = $lastModified;
-        }
 
-        // ── Shipped date ──────────────────────────────────────────────────────
-        // Prefer ActualShipDate; fall back to ShipDate when status is Shipping.
         $shippedAt = $this->datetime(
-            $raw['ActualShipDate']  ??
-            $raw['ShippedDate']     ??
+            $raw['ActualShipDate'] ??
+            $raw['ShippedDate'] ??
             null
         );
-        if (! $shippedAt && $shipDate && in_array($status, ['Shipping', 'Completed'], true)) {
-            $shippedAt = $this->datetime($raw['ShipDate'] ?? null);
-        }
 
-        // ── Completed date ─────────────────────────────────────────────────────
-        // Try dedicated field; proxy to LastModifiedDateTime when status = Completed.
         $completedAt = $this->datetime(
-            $raw['CompletedDate']   ??
+            $raw['CompletedDate'] ??
             $raw['CompletedDateTime'] ??
-            $raw['InvoiceDate']     ??
+            $raw['InvoiceDate'] ??
             null
         );
-        if (! $completedAt && $lastModified && $status === 'Completed') {
-            $completedAt = $lastModified;
-        }
 
         $orderData = [
-            'order_type'             => $this->str($raw['OrderType'] ?? null) ?? 'SO',
+            'order_type'             => AcumaticaSalesOrder::inferOrderType($orderNbr, $this->str($raw['OrderType'] ?? null)),
             'customer_acumatica_id'  => $this->str($raw['CustomerID'] ?? null),
             'customer_name'          => $this->str($raw['CustomerName'] ?? null),
-            'customer_order'         => $this->str($raw['CustomerOrder'] ?? null),
+            'customer_order'         => $this->customerOrder($raw),
             'location_id'            => $this->str($raw['LocationID'] ?? null),
             'status'                 => $status,
             'order_date'             => $this->datetime($raw['Date'] ?? $raw['CreatedDate'] ?? null),
@@ -233,13 +243,23 @@ class AcumaticaSalesOrderSyncService
             'ship_date'              => $this->datetime($raw['ShipDate'] ?? null),
             'requested_on'           => $this->datetime($raw['RequestedOn'] ?? null),
             'order_total'            => (float) ($this->str($raw['OrderTotal'] ?? null) ?? 0),
-            'currency_id'            => $this->str($raw['CurrencyID'] ?? null),
+            'currency_id'            => $this->str($raw['CurrencyID'] ?? $raw['CuryID'] ?? null),
             'approved_at'            => $approvedAt,
+            'approved_by_id'         => $this->str($raw['ApprovedByID'] ?? null),
             'shipped_at'             => $shippedAt,
             'completed_at'           => $completedAt,
             'sync_run_id'            => $runId,
             'synced_at'              => now(),
+            'raw_payload'            => $raw,
         ];
+
+        if ($rejectionReason = $this->extractRejectionReason($raw, $status)) {
+            $orderData['rejection_reason'] = $rejectionReason;
+        }
+
+        if ($holdReason = $this->extractOnHoldReason($raw, $status)) {
+            $orderData['on_hold_reason'] = $holdReason;
+        }
 
         $order = AcumaticaSalesOrder::updateOrCreate(
             ['acumatica_order_nbr' => $orderNbr],
@@ -249,25 +269,57 @@ class AcumaticaSalesOrderSyncService
         // Re-sync line items: delete and replace to avoid stale lines
         $order->lines()->delete();
 
-        $lines = $raw['DocumentDetails'] ?? [];
+        $lines = $raw['DocumentDetails'] ?? $raw['Details'] ?? [];
         if (! is_array($lines)) {
             $lines = [];
         }
 
         foreach ($lines as $lineRaw) {
-            if (! is_array($lineRaw)) continue;
+            if (! is_array($lineRaw)) {
+                continue;
+            }
+
+            $mapped = SalesOrderLineFulfillmentDeriver::mapFromRaw($lineRaw);
+            if (! $mapped['inventory_id']) {
+                continue;
+            }
+
             AcumaticaSalesOrderLine::create([
-                'sales_order_id'  => $order->id,
-                'line_nbr'        => (int) ($this->str($lineRaw['LineNbr'] ?? null) ?? 0),
-                'inventory_id'    => $this->str($lineRaw['InventoryID'] ?? null),
-                'description'     => $this->str($lineRaw['TransactionDescr'] ?? $lineRaw['Description'] ?? null),
-                'order_qty'       => (float) ($this->str($lineRaw['OrderQty'] ?? null) ?? 0),
-                'unit_price'      => (float) ($this->str($lineRaw['UnitPrice'] ?? null) ?? 0),
-                'ext_cost'        => (float) ($this->str($lineRaw['ExtCost'] ?? $lineRaw['Amount'] ?? null) ?? 0),
-                'discount_amount' => (float) ($this->str($lineRaw['DiscountAmt'] ?? null) ?? 0),
-                'discount_code'   => $this->str($lineRaw['DiscountCode'] ?? null),
+                'sales_order_id'     => $order->id,
+                'line_nbr'           => $mapped['line_nbr'],
+                'inventory_id'       => $mapped['inventory_id'],
+                'description'        => $mapped['description'],
+                'order_qty'          => $mapped['order_qty'],
+                'shipped_qty'        => $mapped['shipped_qty'],
+                'open_qty'           => $mapped['open_qty'],
+                'cancelled_qty'      => $mapped['cancelled_qty'],
+                'qty_at_approval'    => $mapped['qty_at_approval'],
+                'backorder_qty'      => $mapped['backorder_qty'],
+                'fill_rate_pct'      => $mapped['fill_rate_pct'],
+                'line_type'          => $mapped['line_type'],
+                'completed'          => $mapped['completed'],
+                'fulfillment_status' => $mapped['fulfillment_status'],
+                'warehouse_id'       => $mapped['warehouse_id'],
+                'uom'                => $mapped['uom'],
+                'unit_price'         => $mapped['unit_price'],
+                'ext_cost'           => $mapped['ext_cost'],
+                'discount_amount'    => $mapped['discount_amount'],
+                'discount_code'      => $mapped['discount_code'],
             ]);
         }
+    }
+
+    /** @param  array<string, mixed>  $raw */
+    private function customerOrder(array $raw): ?string
+    {
+        foreach (['CustomerOrder', 'CustomerOrderNbr', 'CustomerPONbr'] as $field) {
+            $value = $this->str($raw[$field] ?? null);
+            if ($value !== null) {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -288,6 +340,61 @@ class AcumaticaSalesOrderSyncService
         if (! $s) return null;
         $ts = strtotime($s);
         return $ts !== false ? date('Y-m-d', $ts) : null;
+    }
+
+    /** @param  array<string, mixed>  $raw */
+    private function extractRejectionReason(array $raw, ?string $status): ?string
+    {
+        $normalized = strtolower(trim((string) $status));
+        if (! in_array($normalized, ['rejected', 'cancelled', 'canceled'], true)) {
+            return null;
+        }
+
+        return $this->firstWorkflowReason($raw, [
+            'RejectionReason',
+            'RejectReason',
+            'RejectedReason',
+            'ReasonCode',
+            'Reason',
+            'Note',
+            'Description',
+        ]);
+    }
+
+    /** @param  array<string, mixed>  $raw */
+    private function extractOnHoldReason(array $raw, ?string $status): ?string
+    {
+        $normalized = strtolower(trim((string) $status));
+        if (! in_array($normalized, ['on hold', 'credit hold', 'hold'], true)) {
+            return null;
+        }
+
+        return $this->firstWorkflowReason($raw, [
+            'HoldReason',
+            'OnHoldReason',
+            'CreditHoldReason',
+            'CreditHoldReasonDescription',
+            'ReasonCode',
+            'Reason',
+            'Note',
+            'Description',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $raw
+     * @param  list<string>  $fields
+     */
+    private function firstWorkflowReason(array $raw, array $fields): ?string
+    {
+        foreach ($fields as $field) {
+            $value = $this->str($raw[$field] ?? null);
+            if ($value !== null && trim($value) !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     private function datetime(mixed $field): ?\DateTime

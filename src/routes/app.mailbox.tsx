@@ -1,9 +1,12 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
   Filter,
   FolderTree,
   Inbox,
@@ -20,11 +23,12 @@ import {
   Unplug,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -45,7 +50,7 @@ import {
   useDeleteEmailFilter,
   useDisconnectMailbox,
   useEmailFilters,
-  useEmails,
+  useInboxEmailGroups,
   useMailboxAccounts,
   useMailboxFolders,
   useDiscoverMailboxFolders,
@@ -53,6 +58,8 @@ import {
   useSaveFolderRule,
   useDeleteFolderRule,
   useTestMailboxFolder,
+  useSyncMailboxFolder,
+  useSyncRunEmails,
   useIngestionReviews,
   useReviewIngestion,
   useMailboxSyncLogs,
@@ -65,8 +72,19 @@ import {
 } from "@/hooks/mailbox/useMailbox";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
+import {
+  DATE_PRESETS,
+  formatRangeLabel,
+  formatSyncRangeLabel,
+  resolveDatePreset,
+  toDateTimeLocalValue,
+  type DatePresetId,
+} from "@/lib/date-presets";
+import { cn } from "@/lib/utils";
 import { useCustomers } from "@/hooks/useCustomers";
-import type { CreateEmailFilterPayload, EmailFilter, EmailFilterCondition, EmailFilterType, EmailMessage, MailboxAccount, SyncLog } from "@/types/mailbox";
+import type { CreateEmailFilterPayload, EmailFilter, EmailFilterCondition, EmailFilterType, EmailMessage, InboxCustomerGroup, MailboxAccount, MailboxFolder, SyncLog } from "@/types/mailbox";
+import { Calendar } from "@/components/ui/calendar";
+import type { DateRange } from "react-day-picker";
 
 export const Route = createFileRoute("/app/mailbox")({
   head: () => ({ meta: [{ title: "Mailbox - Kim-Fay OrderWatch" }] }),
@@ -145,6 +163,208 @@ function MailboxPage() {
   );
 }
 
+function folderSyncToday() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function folderSyncDefaultRange() {
+  return resolveDatePreset("last_7_days");
+}
+
+function sortMailboxFolders(folders: MailboxFolder[]) {
+  return [...folders].sort((a, b) => {
+    if (a.is_sync_enabled !== b.is_sync_enabled) {
+      return a.is_sync_enabled ? -1 : 1;
+    }
+    if (a.sync_priority !== b.sync_priority) {
+      return a.sync_priority - b.sync_priority;
+    }
+    return a.display_name.localeCompare(b.display_name);
+  });
+}
+
+function FolderSyncButton({
+  folder,
+  mailboxId,
+}: {
+  folder: MailboxFolder;
+  mailboxId: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [lastSyncRunId, setLastSyncRunId] = useState<number | null>(null);
+  const [preset, setPreset] = useState<DatePresetId>("last_7_days");
+  const defaultRange = folderSyncDefaultRange();
+  const [dateFrom, setDateFrom] = useState(defaultRange.from);
+  const [dateTo, setDateTo] = useState(defaultRange.to);
+  const sync = useSyncMailboxFolder();
+  const syncResults = useSyncRunEmails(resultsOpen ? lastSyncRunId : null);
+  const isInbox = folder.display_name.toLowerCase() === "inbox";
+  const canSync = folder.is_sync_enabled || isInbox;
+  const syncing = sync.isPending && sync.variables?.folderId === folder.id;
+
+  function applyPreset(next: DatePresetId) {
+    setPreset(next);
+    if (next !== "custom") {
+      const range = resolveDatePreset(next);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+    } else {
+      setDateFrom(toDateTimeLocalValue(dateFrom, "start"));
+      setDateTo(toDateTimeLocalValue(dateTo, "end"));
+    }
+  }
+
+  function handleSync() {
+    const from = preset === "custom" ? dateFrom : dateFrom.slice(0, 10);
+    const to = preset === "custom" ? dateTo : dateTo.slice(0, 10);
+    sync.mutate(
+      { folderId: folder.id, from, to, mailboxId },
+      {
+        onSuccess: (result) => {
+          setOpen(false);
+          setLastSyncRunId(result.sync_id);
+          setResultsOpen(true);
+        },
+      },
+    );
+  }
+
+  if (!canSync) {
+    return (
+      <Button size="sm" variant="outline" disabled title="Enable sync for this folder first">
+        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+        Sync
+      </Button>
+    );
+  }
+
+  return (
+    <>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="outline" disabled={syncing}>
+          <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", syncing && "animate-spin")} />
+          Sync
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80" align="end">
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium">Sync {folder.display_name}</p>
+            <p className="text-xs text-muted-foreground">
+              Imports every email in this folder for the selected dates — read, unread, and previously opened (max 90 days).
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {DATE_PRESETS.filter((item) => item.id !== "custom").map((item) => (
+              <Button
+                key={item.id}
+                size="sm"
+                variant={preset === item.id ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                onClick={() => applyPreset(item.id)}
+              >
+                {item.label}
+              </Button>
+            ))}
+            <Button
+              size="sm"
+              variant={preset === "custom" ? "default" : "outline"}
+              className="h-7 px-2 text-xs"
+              onClick={() => setPreset("custom")}
+            >
+              <CalendarDays className="mr-1 h-3 w-3" />
+              Custom
+            </Button>
+          </div>
+          {preset === "custom" ? (
+            <div className="grid grid-cols-1 gap-2">
+              <div>
+                <Label className="text-xs">From (date & time)</Label>
+                <Input
+                  type="datetime-local"
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">To (date & time)</Label>
+                <Input
+                  type="datetime-local"
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">{formatSyncRangeLabel(dateFrom, dateTo)} (full days)</p>
+          )}
+          <Button className="w-full" size="sm" onClick={handleSync} disabled={syncing}>
+            {syncing ? "Importing all emails in range…" : "Import all in range"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+
+    <Dialog open={resultsOpen} onOpenChange={setResultsOpen}>
+      <DialogContent className="max-h-[80vh] max-w-2xl overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>Saved emails from sync</DialogTitle>
+        </DialogHeader>
+        {syncResults.isLoading && <Skeleton className="h-24 w-full" />}
+        {syncResults.data && (
+          <div className="space-y-3 overflow-y-auto pr-1">
+            <p className="text-sm text-muted-foreground">
+              {syncResults.data.sync_run.emails_stored} email(s) imported from{" "}
+              {syncResults.data.sync_run.folder_name ?? folder.display_name}
+              {" "}({syncResults.data.sync_run.emails_created} new, {syncResults.data.sync_run.emails_updated} updated/re-imported)
+              {syncResults.data.sync_run.sync_from && syncResults.data.sync_run.sync_to && (
+                <> for {formatSyncRangeLabel(syncResults.data.sync_run.sync_from, syncResults.data.sync_run.sync_to)}</>
+              )}
+              . View them anytime in the Inbox tab.
+            </p>
+            <div className="divide-y rounded-md border">
+              {syncResults.data.emails.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">
+                  {syncResults.data.sync_run.emails_stored === 0
+                    ? "Outlook returned no messages in this date range (read or unread). Try a wider range such as Last 7 days, or use Custom for exact received times."
+                    : "No emails were stored for this sync run."}
+                </p>
+              ) : (
+                syncResults.data.emails.map((email) => (
+                  <div key={email.id} className="px-3 py-2 text-sm">
+                    <div className="font-medium">{email.subject ?? "(no subject)"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {email.from_name ?? email.from_email ?? "Unknown sender"}
+                      {email.received_at && ` · ${new Date(email.received_at).toLocaleString("en-KE")}`}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <Badge variant="outline" className="text-[10px]">{email.folder}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{email.outcome}</Badge>
+                      {(email.canonical_po || email.extracted_po_number) && (
+                        <Badge className="text-[10px]">PO: {email.canonical_po ?? email.extracted_po_number}</Badge>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setResultsOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
+  );
+}
+
 function FoldersRulesPanel() {
   const { data: mailboxes = [] } = useMailboxAccounts();
   const [mailboxId, setMailboxId] = useState<number | null>(null);
@@ -154,12 +374,15 @@ function FoldersRulesPanel() {
     if (mailboxId === null && mailboxes.length) setMailboxId(mailboxes[0].id);
   }, [mailboxId, mailboxes]);
   const folders = useMailboxFolders(mailboxId);
+  const sortedFolders = useMemo(
+    () => sortMailboxFolders(folders.data ?? []),
+    [folders.data],
+  );
   const discover = useDiscoverMailboxFolders();
   const updateFolder = useUpdateMailboxFolder();
   const saveRule = useSaveFolderRule();
   const deleteRule = useDeleteFolderRule();
   const testFolder = useTestMailboxFolder();
-  const customers = useCustomers({ per_page: 200 });
   const reviews = useIngestionReviews();
   const review = useReviewIngestion();
 
@@ -187,22 +410,46 @@ function FoldersRulesPanel() {
           {folders.isLoading && <Skeleton className="h-32" />}
           {folders.data?.length === 0 && <p className="text-sm text-muted-foreground">No folders discovered yet.</p>}
           <div className="space-y-3">
-            {folders.data?.map((folder) => {
+            {sortedFolders.map((folder) => {
               const rule = folder.rules[0];
               const ruleName = ruleDrafts[folder.id] ?? rule?.existing_rule_name ?? "";
               const isInbox = folder.display_name.toLowerCase() === "inbox";
+              const isActiveSync = folder.is_sync_enabled || isInbox;
               return (
-                <div key={folder.id} className="rounded-md border p-3">
+                <div
+                  key={folder.id}
+                  className={cn(
+                    "rounded-md border p-3 transition-colors",
+                    isActiveSync
+                      ? "border-green-300/80 bg-green-50/60 dark:border-green-800 dark:bg-green-950/25"
+                      : "border-border bg-card",
+                  )}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2 font-medium">
                         {folder.parent_display_name && <span className="text-muted-foreground">{folder.parent_display_name} /</span>}{folder.display_name}
+                        {isActiveSync && (
+                          <Badge className="border-green-600/30 bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-300">
+                            Active sync
+                          </Badge>
+                        )}
                         {folder.suggested_order_folder && <Badge variant="outline">Order-folder suggestion</Badge>}
                       </div>
-                      <div className="mt-1 text-xs text-muted-foreground">{folder.total_item_count} messages · {folder.unread_item_count} unread · {folder.last_synced_at ? `synced ${new Date(folder.last_synced_at).toLocaleString("en-KE")}` : "never synced"}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {folder.total_item_count} in Outlook · {folder.unread_item_count} unread
+                        {" · "}
+                        <span className="font-medium text-foreground">{folder.emails_synced_all_time ?? 0}</span> synced all time
+                        {folder.last_manual_sync_at
+                          ? ` · last sync ${new Date(folder.last_manual_sync_at).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })} (${folder.last_manual_sync_count ?? 0} emails)`
+                          : " · no manual sync yet"}
+                      </div>
                       {folder.last_sync_error && <div className="mt-1 text-xs text-destructive">{folder.last_sync_error}</div>}
                     </div>
-                    <Button size="sm" variant="ghost" disabled={testFolder.isPending} onClick={() => testFolder.mutate(folder.id)}>Test folder</Button>
+                    <div className="flex gap-2">
+                      {mailboxId !== null && <FolderSyncButton folder={folder} mailboxId={mailboxId} />}
+                      <Button size="sm" variant="ghost" disabled={testFolder.isPending} onClick={() => testFolder.mutate(folder.id)}>Test folder</Button>
+                    </div>
                   </div>
                   <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                     <label className="flex items-center gap-2 text-xs"><Switch checked={folder.is_sync_enabled} disabled={isInbox} onCheckedChange={(value) => updateFolder.mutate({ id: folder.id, is_sync_enabled: value })} />Sync enabled</label>
@@ -210,9 +457,10 @@ function FoldersRulesPanel() {
                     <Select value={folder.trust_level} onValueChange={(value) => updateFolder.mutate({ id: folder.id, trust_level: value as typeof folder.trust_level })}>
                       <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="untrusted">Untrusted</SelectItem><SelectItem value="standard">Standard</SelectItem><SelectItem value="trusted_order">Trusted order</SelectItem></SelectContent>
                     </Select>
-                    <Select value={folder.customer_id ? String(folder.customer_id) : "none"} onValueChange={(value) => updateFolder.mutate({ id: folder.id, customer_id: value === "none" ? null : Number(value) })}>
-                      <SelectTrigger><SelectValue placeholder="Map customer" /></SelectTrigger><SelectContent><SelectItem value="none">No customer mapping</SelectItem>{customers.data?.data.map((customer) => <SelectItem key={customer.id} value={String(customer.id)}>{customer.name}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <CustomerSearchCombobox
+                      value={folder.customer_id ?? null}
+                      onChange={(id) => updateFolder.mutate({ id: folder.id, customer_id: id })}
+                    />
                     <Input type="number" min={0} max={1000} value={folder.sync_priority} onChange={(event) => updateFolder.mutate({ id: folder.id, sync_priority: Number(event.target.value) })} title="Lower priority syncs first" />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -252,23 +500,109 @@ function InboxPanel() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [mailboxId, setMailboxId] = useState<number | undefined>();
+  const [preset, setPreset] = useState<DatePresetId>("last_7_days");
+  const initialRange = resolveDatePreset("last_7_days");
+  const [dateFrom, setDateFrom] = useState(initialRange.from);
+  const [dateTo, setDateTo] = useState(initialRange.to);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const { session } = useAuth();
   const isAdmin = session?.role === "Administrator";
 
   const { data: mailboxes } = useMailboxAccounts(isAdmin);
-  const { data, isLoading, isError, refetch } = useEmails({
+  const { data, isLoading, isError, refetch } = useInboxEmailGroups({
     search: debouncedSearch || undefined,
     mailbox_id: mailboxId,
+    date_from: dateFrom,
+    date_to: dateTo,
   });
 
-  // Debounce search
+  const calendarRange: DateRange | undefined = useMemo(() => ({
+    from: dateFrom ? new Date(`${dateFrom}T00:00:00`) : undefined,
+    to: dateTo ? new Date(`${dateTo}T00:00:00`) : undefined,
+  }), [dateFrom, dateTo]);
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    if (!data?.groups.length) return;
+    setExpandedGroups((current) => {
+      if (current.size > 0) return current;
+      const first = data.groups[0];
+      const key = first.customer_id ? String(first.customer_id) : "unassigned";
+      return new Set([key]);
+    });
+  }, [data?.groups]);
+
+  function applyPreset(id: DatePresetId) {
+    setPreset(id);
+    if (id !== "custom") {
+      const range = resolveDatePreset(id);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+    }
+  }
+
+  function applyCustomRange(range: DateRange | undefined) {
+    if (!range?.from) return;
+    const from = range.from.toISOString().slice(0, 10);
+    const to = (range.to ?? range.from).toISOString().slice(0, 10);
+    setPreset("custom");
+    setDateFrom(from);
+    setDateTo(to);
+    if (range.to) setCalendarOpen(false);
+  }
+
+  function toggleGroup(key: string) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  function groupKey(group: InboxCustomerGroup) {
+    return group.customer_id ? String(group.customer_id) : "unassigned";
+  }
+
   return (
     <div className="space-y-3">
+      <div className="rounded-lg border bg-card p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {DATE_PRESETS.map((item) => (
+            <Button
+              key={item.id}
+              size="sm"
+              variant={preset === item.id ? "default" : "outline"}
+              className="h-7 px-2 text-xs"
+              onClick={() => applyPreset(item.id)}
+            >
+              {item.label}
+            </Button>
+          ))}
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant={preset === "custom" ? "default" : "outline"} className="h-7 px-2 text-xs">
+                <CalendarDays className="mr-1 h-3 w-3" />
+                {formatRangeLabel(dateFrom, dateTo)}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={calendarRange}
+                onSelect={applyCustomRange}
+                numberOfMonths={2}
+                defaultMonth={calendarRange?.from}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -322,12 +656,22 @@ function InboxPanel() {
 
       {!isLoading && !isError && data && (
         <>
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <InboxStatCard label="Total emails" value={data.stats.total} />
+            <InboxStatCard label="With PO" value={data.stats.with_po} highlight />
+            <InboxStatCard label="PO processing" value={data.stats.po_processing} />
+            <InboxStatCard label="Needs review" value={data.stats.needs_review} />
+            <InboxStatCard label="Non-order" value={data.stats.stored_non_order} />
+            <InboxStatCard label="Unread" value={data.stats.unread} />
+          </div>
+
           <p className="text-xs text-muted-foreground">
-            {data.total} email{data.total !== 1 ? "s" : ""} found
+            {data.stats.total} email{data.stats.total !== 1 ? "s" : ""} in {formatRangeLabel(dateFrom, dateTo)}
             {debouncedSearch ? ` matching "${debouncedSearch}"` : ""}
+            {data.truncated ? " · showing first 500 for grouping" : ""}
           </p>
 
-          {data.data.length === 0 ? (
+          {data.groups.length === 0 ? (
             <EmptyState
               icon={Inbox}
               title="No emails yet"
@@ -336,18 +680,71 @@ function InboxPanel() {
                   ? isAdmin
                     ? "Connect an Outlook account in the Accounts tab to start syncing."
                     : "An administrator must connect a mailbox account before synced email import is available."
-                  : "No emails match your current search."
+                  : "No emails match your current filters."
               }
             />
           ) : (
-            <div className="divide-y rounded-lg border bg-card">
-              {data.data.map((email) => (
-                <EmailRow key={email.id} email={email} />
-              ))}
+            <div className="rounded-lg border bg-card">
+              {data.groups.map((group) => {
+                const key = groupKey(group);
+                const open = expandedGroups.has(key);
+                return (
+                  <div key={key} className="border-b last:border-b-0">
+                    <button
+                      type="button"
+                      className="flex w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-muted/30"
+                      onClick={() => toggleGroup(key)}
+                    >
+                      {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium">
+                          {group.customer_name}
+                          {group.acumatica_id && (
+                            <span className="ml-2 font-mono text-xs text-muted-foreground">{group.acumatica_id}</span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                          <span>{group.email_count} emails</span>
+                          <span>· {group.with_po_count} with PO</span>
+                          <span>· {group.po_processing_count} PO processing</span>
+                          {group.needs_review_count > 0 && <span>· {group.needs_review_count} review</span>}
+                        </div>
+                      </div>
+                      {group.with_po_count > 0 && (
+                        <Badge variant="default" className="shrink-0">{group.with_po_count} PO</Badge>
+                      )}
+                    </button>
+                    {open && (
+                      <div className="divide-y border-t bg-muted/10">
+                        {group.emails.map((email) => (
+                          <EmailRow key={email.id} email={email} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function InboxStatCard({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={cn("rounded-md border px-3 py-2", highlight && "border-primary/30 bg-primary/5")}>
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={cn("text-lg font-semibold tabular-nums", highlight && "text-primary")}>{value}</div>
     </div>
   );
 }
@@ -388,6 +785,11 @@ function EmailRow({ email }: { email: EmailMessage }) {
           )}
           <div className="mt-1 flex flex-wrap gap-1">
             <Badge variant="outline" className="text-[10px]">{email.folder}</Badge>
+            {(email.canonical_po || email.extracted_po_number) && (
+              <Badge variant="default" className="text-[10px]">
+                PO: {email.canonical_po ?? email.extracted_po_number}
+              </Badge>
+            )}
             {email.ingestion_classification && (
               <Badge variant={email.ingestion_classification === "po_processing" ? "default" : "secondary"} className="text-[10px]">
                 {email.ingestion_classification.replaceAll("_", " ")}
@@ -1014,6 +1416,126 @@ function ConditionRowField({
         {condition.type === "date_range" && "Emails received between these dates (inclusive)."}
       </p>
     </div>
+  );
+}
+
+// ─── Customer Search Combobox ─────────────────────────────────────────────────
+
+function CustomerSearchCombobox({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (id: number | null) => void;
+}) {
+  const [open, setOpen]       = useState(false);
+  const [search, setSearch]   = useState("");
+  const [debounced, setDebounced] = useState("");
+
+  // Debounce search input so we don't fire on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data, isLoading } = useCustomers({
+    q: debounced || undefined,
+    per_page: 30,
+    status: "Active",
+  });
+
+  const customers = data?.data ?? [];
+
+  // Separate mains and branches for visual grouping
+  const mains    = customers.filter((c) => c.is_main_account || !c.parent_acumatica_id);
+  const branches = customers.filter((c) => !c.is_main_account && !!c.parent_acumatica_id);
+
+  // Show selected customer name even when not in current search results
+  const selectedInList = customers.find((c) => c.id === value);
+  const selectedName = selectedInList?.name ?? (value ? `Customer #${value}` : null);
+
+  function select(id: number | null) {
+    onChange(id);
+    setOpen(false);
+    setSearch("");
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 w-full justify-between font-normal text-xs truncate"
+        >
+          <span className="truncate">
+            {selectedName ?? <span className="text-muted-foreground">Map customer…</span>}
+          </span>
+          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search by name or ID…"
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandList>
+            {isLoading && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
+            {!isLoading && customers.length === 0 && (
+              <CommandEmpty>No customers found.</CommandEmpty>
+            )}
+
+            {/* Clear option */}
+            <CommandItem
+              value="__none__"
+              onSelect={() => select(null)}
+              className="text-xs text-muted-foreground"
+            >
+              <Check className={cn("mr-2 h-3.5 w-3.5", value === null ? "opacity-100" : "opacity-0")} />
+              No customer mapping
+            </CommandItem>
+
+            {/* Main accounts */}
+            {mains.length > 0 && (
+              <CommandGroup heading="Main Accounts">
+                {mains.map((c) => (
+                  <CommandItem key={c.id} value={String(c.id)} onSelect={() => select(c.id)} className="text-xs">
+                    <Check className={cn("mr-2 h-3.5 w-3.5 shrink-0", value === c.id ? "opacity-100" : "opacity-0")} />
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{c.name}</div>
+                      <div className="text-[10px] text-muted-foreground">{c.acumatica_id}{c.customer_class ? ` · ${c.customer_class}` : ""}</div>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {/* Branch accounts */}
+            {branches.length > 0 && (
+              <CommandGroup heading="Branches">
+                {branches.map((c) => (
+                  <CommandItem key={c.id} value={String(c.id)} onSelect={() => select(c.id)} className="text-xs">
+                    <Check className={cn("mr-2 h-3.5 w-3.5 shrink-0", value === c.id ? "opacity-100" : "opacity-0")} />
+                    <div className="min-w-0">
+                      <div className="truncate">{c.name}</div>
+                      <div className="text-[10px] text-muted-foreground">{c.acumatica_id} · Branch</div>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 

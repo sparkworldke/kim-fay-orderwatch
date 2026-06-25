@@ -86,6 +86,7 @@ class DailyManagementReportService
         $criticalSql = $this->statusInSql(self::CRITICAL_STATUSES);
 
         $row = DB::table('acumatica_sales_orders')
+            ->where('order_type', 'SO')
             ->whereBetween('order_date', [$fromStr, $toStr])
             ->selectRaw("
                 COUNT(*) as orders_received,
@@ -136,6 +137,7 @@ class DailyManagementReportService
             ->count();
 
         $discrepancyOrders = (int) DB::table('acumatica_sales_orders')
+            ->where('order_type', 'SO')
             ->whereBetween('order_date', [$fromStr, $toStr])
             ->where('match_status', 'matched_with_discrepancies')
             ->count();
@@ -154,6 +156,7 @@ class DailyManagementReportService
         $capturedSql = $this->statusInSql(self::CAPTURED_STATUSES);
 
         $topByValue = DB::table('acumatica_sales_orders')
+            ->where('order_type', 'SO')
             ->whereBetween('order_date', [$fromDate.' 00:00:00', $toDateTime])
             ->whereNotNull('customer_name')
             ->where('customer_name', '!=', '')
@@ -170,6 +173,7 @@ class DailyManagementReportService
             ->all();
 
         $topOutstanding = DB::table('acumatica_sales_orders')
+            ->where('order_type', 'SO')
             ->whereBetween('order_date', [$fromDate.' 00:00:00', $toDateTime])
             ->whereNotNull('customer_name')
             ->where('customer_name', '!=', '')

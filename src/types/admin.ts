@@ -50,6 +50,8 @@ export interface AcumaticaCustomerSummary {
   customer_class: string | null;
   email: string | null;
   status: string | null;
+  is_main_account: boolean;
+  parent_acumatica_id: string | null;
 }
 
 export interface AcumaticaCustomer extends AcumaticaCustomerSummary {
@@ -73,6 +75,16 @@ export interface AcumaticaSalesOrderLine {
   discount_code: string | null;
 }
 
+export interface OrderMatchConflict {
+  field: string;
+  email_value: string;
+  acumatica_value: string;
+  reason: string;
+  email_value_inc_vat?: string;
+  vat_rate?: string;
+  amount_delta?: string;
+}
+
 export interface AcumaticaSalesOrder {
   id: number;
   acumatica_order_nbr: string;
@@ -87,11 +99,16 @@ export interface AcumaticaSalesOrder {
   on_hold_reason: string | null;
   email_subject: string | null;
   email_received_at: string | null;
+  matched_po_number?: string | null;
+  extracted_po_number?: string | null;
+  sanitized_po_number?: string | null;
+  match_conflicts?: OrderMatchConflict[] | null;
   order_date: string | null;
   last_modified_at: string | null;
   ship_date: string | null;
   requested_on: string | null;
   approved_at: string | null;
+  approved_by_id: string | null;
   shipped_at: string | null;
   completed_at: string | null;
   order_total: string;

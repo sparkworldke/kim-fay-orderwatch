@@ -1,12 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
-import { Bot, Send, Sparkles, X, Loader2, RotateCcw, AlertTriangle, TrendingUp, TrendingDown, Minus, ExternalLink } from "lucide-react";
+import { Bot, Send, Sparkles, X, Loader2, RotateCcw, AlertTriangle, TrendingUp, TrendingDown, Minus, ExternalLink, Calendar, BarChart3, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  SHORTCUT_CATEGORY_LABELS,
+  applyShortcut,
+  filterShortcuts,
+  getShortcutTriggerContext,
+  type AiShortcut,
+  type ShortcutCategory,
+  type ShortcutTriggerContext,
+} from "@/lib/ai-shortcuts";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -49,6 +58,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/app/orders":        "Orders",
   "/app/customers":     "Customers",
   "/app/mailbox":       "Mailbox",
+  "/app/ai-intelligence": "AI Intelligence",
   "/app/administration":"Administration",
   "/app/so-imports":    "Sales Order Imports",
   "/app/profile":       "Profile",
@@ -200,6 +210,93 @@ function ActionChips({ actions }: { actions: ActionItem[] }) {
   );
 }
 
+const CATEGORY_ICONS: Record<ShortcutCategory, typeof Calendar> = {
+  date: Calendar,
+  metric: BarChart3,
+  report: FileText,
+};
+
+function ShortcutPicker({
+  context,
+  selectedIndex,
+  onSelect,
+}: {
+  context: ShortcutTriggerContext;
+  selectedIndex: number;
+  onSelect: (shortcut: AiShortcut) => void;
+}) {
+  const filtered = useMemo(() => filterShortcuts(context.query), [context.query]);
+  const grouped = useMemo(() => {
+    const map = new Map<ShortcutCategory, AiShortcut[]>();
+    for (const shortcut of filtered) {
+      const list = map.get(shortcut.category) ?? [];
+      list.push(shortcut);
+      map.set(shortcut.category, list);
+    }
+    return map;
+  }, [filtered]);
+
+  if (filtered.length === 0) {
+    return (
+      <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+        No shortcuts match “{context.trigger}{context.query}”
+      </div>
+    );
+  }
+
+  let index = 0;
+
+  return (
+    <div className="absolute bottom-full left-0 right-0 mb-1 max-h-56 overflow-y-auto rounded-lg border bg-popover shadow-md">
+      <div className="sticky top-0 border-b bg-popover px-3 py-1.5 text-[10px] font-medium text-muted-foreground">
+        Type <span className="font-mono text-foreground">{context.trigger}</span> shortcuts · ↑↓ navigate · Enter insert
+      </div>
+      {(["date", "metric", "report"] as ShortcutCategory[]).map((category) => {
+        const items = grouped.get(category);
+        if (!items?.length) return null;
+        const Icon = CATEGORY_ICONS[category];
+
+        return (
+          <div key={category}>
+            <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <Icon className="h-3 w-3" />
+              {SHORTCUT_CATEGORY_LABELS[category]}
+            </div>
+            {items.map((shortcut) => {
+              const current = index;
+              index += 1;
+              const active = current === selectedIndex;
+
+              return (
+                <button
+                  key={shortcut.key}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors",
+                    active ? "bg-accent text-accent-foreground" : "hover:bg-muted/70",
+                  )}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    onSelect(shortcut);
+                  }}
+                >
+                  <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                    {context.trigger}{shortcut.insert}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium">{shortcut.label}</span>
+                    <span className="block text-[10px] text-muted-foreground">{shortcut.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function AiAssistant() {
@@ -208,6 +305,8 @@ export function AiAssistant() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  const [cursor, setCursor]     = useState(0);
+  const [shortcutIndex, setShortcutIndex] = useState(0);
   const bottomRef               = useRef<HTMLDivElement>(null);
   const textareaRef             = useRef<HTMLTextAreaElement>(null);
 
@@ -258,7 +357,66 @@ export function AiAssistant() {
     }
   }
 
+  const shortcutContext = useMemo(
+    () => getShortcutTriggerContext(input, cursor),
+    [input, cursor],
+  );
+  const shortcutOptions = useMemo(
+    () => (shortcutContext ? filterShortcuts(shortcutContext.query) : []),
+    [shortcutContext],
+  );
+  const shortcutMenuOpen = shortcutContext !== null;
+
+  useEffect(() => {
+    setShortcutIndex(0);
+  }, [shortcutContext?.query, shortcutContext?.trigger]);
+
+  function updateInput(value: string, nextCursor?: number) {
+    setInput(value);
+    const pos = nextCursor ?? value.length;
+    setCursor(pos);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  function insertShortcut(shortcut: AiShortcut) {
+    if (!shortcutContext) return;
+    const { value, cursor: nextCursor } = applyShortcut(input, shortcutContext, shortcut);
+    updateInput(value, nextCursor);
+  }
+
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (shortcutMenuOpen && shortcutContext) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setShortcutIndex((i) => (i + 1) % shortcutOptions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setShortcutIndex((i) => (i - 1 + shortcutOptions.length) % shortcutOptions.length);
+        return;
+      }
+      if ((e.key === "Enter" || e.key === "Tab") && shortcutOptions.length > 0) {
+        e.preventDefault();
+        const shortcut = shortcutOptions[Math.min(shortcutIndex, shortcutOptions.length - 1)];
+        if (shortcut) insertShortcut(shortcut);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        updateInput(
+          input.slice(0, shortcutContext.start) + input.slice(shortcutContext.end),
+          shortcutContext.start,
+        );
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -323,12 +481,15 @@ export function AiAssistant() {
               <p className="text-sm text-muted-foreground">
                 Ask about your orders, customers, emails, or how this system works.
               </p>
+              <p className="text-[11px] text-muted-foreground/80">
+                Tip: type <span className="font-mono">/</span> or <span className="font-mono">@</span> for date &amp; report shortcuts
+              </p>
               <div className="flex flex-wrap gap-1.5 justify-center">
                 {[
-                  "Summarise today's orders",
-                  "Show unmatched emails",
-                  "Which customers are at risk?",
-                  "Compare this week vs last week",
+                  "@mtd @orders summary",
+                  "@yesterday @completed performance",
+                  "@today @emails @matches",
+                  "@last-week @compare @risk",
                 ].map((s) => (
                   <button
                     key={s}
@@ -400,13 +561,25 @@ export function AiAssistant() {
 
         {/* Input */}
         <div className="border-t p-3">
-          <div className="flex items-end gap-2">
+          <div className="relative flex items-end gap-2">
+            {shortcutMenuOpen && shortcutContext && (
+              <ShortcutPicker
+                context={shortcutContext}
+                selectedIndex={Math.min(shortcutIndex, Math.max(shortcutOptions.length - 1, 0))}
+                onSelect={insertShortcut}
+              />
+            )}
             <Textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setCursor(e.target.selectionStart ?? e.target.value.length);
+              }}
+              onClick={(e) => setCursor(e.currentTarget.selectionStart ?? input.length)}
+              onKeyUp={(e) => setCursor(e.currentTarget.selectionStart ?? input.length)}
               onKeyDown={handleKey}
-              placeholder="Ask anything… (Enter to send)"
+              placeholder="Ask anything… type / or @ for shortcuts"
               className="min-h-[40px] max-h-[120px] resize-none text-sm py-2.5"
               rows={1}
               disabled={loading}
@@ -421,7 +594,7 @@ export function AiAssistant() {
             </Button>
           </div>
           <p className="mt-1.5 text-[10px] text-muted-foreground text-center">
-            Shift+Enter for new line · context: {pageLabel}
+            <span className="font-mono">/</span> or <span className="font-mono">@</span> shortcuts · Shift+Enter new line · {pageLabel}
           </p>
         </div>
       </div>

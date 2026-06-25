@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcumaticaSalesOrder;
+use App\Services\Admin\SalesOrderLineFulfillmentDeriver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -54,8 +55,9 @@ class DashboardController extends Controller
 
     private function statusCounts(string $dateFrom, string $dateTo): array
     {
-        $base = AcumaticaSalesOrder::whereDate('order_date', '>=', $dateFrom)
-                                   ->whereDate('order_date', '<=', $dateTo);
+        $base = AcumaticaSalesOrder::salesOrdersOnly()
+            ->whereDate('order_date', '>=', $dateFrom)
+            ->whereDate('order_date', '<=', $dateTo);
 
         $rows = (clone $base)
             ->select([DB::raw('status'), DB::raw('COUNT(*) as cnt')])
@@ -86,6 +88,7 @@ class DashboardController extends Controller
             'back_order'       => $rows['back order']       ?? 0,
             'avg_per_day'      => $avgPerDay,
             'active_days'      => $activeDays,
+            'open_so'          => $rows['open'] ?? 0,
         ];
     }
 
@@ -99,6 +102,7 @@ class DashboardController extends Controller
     private function dailyTrend(string $dateFrom, string $dateTo, ?string $labelOffset = null): array
     {
         $rows = AcumaticaSalesOrder::query()
+            ->salesOrdersOnly()
             ->selectRaw('DATE(order_date) as day, status, COUNT(*) as cnt')
             ->whereDate('order_date', '>=', $dateFrom)
             ->whereDate('order_date', '<=', $dateTo)
@@ -106,11 +110,14 @@ class DashboardController extends Controller
             ->orderByRaw('DATE(order_date)')
             ->get();
 
+        $fillRatesByDay = $this->fillRateQtyByDay($dateFrom, $dateTo);
+
         // Build a map keyed by day
         $byDay = [];
         foreach ($rows as $row) {
             $day = $row->day;
             if (! isset($byDay[$day])) {
+                $fillQty = $fillRatesByDay[$day] ?? ['shipped' => 0.0, 'ordered' => 0.0];
                 $byDay[$day] = [
                     'day'              => $day,
                     'total'            => 0,
@@ -120,6 +127,12 @@ class DashboardController extends Controller
                     'rejected'         => 0,
                     'on_hold'          => 0,
                     'open'             => 0,
+                    'fill_shipped_qty' => $fillQty['shipped'],
+                    'fill_ordered_qty' => $fillQty['ordered'],
+                    'fill_rate_pct'    => SalesOrderLineFulfillmentDeriver::safeFillRate(
+                        $fillQty['shipped'],
+                        $fillQty['ordered'],
+                    ),
                 ];
             }
             $byDay[$day]['total'] += (int) $row->cnt;
@@ -149,6 +162,60 @@ class DashboardController extends Controller
             return $result;
         }
 
+        // Include days that have fill-rate data but no status breakdown rows.
+        foreach ($fillRatesByDay as $day => $fillQty) {
+            if (isset($byDay[$day])) {
+                continue;
+            }
+
+            $byDay[$day] = [
+                'day'              => $day,
+                'total'            => 0,
+                'completed'        => 0,
+                'shipping'         => 0,
+                'pending_approval' => 0,
+                'rejected'         => 0,
+                'on_hold'          => 0,
+                'open'             => 0,
+                'fill_shipped_qty' => $fillQty['shipped'],
+                'fill_ordered_qty' => $fillQty['ordered'],
+                'fill_rate_pct'    => SalesOrderLineFulfillmentDeriver::safeFillRate(
+                    $fillQty['shipped'],
+                    $fillQty['ordered'],
+                ),
+            ];
+        }
+
+        ksort($byDay);
+
         return array_values($byDay);
+    }
+
+    /**
+     * @return array<string, array{shipped: float, ordered: float}>
+     */
+    private function fillRateQtyByDay(string $dateFrom, string $dateTo): array
+    {
+        $rows = DB::table('acumatica_fill_rate_snapshots as f')
+            ->join('acumatica_sales_orders as o', 'f.sales_order_id', '=', 'o.id')
+            ->where('o.order_type', AcumaticaSalesOrder::TYPE_SALES_ORDER)
+            ->whereDate('o.order_date', '>=', $dateFrom)
+            ->whereDate('o.order_date', '<=', $dateTo)
+            ->where('f.fill_rate_status', '!=', 'na')
+            ->selectRaw('DATE(o.order_date) as day')
+            ->selectRaw('SUM(f.total_shipped_qty) as shipped')
+            ->selectRaw('SUM(f.total_ordered_qty) as ordered')
+            ->groupByRaw('DATE(o.order_date)')
+            ->get();
+
+        $byDay = [];
+        foreach ($rows as $row) {
+            $byDay[$row->day] = [
+                'shipped' => (float) $row->shipped,
+                'ordered' => (float) $row->ordered,
+            ];
+        }
+
+        return $byDay;
     }
 }

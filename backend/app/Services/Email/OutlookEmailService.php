@@ -144,6 +144,199 @@ class OutlookEmailService implements EmailProviderInterface
         return $count;
     }
 
+    /**
+     * On-demand folder sync scoped to a date/time range (max 90 days — enforced by caller).
+     * Fetches every message in the folder whose receivedDateTime falls within the bounds
+     * (read and unread — not delta/new-only), paginating until @odata.nextLink is exhausted.
+     * Existing database rows are re-attached to the folder and counted in the run.
+     */
+    /**
+     * @return array{
+     *   fetched:int,
+     *   created:int,
+     *   updated:int,
+     *   stored:int,
+     *   skipped:int,
+     *   failed:int,
+     *   email_records:array<int, array{email_id:int, outcome:string}>
+     * }
+     */
+    public function syncFolderDateRange(
+        MailboxAccount $account,
+        MailboxFolder $folder,
+        Carbon $from,
+        Carbon $to,
+    ): array {
+        $senderConfigs = EmailImportConfig::where('is_active', true)->get();
+        $fromIso = $from->copy()->utc()->format('Y-m-d\TH:i:s\Z');
+        $toIso   = $to->copy()->utc()->format('Y-m-d\TH:i:s\Z');
+
+        $url = 'https://graph.microsoft.com/v1.0/me/mailFolders/'.rawurlencode($folder->external_folder_id).'/messages';
+        $params = [
+            '$select' => 'id,conversationId,internetMessageId,subject,from,toRecipients,bodyPreview,isRead,receivedDateTime,hasAttachments',
+            '$filter' => "receivedDateTime ge {$fromIso} and receivedDateTime le {$toIso}",
+            '$orderby' => 'receivedDateTime asc',
+            '$top' => 100,
+        ];
+
+        $stats = [
+            'fetched' => 0,
+            'created' => 0,
+            'updated' => 0,
+            'stored' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'email_records' => [],
+        ];
+        $page = 0;
+        $seenMessageIds = [];
+        $seenInternetMessageIds = [];
+        $seenEmailIds = [];
+
+        do {
+            $accessToken = $this->getValidAccessToken($account);
+            $request = Http::withToken($accessToken)
+                ->withHeaders([
+                    'ConsistencyLevel' => 'eventual',
+                    'Prefer' => 'IdType="ImmutableId", odata.maxpagesize=100',
+                ])
+                ->retry(3, 5000)
+                ->connectTimeout(10)
+                ->timeout(120);
+
+            $response = $page === 0
+                ? $request->get($url, $params)
+                : $request->get($url);
+
+            if ($response->status() === 429) {
+                sleep((int) ($response->header('Retry-After') ?? 5));
+                continue;
+            }
+
+            if (! $response->successful()) {
+                throw new RuntimeException('Microsoft Graph folder sync failed with HTTP '.$response->status());
+            }
+
+            $data = $response->json();
+            $batch = $data['value'] ?? [];
+            $newInBatch = 0;
+
+            foreach ($batch as $message) {
+                if (! is_array($message)) {
+                    continue;
+                }
+
+                $messageId = (string) ($message['id'] ?? '');
+                $internetMessageId = trim((string) ($message['internetMessageId'] ?? ''));
+
+                if ($messageId !== '' && isset($seenMessageIds[$messageId])) {
+                    continue;
+                }
+
+                if ($internetMessageId !== '' && isset($seenInternetMessageIds[$internetMessageId])) {
+                    continue;
+                }
+
+                if ($messageId !== '') {
+                    $seenMessageIds[$messageId] = true;
+                    $newInBatch++;
+                }
+
+                if ($internetMessageId !== '') {
+                    $seenInternetMessageIds[$internetMessageId] = true;
+                }
+
+                $stats['fetched']++;
+                $result = $this->processMessageOneByOne(
+                    $account,
+                    $message,
+                    $senderConfigs,
+                    collect(),
+                    null,
+                    $accessToken,
+                    $folder,
+                    forcePersist: true,
+                );
+
+                if ($result === null) {
+                    $stats['failed']++;
+                    continue;
+                }
+
+                $emailId = isset($result['email_id']) ? (int) $result['email_id'] : null;
+                if ($emailId !== null && isset($seenEmailIds[$emailId])) {
+                    Log::channel('mailbox_sync')->warning('folder_date_range_sync_duplicate_email_id', [
+                        'mailbox_id' => $account->id,
+                        'folder' => $folder->display_name,
+                        'email_id' => $emailId,
+                        'message_id' => $messageId !== '' ? $messageId : null,
+                        'internet_message_id' => $internetMessageId !== '' ? $internetMessageId : null,
+                    ]);
+
+                    continue;
+                }
+
+                match ($result['outcome']) {
+                    'created' => $stats['created']++,
+                    'updated', 'synced' => $stats['updated']++,
+                    'skipped' => $stats['skipped']++,
+                    default => null,
+                };
+
+                if ($emailId !== null) {
+                    $seenEmailIds[$emailId] = true;
+                    $stats['stored']++;
+                    $stats['email_records'][] = [
+                        'email_id' => $emailId,
+                        'outcome' => (string) $result['outcome'],
+                    ];
+                }
+            }
+
+            $page++;
+
+            if (count($batch) > 0 && $newInBatch === 0) {
+                Log::channel('mailbox_sync')->warning('folder_date_range_sync_duplicate_page', [
+                    'mailbox_id' => $account->id,
+                    'folder' => $folder->display_name,
+                    'page' => $page,
+                    'batch_count' => count($batch),
+                    'total_fetched' => $stats['fetched'],
+                    'from' => $fromIso,
+                    'to' => $toIso,
+                ]);
+                break;
+            }
+
+            Log::channel('mailbox_sync')->info('folder_date_range_sync_page', [
+                'mailbox_id' => $account->id,
+                'folder' => $folder->display_name,
+                'page' => $page,
+                'batch_count' => count($batch),
+                'new_in_batch' => $newInBatch,
+                'total_fetched' => $stats['fetched'],
+                'total_stored' => $stats['stored'],
+                'from' => $fromIso,
+                'to' => $toIso,
+            ]);
+
+            $url = $data['@odata.nextLink'] ?? null;
+        } while ($url);
+
+        $folder->update(['last_synced_at' => now(), 'last_sync_error' => null]);
+
+        if ($stats['fetched'] === 0) {
+            Log::channel('mailbox_sync')->info('folder_date_range_sync_empty', [
+                'mailbox_id' => $account->id,
+                'folder' => $folder->display_name,
+                'from' => $fromIso,
+                'to' => $toIso,
+            ]);
+        }
+
+        return $stats;
+    }
+
     public function discoverFolders(MailboxAccount $account, ?string $accessToken = null): array
     {
         $token = $accessToken ?: $this->getValidAccessToken($account);
@@ -204,8 +397,11 @@ class OutlookEmailService implements EmailProviderInterface
     private function syncFolder(MailboxAccount $account, MailboxFolder $folder, string $accessToken, $senderConfigs, $activeRules, ?MailboxSyncLog $syncLog): int
     {
         $url = $folder->delta_token ?: 'https://graph.microsoft.com/v1.0/me/mailFolders/'.rawurlencode($folder->external_folder_id).'/messages/delta';
+        // 'body' is intentionally excluded — requesting it via Graph API automatically
+        // marks the message as read in Outlook. bodyPreview (255 chars) is sufficient
+        // for PO extraction; full body can be fetched separately if ever needed.
         $params = $folder->delta_token ? [] : [
-            '$select' => 'id,conversationId,internetMessageId,subject,from,toRecipients,body,bodyPreview,isRead,receivedDateTime,hasAttachments',
+            '$select' => 'id,conversationId,internetMessageId,subject,from,toRecipients,bodyPreview,isRead,receivedDateTime,hasAttachments',
             '$filter' => 'receivedDateTime ge '.($account->sync_from_date?->format('Y-m-d') ?? now()->subDay()->format('Y-m-d')).'T00:00:00Z',
         ];
         $count = 0;
@@ -254,7 +450,8 @@ class OutlookEmailService implements EmailProviderInterface
             : collect();
 
         $url = 'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages/delta';
-        $params = ['$select' => 'id,conversationId,internetMessageId,subject,from,toRecipients,body,bodyPreview,isRead,receivedDateTime,hasAttachments'];
+        // 'body' excluded — see syncFolder() for explanation.
+        $params = ['$select' => 'id,conversationId,internetMessageId,subject,from,toRecipients,bodyPreview,isRead,receivedDateTime,hasAttachments'];
 
         if ($account->delta_token) {
             // Subsequent sync — delta token already encodes any date filter from initial sync
@@ -331,7 +528,8 @@ class OutlookEmailService implements EmailProviderInterface
         ?MailboxSyncLog $syncLog,
         string $accessToken,
         ?MailboxFolder $folder = null,
-    ): void {
+        bool $forcePersist = false,
+    ): ?array {
         $startedAt = hrtime(true);
         $messageId = isset($message['id']) && is_string($message['id']) && $message['id'] !== ''
             ? $message['id']
@@ -350,6 +548,7 @@ class OutlookEmailService implements EmailProviderInterface
                     $attempt,
                     $startedAt,
                     $folder,
+                    $forcePersist,
                 ): array {
                     if ($messageId === null) {
                         throw new RuntimeException('Graph message is missing a valid id.');
@@ -362,6 +561,7 @@ class OutlookEmailService implements EmailProviderInterface
                         $senderConfigs,
                         $activeRules,
                         $folder,
+                        $forcePersist,
                     );
 
                     $durationMs = $this->elapsedMilliseconds($startedAt);
@@ -386,9 +586,9 @@ class OutlookEmailService implements EmailProviderInterface
                     $this->syncAttachments($accessToken, (int) $result['email_id'], $messageId);
                 }
 
-                if (isset($result['email_id']) && in_array($result['outcome'], ['created', 'updated', 'skipped'], true)) {
+                if (isset($result['email_id']) && in_array($result['outcome'], ['created', 'updated', 'synced', 'skipped'], true)) {
                     $email = Email::find($result['email_id']);
-                    if ($email && ($result['outcome'] !== 'skipped' || ! $email->ingestion_classification)) {
+                    if ($email && ($forcePersist || $result['outcome'] !== 'skipped' || ! $email->ingestion_classification)) {
                         $decision = app(EmailIngestionDecisionService::class)->evaluate($email);
                         if (isset($result['item_log_id'])) {
                             MailboxSyncItemLog::whereKey($result['item_log_id'])->update([
@@ -401,7 +601,7 @@ class OutlookEmailService implements EmailProviderInterface
                     }
                 }
 
-                return;
+                return $result;
             } catch (Throwable $exception) {
                 $lastException = $exception;
             }
@@ -433,6 +633,8 @@ class OutlookEmailService implements EmailProviderInterface
             'duration_ms' => $durationMs,
             'exception_class' => $lastException ? $lastException::class : null,
         ]);
+
+        return null;
     }
 
     private function persistSingleMessage(
@@ -442,6 +644,7 @@ class OutlookEmailService implements EmailProviderInterface
         $senderConfigs,
         $activeRules,
         ?MailboxFolder $folder = null,
+        bool $forcePersist = false,
     ): array {
         if (isset($message['@removed'])) {
             $query = Email::where('mailbox_account_id', $account->id)->where('message_id', $messageId);
@@ -462,7 +665,7 @@ class OutlookEmailService implements EmailProviderInterface
             && $folder->is_order_folder
             && $folder->customer_id !== null;
 
-        if (! $folderIsTrusted && $activeRules->isNotEmpty()) {
+        if (! $forcePersist && ! $folderIsTrusted && $activeRules->isNotEmpty()) {
             $filterData = [
                 'from_email' => $fromEmail,
                 'subject' => $message['subject'] ?? '',
@@ -486,7 +689,7 @@ class OutlookEmailService implements EmailProviderInterface
                 $message['toRecipients'] ?? [],
             ),
             'body_preview' => substr($message['bodyPreview'] ?? '', 0, 500),
-            'body_content' => $this->plainTextBody($message['body']['content'] ?? null, $message['body']['contentType'] ?? null),
+            'body_content' => null, // body not fetched — see select comment; bodyPreview is used for PO extraction
             'conversation_id' => $message['conversationId'] ?? null,
             'internet_message_id' => $message['internetMessageId'] ?? null,
             'is_read' => $message['isRead'] ?? false,
@@ -504,6 +707,20 @@ class OutlookEmailService implements EmailProviderInterface
             $email->save();
 
             return ['outcome' => 'created', 'reason' => null, 'email_id' => $email->id];
+        }
+
+        if ($forcePersist) {
+            $hadFieldChanges = $email->isDirty();
+            if (! $hadFieldChanges) {
+                $email->touch();
+            }
+            $email->save();
+
+            return [
+                'outcome' => $hadFieldChanges ? 'updated' : 'synced',
+                'reason' => $hadFieldChanges ? 'fields_changed' : 'date_range_reimport',
+                'email_id' => $email->id,
+            ];
         }
 
         if (! $email->isDirty()) {
@@ -634,7 +851,7 @@ class OutlookEmailService implements EmailProviderInterface
 
         $counter = match ($outcome) {
             'created' => 'emails_created',
-            'updated' => 'emails_updated',
+            'updated', 'synced' => 'emails_updated',
             'deleted' => 'emails_deleted',
             'failed' => 'emails_failed',
             default => 'emails_skipped',

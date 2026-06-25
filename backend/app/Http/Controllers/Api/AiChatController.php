@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\Admin\AiConnectorService;
 use App\Services\AI\AiIntentClassifierService;
+use App\Services\AI\AiPromptShortcutResolver;
 use App\Services\AI\AiResponseCardBuilder;
 use App\Services\AI\AiPromptLogService;
 use App\Services\AI\Insights\OrderInsightService;
@@ -22,6 +23,7 @@ class AiChatController extends Controller
     public function __construct(
         private readonly AiConnectorService       $ai,
         private readonly AiIntentClassifierService $classifier,
+        private readonly AiPromptShortcutResolver $shortcuts,
         private readonly AiResponseCardBuilder    $cardBuilder,
         private readonly AiPromptLogService       $logger,
         private readonly OrderInsightService      $orderInsight,
@@ -51,11 +53,18 @@ class AiChatController extends Controller
             ], 503);
         }
 
+        $shortcutContext = $this->shortcuts->resolve($validated['prompt']);
+
         // 1. Classify intent & determine data domains
         ['intent' => $intent, 'domains' => $domains] = $this->classifier->classify($validated['prompt']);
+        $domains = array_values(array_unique([...$domains, ...$shortcutContext['domain_hints']]));
 
         // 2. Gather DB insights for the relevant domains
-        $insights      = $this->gatherInsights($domains);
+        $insights      = $this->gatherInsights(
+            $domains,
+            $shortcutContext['date_from'],
+            $shortcutContext['date_to'],
+        );
         $formulasUsed  = $this->collectFormulas($insights);
 
         // 3. Build structured cards from real DB data
@@ -63,7 +72,12 @@ class AiChatController extends Controller
             $this->cardBuilder->build($insights, $intent);
 
         // 4. Build rich system prompt with live DB context
-        $systemPrompt = $this->buildSystemPrompt($validated['page'] ?? null, $insights, $intent);
+        $systemPrompt = $this->buildSystemPrompt(
+            $validated['page'] ?? null,
+            $insights,
+            $intent,
+            $shortcutContext['context_lines'],
+        );
 
         try {
             $reply = $provider === 'anthropic'
@@ -115,18 +129,18 @@ class AiChatController extends Controller
 
     // ── Data gathering ─────────────────────────────────────────────────────────
 
-    private function gatherInsights(array $domains): array
+    private function gatherInsights(array $domains, ?string $dateFrom = null, ?string $dateTo = null): array
     {
         $insights = [];
 
         if (in_array('orders', $domains)) {
-            $insights['orders'] = $this->orderInsight->getSnapshot();
+            $insights['orders'] = $this->orderInsight->getSnapshot($dateFrom, $dateTo);
         }
         if (in_array('emails', $domains)) {
-            $insights['emails'] = $this->emailInsight->getSnapshot();
+            $insights['emails'] = $this->emailInsight->getSnapshot($dateFrom, $dateTo);
         }
         if (in_array('matches', $domains)) {
-            $insights['matches'] = $this->matchInsight->getSnapshot();
+            $insights['matches'] = $this->matchInsight->getSnapshot($dateFrom, $dateTo);
         }
         if (in_array('customers', $domains)) {
             $insights['customers'] = $this->customerInsight->getSnapshot();
@@ -205,18 +219,22 @@ class AiChatController extends Controller
 
     // ── System prompt ──────────────────────────────────────────────────────────
 
-    private function buildSystemPrompt(?string $page, array $insights, string $intent): string
+    private function buildSystemPrompt(?string $page, array $insights, string $intent, array $shortcutLines = []): string
     {
         $pageCtx    = $page ? "The user is currently on the '{$page}' page." : '';
         $intentCtx  = "The user's intent has been classified as: {$intent}.";
         $dataContext = $this->formatInsightsForPrompt($insights);
         $today      = now()->toDateString();
+        $shortcutCtx = $shortcutLines !== []
+            ? "USER SHORTCUT TAGS:\n".implode("\n", array_map(fn ($line) => "- {$line}", $shortcutLines))
+            : '';
 
         return <<<PROMPT
 You are a DB-driven AI assistant embedded in Kim-Fay OrderWatch, an internal order management and email monitoring platform for Kim-Fay, a food distribution company in Kenya. Today's date is {$today}.
 
 {$pageCtx}
 {$intentCtx}
+{$shortcutCtx}
 
 LIVE DATABASE SNAPSHOT (pre-queried, accurate — use these numbers in your response):
 {$dataContext}

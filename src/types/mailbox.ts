@@ -23,8 +23,44 @@ export interface EmailMessage {
   ingestion_classification: "po_processing" | "needs_review" | "stored_non_order" | null;
   ingestion_reason_codes: string[] | null;
   ingestion_decision_sources: string[] | null;
-  mailbox_folder?: { display_name: string; rules: FolderRuleMapping[] } | null;
-  created_at: string;
+  extracted_po_number?: string | null;
+  canonical_po?: string | null;
+  mailbox_folder?: {
+    display_name: string;
+    customer?: { id: number; acumatica_id: string; name: string } | null;
+    rules: FolderRuleMapping[];
+  } | null;
+  created_at?: string;
+}
+
+export interface InboxEmailStats {
+  total: number;
+  with_po: number;
+  po_processing: number;
+  needs_review: number;
+  stored_non_order: number;
+  unread: number;
+}
+
+export interface InboxCustomerGroup {
+  customer_id: number | null;
+  customer_name: string;
+  acumatica_id: string | null;
+  email_count: number;
+  with_po_count: number;
+  po_processing_count: number;
+  needs_review_count: number;
+  stored_non_order_count: number;
+  unread_count: number;
+  emails: EmailMessage[];
+}
+
+export interface InboxEmailGroupsResponse {
+  stats: InboxEmailStats;
+  groups: InboxCustomerGroup[];
+  truncated: boolean;
+  date_from: string | null;
+  date_to: string | null;
 }
 
 export interface FolderRuleMapping {
@@ -53,6 +89,9 @@ export interface MailboxFolder {
   last_discovered_at: string | null;
   last_synced_at: string | null;
   last_sync_error: string | null;
+  emails_synced_all_time: number;
+  last_manual_sync_at: string | null;
+  last_manual_sync_count: number;
   suggested_order_folder: boolean;
   rules: FolderRuleMapping[];
   customer: { id: number; acumatica_id: string; name: string } | null;

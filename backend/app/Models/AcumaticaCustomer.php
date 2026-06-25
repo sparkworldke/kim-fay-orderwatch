@@ -40,4 +40,9 @@ class AcumaticaCustomer extends Model
     {
         return $this->belongsTo(AcumaticaSyncLog::class, 'sync_run_id');
     }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_acumatica_id', 'acumatica_id');
+    }
 }

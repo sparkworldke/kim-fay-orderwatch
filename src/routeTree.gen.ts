@@ -17,10 +17,17 @@ import { Route as AppSoImportsRouteImport } from './routes/app.so-imports'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppProfileRouteImport } from './routes/app.profile'
 import { Route as AppOrdersRouteImport } from './routes/app.orders'
+import { Route as AppOrderMatchRouteImport } from './routes/app.order-match'
 import { Route as AppNotificationsRouteImport } from './routes/app.notifications'
 import { Route as AppMailboxRouteImport } from './routes/app.mailbox'
+import { Route as AppInventoryRouteImport } from './routes/app.inventory'
+import { Route as AppFillRateRouteImport } from './routes/app.fill-rate'
 import { Route as AppDiscrepanciesRouteImport } from './routes/app.discrepancies'
 import { Route as AppCustomersRouteImport } from './routes/app.customers'
+import { Route as AppCustomerFeedRouteImport } from './routes/app.customer-feed'
+import { Route as AppCreditNotesMoreRouteImport } from './routes/app.credit-notes-more'
+import { Route as AppBackordersRouteImport } from './routes/app.backorders'
+import { Route as AppAiIntelligenceRouteImport } from './routes/app.ai-intelligence'
 import { Route as AppAiInsightsRouteImport } from './routes/app.ai-insights'
 import { Route as AppAdministrationRouteImport } from './routes/app.administration'
 
@@ -64,6 +71,11 @@ const AppOrdersRoute = AppOrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOrderMatchRoute = AppOrderMatchRouteImport.update({
+  id: '/order-match',
+  path: '/order-match',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppNotificationsRoute = AppNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
@@ -74,6 +86,16 @@ const AppMailboxRoute = AppMailboxRouteImport.update({
   path: '/mailbox',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInventoryRoute = AppInventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFillRateRoute = AppFillRateRouteImport.update({
+  id: '/fill-rate',
+  path: '/fill-rate',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDiscrepanciesRoute = AppDiscrepanciesRouteImport.update({
   id: '/discrepancies',
   path: '/discrepancies',
@@ -82,6 +104,26 @@ const AppDiscrepanciesRoute = AppDiscrepanciesRouteImport.update({
 const AppCustomersRoute = AppCustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCustomerFeedRoute = AppCustomerFeedRouteImport.update({
+  id: '/customer-feed',
+  path: '/customer-feed',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCreditNotesMoreRoute = AppCreditNotesMoreRouteImport.update({
+  id: '/credit-notes-more',
+  path: '/credit-notes-more',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBackordersRoute = AppBackordersRouteImport.update({
+  id: '/backorders',
+  path: '/backorders',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAiIntelligenceRoute = AppAiIntelligenceRouteImport.update({
+  id: '/ai-intelligence',
+  path: '/ai-intelligence',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAiInsightsRoute = AppAiInsightsRouteImport.update({
@@ -101,10 +143,17 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/app/administration': typeof AppAdministrationRoute
   '/app/ai-insights': typeof AppAiInsightsRoute
+  '/app/ai-intelligence': typeof AppAiIntelligenceRoute
+  '/app/backorders': typeof AppBackordersRoute
+  '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
+  '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/fill-rate': typeof AppFillRateRoute
+  '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
   '/app/notifications': typeof AppNotificationsRoute
+  '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
@@ -116,10 +165,17 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/app/administration': typeof AppAdministrationRoute
   '/app/ai-insights': typeof AppAiInsightsRoute
+  '/app/ai-intelligence': typeof AppAiIntelligenceRoute
+  '/app/backorders': typeof AppBackordersRoute
+  '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
+  '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/fill-rate': typeof AppFillRateRoute
+  '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
   '/app/notifications': typeof AppNotificationsRoute
+  '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
@@ -133,10 +189,17 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/app/administration': typeof AppAdministrationRoute
   '/app/ai-insights': typeof AppAiInsightsRoute
+  '/app/ai-intelligence': typeof AppAiIntelligenceRoute
+  '/app/backorders': typeof AppBackordersRoute
+  '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
+  '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/fill-rate': typeof AppFillRateRoute
+  '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
   '/app/notifications': typeof AppNotificationsRoute
+  '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
@@ -151,10 +214,17 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app/administration'
     | '/app/ai-insights'
+    | '/app/ai-intelligence'
+    | '/app/backorders'
+    | '/app/credit-notes-more'
+    | '/app/customer-feed'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/fill-rate'
+    | '/app/inventory'
     | '/app/mailbox'
     | '/app/notifications'
+    | '/app/order-match'
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
@@ -166,10 +236,17 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app/administration'
     | '/app/ai-insights'
+    | '/app/ai-intelligence'
+    | '/app/backorders'
+    | '/app/credit-notes-more'
+    | '/app/customer-feed'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/fill-rate'
+    | '/app/inventory'
     | '/app/mailbox'
     | '/app/notifications'
+    | '/app/order-match'
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
@@ -182,10 +259,17 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app/administration'
     | '/app/ai-insights'
+    | '/app/ai-intelligence'
+    | '/app/backorders'
+    | '/app/credit-notes-more'
+    | '/app/customer-feed'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/fill-rate'
+    | '/app/inventory'
     | '/app/mailbox'
     | '/app/notifications'
+    | '/app/order-match'
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
@@ -257,6 +341,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrdersRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/order-match': {
+      id: '/app/order-match'
+      path: '/order-match'
+      fullPath: '/app/order-match'
+      preLoaderRoute: typeof AppOrderMatchRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/notifications': {
       id: '/app/notifications'
       path: '/notifications'
@@ -271,6 +362,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMailboxRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/inventory': {
+      id: '/app/inventory'
+      path: '/inventory'
+      fullPath: '/app/inventory'
+      preLoaderRoute: typeof AppInventoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/fill-rate': {
+      id: '/app/fill-rate'
+      path: '/fill-rate'
+      fullPath: '/app/fill-rate'
+      preLoaderRoute: typeof AppFillRateRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/discrepancies': {
       id: '/app/discrepancies'
       path: '/discrepancies'
@@ -283,6 +388,34 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/app/customers'
       preLoaderRoute: typeof AppCustomersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/customer-feed': {
+      id: '/app/customer-feed'
+      path: '/customer-feed'
+      fullPath: '/app/customer-feed'
+      preLoaderRoute: typeof AppCustomerFeedRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/credit-notes-more': {
+      id: '/app/credit-notes-more'
+      path: '/credit-notes-more'
+      fullPath: '/app/credit-notes-more'
+      preLoaderRoute: typeof AppCreditNotesMoreRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/backorders': {
+      id: '/app/backorders'
+      path: '/backorders'
+      fullPath: '/app/backorders'
+      preLoaderRoute: typeof AppBackordersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/ai-intelligence': {
+      id: '/app/ai-intelligence'
+      path: '/ai-intelligence'
+      fullPath: '/app/ai-intelligence'
+      preLoaderRoute: typeof AppAiIntelligenceRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/ai-insights': {
@@ -305,10 +438,17 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAdministrationRoute: typeof AppAdministrationRoute
   AppAiInsightsRoute: typeof AppAiInsightsRoute
+  AppAiIntelligenceRoute: typeof AppAiIntelligenceRoute
+  AppBackordersRoute: typeof AppBackordersRoute
+  AppCreditNotesMoreRoute: typeof AppCreditNotesMoreRoute
+  AppCustomerFeedRoute: typeof AppCustomerFeedRoute
   AppCustomersRoute: typeof AppCustomersRoute
   AppDiscrepanciesRoute: typeof AppDiscrepanciesRoute
+  AppFillRateRoute: typeof AppFillRateRoute
+  AppInventoryRoute: typeof AppInventoryRoute
   AppMailboxRoute: typeof AppMailboxRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
+  AppOrderMatchRoute: typeof AppOrderMatchRoute
   AppOrdersRoute: typeof AppOrdersRoute
   AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
@@ -319,10 +459,17 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAdministrationRoute: AppAdministrationRoute,
   AppAiInsightsRoute: AppAiInsightsRoute,
+  AppAiIntelligenceRoute: AppAiIntelligenceRoute,
+  AppBackordersRoute: AppBackordersRoute,
+  AppCreditNotesMoreRoute: AppCreditNotesMoreRoute,
+  AppCustomerFeedRoute: AppCustomerFeedRoute,
   AppCustomersRoute: AppCustomersRoute,
   AppDiscrepanciesRoute: AppDiscrepanciesRoute,
+  AppFillRateRoute: AppFillRateRoute,
+  AppInventoryRoute: AppInventoryRoute,
   AppMailboxRoute: AppMailboxRoute,
   AppNotificationsRoute: AppNotificationsRoute,
+  AppOrderMatchRoute: AppOrderMatchRoute,
   AppOrdersRoute: AppOrdersRoute,
   AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,

@@ -10,6 +10,9 @@ class AcumaticaClient
 {
     private const CACHE_KEY = 'acumatica_access_token';
     private const PAGE_SIZE = 100;
+    private const MAX_CHUNK_SIZE = 200;
+    private const MAX_PAGES = 500;
+    private const INTER_PAGE_DELAY_US = 500_000;
 
     public function __construct(
         private readonly AcumaticaService $acumaticaService,
@@ -76,8 +79,68 @@ class AcumaticaClient
      * are never percent-encoded — Guzzle's array param encoding turns '$' into
      * '%24' which Acumatica does not accept.
      */
+    /** OData fragment restricting SalesOrder queries to in-scope document types. */
+    private function salesOrderTypeClause(): string
+    {
+        return "OrderType eq 'SO'";
+    }
+
+    private function creditNotesAndMoreTypeClause(): string
+    {
+        return "(OrderType eq 'QT' or OrderType eq 'RC' or OrderType eq 'CM' or OrderType eq 'PL')";
+    }
+
+    private function dateRangeClause(string $dateFrom, string $dateTo): string
+    {
+        $fromIso = date('Y-m-d', strtotime($dateFrom)).'T00:00:00';
+        $toIso   = date('Y-m-d', strtotime($dateTo)).'T23:59:59';
+
+        return "Date ge datetimeoffset'{$fromIso}' and Date le datetimeoffset'{$toIso}'";
+    }
+
+    private function normalizeQuery(string $path, array $query): array
+    {
+        $entity = trim($path, '/');
+
+        if ($entity === 'SalesOrder') {
+            // IpayV2 22.200.001 exposes line items as Details (DocumentDetails is invalid).
+            if (($query['$expand'] ?? null) === 'DocumentDetails') {
+                $query['$expand'] = 'Details';
+            }
+
+            $select = (string) ($query['$select'] ?? '');
+            if (str_contains($select, 'Details/') || str_contains($select, 'DocumentDetails/')) {
+                unset($query['$select']);
+            }
+        }
+
+        if (in_array($entity, ['StockItem', 'CustomerClass'], true)) {
+            unset($query['$select']);
+        }
+
+        return $query;
+    }
+
+    /**
+     * IpayV2 exposes line items as Details.
+     * Never add nested $select paths — they fail OData binding on 22.200.001.
+     */
+    private function salesOrderListParams(array $params): array
+    {
+        if (($params['$expand'] ?? null) === 'DocumentDetails') {
+            $params['$expand'] = 'Details';
+        }
+
+        if (! isset($params['$expand'])) {
+            $params['$expand'] = 'Details';
+        }
+
+        return $params;
+    }
+
     private function get(string $path, array $query = []): array
     {
+        $query = $this->normalizeQuery($path, $query);
         $url = $this->entityBase() . '/' . ltrim($path, '/') . '/';
 
         if (! empty($query)) {
@@ -165,9 +228,10 @@ class AcumaticaClient
      */
     public function fetchOrderByNumber(string $orderNbr): ?array
     {
-        $results = $this->get('SalesOrder', [
+        $results = $this->get('SalesOrder', $this->salesOrderListParams([
+            '$top'    => 1,
             '$filter' => "OrderNbr eq '{$orderNbr}'",
-        ]);
+        ]));
 
         return $results[0] ?? null;
     }
@@ -221,14 +285,44 @@ class AcumaticaClient
      */
     public function fetchSalesOrdersByDateRange(string $dateFrom, string $dateTo, int $skip = 0, int $top = self::PAGE_SIZE): array
     {
-        $fromIso = date('Y-m-d', strtotime($dateFrom)) . 'T00:00:00';
-        $toIso   = date('Y-m-d', strtotime($dateTo))   . 'T23:59:59';
-
-        return $this->get('SalesOrder', [
+        return $this->get('SalesOrder', $this->salesOrderListParams([
             '$top'    => $top,
             '$skip'   => $skip,
-            '$filter' => "Date ge datetimeoffset'{$fromIso}' and Date le datetimeoffset'{$toIso}'",
-        ]);
+            '$filter' => $this->salesOrderTypeClause().' and '.$this->dateRangeClause($dateFrom, $dateTo),
+        ]));
+    }
+
+    public function fetchCreditNotesAndMoreByDateRange(string $dateFrom, string $dateTo, int $skip = 0, int $top = self::PAGE_SIZE): array
+    {
+        return $this->get('SalesOrder', $this->salesOrderListParams([
+            '$top'    => $top,
+            '$skip'   => $skip,
+            '$filter' => $this->creditNotesAndMoreTypeClause().' and '.$this->dateRangeClause($dateFrom, $dateTo),
+        ]));
+    }
+
+    public function fetchAllCreditNotesAndMoreByDateRange(string $dateFrom, string $dateTo): array
+    {
+        $all = [];
+        $skip = 0;
+
+        do {
+            $page = $this->fetchCreditNotesAndMoreByDateRange($dateFrom, $dateTo, $skip);
+            $all = array_merge($all, $page);
+            $skip += self::PAGE_SIZE;
+            usleep(500_000);
+        } while (count($page) === self::PAGE_SIZE);
+
+        return $all;
+    }
+
+    public function fetchSalesOrdersForCustomerByDateRange(string $customerId, string $dateFrom, string $dateTo, int $skip = 0, int $top = self::PAGE_SIZE): array
+    {
+        return $this->get('SalesOrder', $this->salesOrderListParams([
+            '$top'    => $top,
+            '$skip'   => $skip,
+            '$filter' => "CustomerID eq '{$customerId}' and ".$this->salesOrderTypeClause().' and '.$this->dateRangeClause($dateFrom, $dateTo),
+        ]));
     }
 
     /**
@@ -236,16 +330,9 @@ class AcumaticaClient
      */
     public function fetchAllSalesOrdersByDateRange(string $dateFrom, string $dateTo): array
     {
-        $all = [];
-        $skip = 0;
-
-        do {
-            $page = $this->fetchSalesOrdersByDateRange($dateFrom, $dateTo, $skip);
-            $all = array_merge($all, $page);
-            $skip += self::PAGE_SIZE;
-        } while (count($page) === self::PAGE_SIZE);
-
-        return $all;
+        return $this->fetchAllPages(
+            fn (int $skip) => $this->fetchSalesOrdersByDateRange($dateFrom, $dateTo, $skip),
+        );
     }
 
     /**
@@ -257,14 +344,132 @@ class AcumaticaClient
         $skip = 0;
 
         do {
-            $page = $this->get('SalesOrder', [
+            $page = $this->get('SalesOrder', $this->salesOrderListParams([
                 '$top'    => self::PAGE_SIZE,
                 '$skip'   => $skip,
-                '$filter' => "CustomerID eq '{$customerId}'",
-            ]);
+                '$filter' => "CustomerID eq '{$customerId}' and ".$this->salesOrderTypeClause(),
+            ]));
             $all = array_merge($all, $page);
             $skip += self::PAGE_SIZE;
+            usleep(500_000);
         } while (count($page) === self::PAGE_SIZE);
+
+        return $all;
+    }
+
+    // -------------------------------------------------------------------------
+    // Backorder endpoints
+    // -------------------------------------------------------------------------
+
+    public function openSalesOrdersForBackordersFilter(): string
+    {
+        return $this->salesOrderTypeClause()
+            ." and Status ne 'Completed' and Status ne 'Cancelled' and Status ne 'Canceled' and Status ne 'Rejected'";
+    }
+
+    public function fetchOpenSalesOrdersForBackorders(int $skip = 0, int $top = self::PAGE_SIZE): array
+    {
+        return $this->get('SalesOrder', $this->salesOrderListParams([
+            '$top'    => min($top, self::MAX_CHUNK_SIZE),
+            '$skip'   => $skip,
+            '$filter' => $this->openSalesOrdersForBackordersFilter(),
+        ]));
+    }
+
+    public function fetchAllOpenSalesOrdersForBackorders(): array
+    {
+        return $this->fetchAllPages(
+            fn (int $skip) => $this->fetchOpenSalesOrdersForBackorders($skip),
+        );
+    }
+
+    /** @deprecated Use fetchAllOpenSalesOrdersForBackorders — derives backorders from line qty fields. */
+    public function fetchAllBackorders(): array
+    {
+        return $this->fetchAllOpenSalesOrdersForBackorders();
+    }
+
+    // -------------------------------------------------------------------------
+    // Fill rate endpoints
+    // -------------------------------------------------------------------------
+
+    public function fetchOrdersForFillRatePage(string $dateFrom, string $dateTo, int $skip = 0, int $top = self::PAGE_SIZE): array
+    {
+        $fromIso = date('Y-m-d', strtotime($dateFrom)) . 'T00:00:00';
+        $toIso   = date('Y-m-d', strtotime($dateTo))   . 'T23:59:59';
+
+        return $this->get('SalesOrder', $this->salesOrderListParams([
+            '$top'    => $top,
+            '$skip'   => $skip,
+            '$filter' => $this->salesOrderTypeClause()." and Date ge datetimeoffset'{$fromIso}' and Date le datetimeoffset'{$toIso}' and Status ne 'Completed'",
+        ]));
+    }
+
+    public function fetchOrdersForFillRate(string $dateFrom, string $dateTo): array
+    {
+        return $this->fetchAllPages(
+            fn (int $skip) => $this->fetchOrdersForFillRatePage($dateFrom, $dateTo, $skip),
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Inventory endpoints
+    // -------------------------------------------------------------------------
+
+    public function fetchActiveInventoryItems(int $skip = 0, int $top = self::PAGE_SIZE): array
+    {
+        $top = min($top, self::MAX_CHUNK_SIZE);
+
+        try {
+            return $this->get('InventoryItem', [
+                '$top'    => $top,
+                '$skip'   => $skip,
+                '$filter' => "ItemStatus eq 'Active'",
+            ]);
+        } catch (RuntimeException) {
+            return $this->fetchStockItems($skip, $top);
+        }
+    }
+
+    public function fetchStockItems(int $skip = 0, int $top = self::PAGE_SIZE): array
+    {
+        return $this->get('StockItem', [
+            '$top'  => min($top, self::MAX_CHUNK_SIZE),
+            '$skip' => $skip,
+        ]);
+    }
+
+    public function fetchAllActiveInventoryItems(): array
+    {
+        return $this->fetchAllPages(
+            fn (int $skip) => $this->fetchActiveInventoryItems($skip),
+        );
+    }
+
+    public function fetchAllStockItems(): array
+    {
+        return $this->fetchAllPages(
+            fn (int $skip) => $this->fetchStockItems($skip),
+        );
+    }
+
+    /**
+     * @param  callable(int): array<int, array<string, mixed>>  $fetchPage
+     * @return list<array<string, mixed>>
+     */
+    private function fetchAllPages(callable $fetchPage): array
+    {
+        $all = [];
+        $skip = 0;
+        $pages = 0;
+
+        do {
+            $page = $fetchPage($skip);
+            $all = array_merge($all, $page);
+            $skip += self::PAGE_SIZE;
+            $pages++;
+            usleep(self::INTER_PAGE_DELAY_US);
+        } while (count($page) === self::PAGE_SIZE && $pages < self::MAX_PAGES);
 
         return $all;
     }

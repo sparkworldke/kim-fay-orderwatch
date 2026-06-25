@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\EmailImportConfig;
+use App\Services\Email\PartnerPoPdfContextService;
 use App\Services\Email\PoNumberExtractorService;
 use PHPUnit\Framework\TestCase;
 
@@ -36,6 +37,16 @@ class PoNumberExtractorTest extends TestCase
         $this->assertEquals(100, $result->confidence);
     }
 
+    public function test_extracts_naivas_po_from_attachment_filename_prefix(): void
+    {
+        $candidates = $this->extractor->extractDeterministicAll('notification@naivas.net', [
+            'attachment_filename:1' => 'P042562296_confirmation.pdf',
+        ]);
+
+        $this->assertNotEmpty($candidates);
+        $this->assertEquals('P042562296', $candidates[0]['po_number']);
+    }
+
     public function test_extracts_naivas_po_second_branch(): void
     {
         $result = $this->extractor->extractFromSubject(
@@ -44,6 +55,17 @@ class PoNumberExtractorTest extends TestCase
         );
         $this->assertNotNull($result);
         $this->assertEquals('P042540467', $result->poNumber);
+    }
+
+    public function test_extracts_naivas_po_from_noisy_subject_edge_case(): void
+    {
+        $candidates = $this->extractor->extractDeterministicAll('notification@naivas.net', [
+            'subject' => 'RE: FWD: PO : #P042574206!!!',
+        ]);
+
+        $this->assertNotEmpty($candidates);
+        $this->assertEquals('P042574206', $candidates[0]['po_number']);
+        $this->assertEquals('naivas_canonical', $candidates[0]['method']);
     }
 
     // -------------------------------------------------------------------------
@@ -61,6 +83,16 @@ class PoNumberExtractorTest extends TestCase
         $this->assertEquals('subject_pattern', $result->method);
     }
 
+    public function test_extracts_carrefour_po_example_26021220(): void
+    {
+        $result = $this->extractor->extractFromSubject(
+            'KENCarrefourOrders@maf.ae',
+            'C4 GCM XGCM     26021220',
+        );
+        $this->assertNotNull($result);
+        $this->assertEquals('26021220', $result->poNumber);
+    }
+
     public function test_extracts_carrefour_po_iru(): void
     {
         $result = $this->extractor->extractFromSubject(
@@ -69,6 +101,43 @@ class PoNumberExtractorTest extends TestCase
         );
         $this->assertNotNull($result);
         $this->assertEquals('26025705', $result->poNumber);
+    }
+
+    public function test_extracts_carrefour_po_from_noisy_subject_edge_case(): void
+    {
+        $candidates = $this->extractor->extractDeterministicAll('kencarrefourorders@maf.ae', [
+            'subject' => 'RE: FWD: C4 #KEV@ 2600050!',
+        ]);
+
+        $this->assertNotEmpty($candidates);
+        $this->assertEquals('2600050', $candidates[0]['po_number']);
+        $this->assertEquals('carrefour_canonical', $candidates[0]['method']);
+    }
+
+    public function test_extracts_carrefour_po_from_fax_pdf_metadata(): void
+    {
+        $parser = new PartnerPoPdfContextService;
+        $pdfText = $parser->buildSearchableText(file_get_contents(dirname(__DIR__, 3).'/changes/c4-po.PDF'));
+        $candidates = $this->extractor->extractDeterministicAll('kencarrefourorders@maf.ae', [
+            'attachment_content:1' => $pdfText,
+        ]);
+
+        $this->assertNotEmpty($candidates);
+        $this->assertEquals('26000506', $candidates[0]['po_number']);
+        $this->assertEquals('carrefour_canonical', $candidates[0]['method']);
+    }
+
+    public function test_extracts_naivas_po_from_pdf_attachment_text(): void
+    {
+        $parser = new PartnerPoPdfContextService;
+        $pdfText = $parser->buildSearchableText(file_get_contents(dirname(__DIR__, 3).'/changes/naivas-po.pdf'));
+        $candidates = $this->extractor->extractDeterministicAll('notification@naivas.net', [
+            'attachment_content:1' => $pdfText,
+        ]);
+
+        $this->assertNotEmpty($candidates);
+        $this->assertEquals('P042568464', $candidates[0]['po_number']);
+        $this->assertEquals('naivas_canonical', $candidates[0]['method']);
     }
 
     // -------------------------------------------------------------------------

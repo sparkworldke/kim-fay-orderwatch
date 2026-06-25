@@ -7,6 +7,13 @@ import {
   Settings,
   UserCircle,
   Inbox,
+  Sparkles,
+  Boxes,
+  PackageX,
+  Gauge,
+  GitMerge,
+  FileText,
+  Radio,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,13 +33,16 @@ const NAV = [
   { group: "Operations", items: [
     { title: "Dashboard", url: "/app", icon: LayoutDashboard, exact: true },
     { title: "Orders", url: "/app/orders", icon: PackageSearch },
-    // { title: "Discrepancies", url: "/app/discrepancies", icon: AlertTriangle },
+    { title: "Credit Notes & More", url: "/app/credit-notes-more", icon: FileText },
+    { title: "Inventory", url: "/app/inventory", icon: Boxes },
+    { title: "Backorders", url: "/app/backorders", icon: PackageX },
+    { title: "Fill Rate", url: "/app/fill-rate", icon: Gauge },
     { title: "Customers", url: "/app/customers", icon: Users },
+    { title: "Customer Feed", url: "/app/customer-feed", icon: Radio },
   ]},
   { group: "Intelligence", items: [
-    // { title: "AI Insights", url: "/app/ai-insights", icon: Sparkles },
-    // { title: "Reports", url: "/app/reports", icon: FileBarChart },
-    // { title: "Notifications", url: "/app/notifications", icon: Bell },
+    { title: "AI Intelligence", url: "/app/ai-intelligence", icon: Sparkles },
+    { title: "Order Match", url: "/app/order-match", icon: GitMerge },
     { title: "Mailbox", url: "/app/mailbox", icon: Inbox },
   ]},
   { group: "System", items: [
@@ -58,13 +68,15 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b">
         <div className="flex items-center gap-2 px-2 py-1.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-white shadow-sm">
-            <LogoImage className="h-8 w-8 object-contain" />
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold leading-tight">Kim-Fay</div>
-              <div className="truncate text-[10px] text-muted-foreground">OrderWatch</div>
+          {collapsed ? (
+            /* Icon-only: small square with KF initials / logo mark */
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-white shadow-sm">
+              <LogoImage iconOnly className="h-8 w-8 object-contain" />
+            </div>
+          ) : (
+            /* Expanded: full landscape logo */
+            <div className="flex h-10 items-center justify-start overflow-hidden rounded bg-white px-2 shadow-sm w-full">
+              <LogoImage className="h-8 w-auto max-w-[140px] object-contain" />
             </div>
           )}
         </div>

@@ -9,11 +9,21 @@ use App\Services\Email\Extractors\PdfTextExtractor;
 
 class AttachmentTextExtractorService
 {
+    private ?PdfTextExtractor $pdf = null;
+
     public function __construct(
-        private readonly PdfTextExtractor   $pdf,
         private readonly ExcelTextExtractor $excel,
         private readonly ImageTextExtractor $image,
-    ) {}
+    ) {
+    }
+
+    private function pdf(): PdfTextExtractor
+    {
+        return $this->pdf ??= new PdfTextExtractor(
+            partnerPdf: new PartnerPoPdfContextService,
+            imageText: $this->image,
+        );
+    }
 
     /**
      * Extract text from raw attachment bytes based on content type.
@@ -25,7 +35,7 @@ class AttachmentTextExtractorService
         $mime = strtolower((string) $attachment->content_type);
 
         [$text, $method] = match (true) {
-            $this->pdf->supports($mime)   => [$this->pdf->extract($bytes),                          'pdf_parser'],
+            $this->pdf()->supports($mime)   => [$this->pdf()->extract($bytes),                          'pdf_parser'],
             $this->excel->supports($mime) => [$this->excel->extract($bytes, $mime),                 'excel_parser'],
             $this->image->supports($mime) => [$this->image->extract($bytes, $mime),                 'ai_vision'],
             default                       => [null,                                                  'unsupported'],
@@ -55,7 +65,7 @@ class AttachmentTextExtractorService
     {
         $mime = strtolower($contentType);
 
-        return $this->pdf->supports($mime)
+        return $this->pdf()->supports($mime)
             || $this->excel->supports($mime)
             || $this->image->supports($mime);
     }

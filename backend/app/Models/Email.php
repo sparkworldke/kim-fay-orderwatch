@@ -32,8 +32,13 @@ class Email extends Model
         'ingestion_reviewed_by',
         'ingestion_reviewed_at',
         'extracted_po_number',
+        'canonical_po',
         'po_extraction_method',
         'po_extraction_confidence',
+        'extraction_status',
+        'match_status',
+        'duplicate_flag',
+        'canonical_email_id',
         'matched_order_id',
         'has_attachments',
         'po_extraction_attempted',
@@ -91,5 +96,15 @@ class Email extends Model
     public function matchAttempts(): HasMany
     {
         return $this->hasMany(EmailMatchAttempt::class);
+    }
+
+    public function predictions(): HasMany
+    {
+        return $this->hasMany(MatchPrediction::class);
+    }
+
+    public function matchLogs(): HasMany
+    {
+        return $this->hasMany(MatchLog::class);
     }
 }

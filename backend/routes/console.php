@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\EvaluateOrderMatchNotifications;
 use App\Console\Commands\PruneExpiredOtps;
 use App\Console\Commands\SyncAcumaticaCustomerCategories;
 use Illuminate\Foundation\Inspiring;
@@ -14,6 +15,8 @@ Schedule::command(PruneExpiredOtps::class)->everyFifteenMinutes();
 
 // Sync Acumatica customer categories every hour
 Schedule::command(SyncAcumaticaCustomerCategories::class)->hourly();
+
+Schedule::command(EvaluateOrderMatchNotifications::class)->hourly();
 
 // Unified Outlook folder sync → Acumatica Sales Order sync → guarded matching.
 Schedule::command('orderwatch:hourly-auto-match')

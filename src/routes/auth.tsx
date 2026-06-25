@@ -323,12 +323,8 @@ function AuthPage() {
         style={{ background: "var(--gradient-brand)" }}
       >
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/95 shadow">
-            <LogoImage className="h-9 w-9 object-contain" />
-          </div>
-          <div>
-            <div className="text-sm font-semibold tracking-wide">KIM-FAY</div>
-            <div className="text-xs text-white/70">OrderWatch · Internal</div>
+          <div className="flex h-10 items-center overflow-hidden rounded-lg bg-white/95 px-3 shadow">
+            <LogoImage className="h-7 w-auto max-w-[130px] object-contain" />
           </div>
         </div>
 
@@ -350,9 +346,11 @@ function AuthPage() {
       {/* Auth form */}
       <div className="flex items-center justify-center bg-background px-6 py-12">
         <div className="w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-2 lg:hidden">
-            <LogoImage className="h-8 w-8 object-contain" />
-            <span className="text-sm font-semibold">Kim-Fay OrderWatch</span>
+          {/* Mobile logo — shown on small screens where the brand panel is hidden */}
+          <div className="mb-8 flex items-center lg:hidden">
+            <div className="flex h-9 items-center overflow-hidden rounded-lg bg-white px-2 shadow-sm border">
+              <LogoImage className="h-7 w-auto max-w-[130px] object-contain" />
+            </div>
           </div>
 
           {step === "email" ? (

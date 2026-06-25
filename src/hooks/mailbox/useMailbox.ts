@@ -5,6 +5,7 @@ import type {
   CreateEmailFilterPayload,
   EmailFilter,
   EmailMessage,
+  InboxEmailGroupsResponse,
   MailboxAccount,
   MailboxFolder,
   PaginatedEmails,
@@ -21,8 +22,33 @@ function showError(error: unknown) {
   toast.error(
     error instanceof ApiError
       ? error.message
-      : "The request could not be completed. Please try again.",
+      : error instanceof Error
+        ? error.message
+        : "The request could not be completed. Please try again.",
   );
+}
+
+async function pollMailboxFolderSync(syncId: number): Promise<MailboxFolderSyncResult> {
+  const deadline = Date.now() + 600_000;
+
+  while (Date.now() < deadline) {
+    const run = await apiFetch<MailboxFolderSyncResult & { error_message?: string | null }>(
+      `admin/mailbox-folder-sync-runs/${syncId}`,
+      { timeoutMs: 30_000 },
+    );
+
+    if (run.status === "completed") {
+      return run;
+    }
+
+    if (run.status === "failed") {
+      throw new ApiError(run.error_message ?? "Folder sync failed.", 422, run);
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 3000));
+  }
+
+  throw new Error("Sync is still running in the background. Open sync results again in a minute.");
 }
 
 // --- Mailboxes ---
@@ -193,6 +219,90 @@ export function useTestMailboxFolder() {
   });
 }
 
+export interface MailboxFolderSyncResult {
+  sync_id: number;
+  folder_name: string;
+  emails_found: number;
+  emails_stored: number;
+  emails_created: number;
+  emails_updated: number;
+  status: string;
+}
+
+export interface SyncRunEmailsResponse {
+  sync_run: {
+    id: number;
+    folder_name: string | null;
+    sync_from: string;
+    sync_to: string;
+    emails_stored: number;
+    emails_created: number;
+    emails_updated: number;
+    started_at: string | null;
+  };
+  emails: Array<{
+    id: number;
+    subject: string | null;
+    from_email: string | null;
+    from_name: string | null;
+    received_at: string | null;
+    folder: string;
+    ingestion_classification: string | null;
+    extracted_po_number: string | null;
+    canonical_po: string | null;
+    outcome: string;
+  }>;
+}
+
+export function useSyncRunEmails(syncRunId: number | null) {
+  return useQuery({
+    queryKey: [...EMAILS_KEY, "sync-run", syncRunId],
+    queryFn: () => apiFetch<SyncRunEmailsResponse>(`admin/mailbox-folder-sync-runs/${syncRunId}/emails`),
+    enabled: syncRunId !== null,
+  });
+}
+
+export function useSyncMailboxFolder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      folderId,
+      from,
+      to,
+      mailboxId,
+    }: {
+      folderId: number;
+      from: string;
+      to: string;
+      mailboxId: number;
+    }) => {
+      const started = await apiFetch<MailboxFolderSyncResult & { message?: string }>(
+        `admin/mailbox-folders/${folderId}/sync`,
+        {
+          method: "POST",
+          body: { from, to },
+          timeoutMs: 30_000,
+        },
+      );
+
+      if (started.status === "processing") {
+        return pollMailboxFolderSync(started.sync_id);
+      }
+
+      return started;
+    },
+    onSuccess: (result, { mailboxId }) => {
+      const stored = result.emails_stored ?? result.emails_found;
+      toast.success(
+        `Imported ${stored} email(s) from ${result.folder_name} (${result.emails_created} new, ${result.emails_updated} updated/re-imported).`,
+      );
+      queryClient.invalidateQueries({ queryKey: [...FOLDERS_KEY, mailboxId] });
+      queryClient.invalidateQueries({ queryKey: EMAILS_KEY });
+    },
+    onError: showError,
+  });
+}
+
 export function useIngestionReviews() {
   return useQuery({
     queryKey: ["ingestion-reviews"],
@@ -220,6 +330,26 @@ export interface EmailQueryParams {
   mailbox_id?: number;
   search?: string;
   is_read?: boolean;
+}
+
+export interface InboxGroupQueryParams extends EmailQueryParams {
+  date_from?: string;
+  date_to?: string;
+}
+
+export function useInboxEmailGroups(params: InboxGroupQueryParams = {}) {
+  const query = new URLSearchParams();
+  if (params.mailbox_id !== undefined) query.set("mailbox_id", String(params.mailbox_id));
+  if (params.search) query.set("search", params.search);
+  if (params.date_from) query.set("date_from", params.date_from);
+  if (params.date_to) query.set("date_to", params.date_to);
+  const qs = query.toString();
+
+  return useQuery({
+    queryKey: [...EMAILS_KEY, "inbox-groups", params],
+    queryFn: () => apiFetch<InboxEmailGroupsResponse>(`emails/inbox-groups${qs ? "?" + qs : ""}`),
+    refetchInterval: 30_000,
+  });
 }
 
 export function useEmails(params: EmailQueryParams = {}) {

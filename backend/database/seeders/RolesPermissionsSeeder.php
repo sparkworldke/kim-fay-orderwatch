@@ -126,6 +126,18 @@ class RolesPermissionsSeeder extends Seeder
                 'channels'   => ['in_app'],
                 'is_enabled' => true,
             ],
+            [
+                'rule_key'   => 'R5',
+                'label'      => 'Order Match Queue Backlog',
+                'channels'   => ['email'],
+                'is_enabled' => true,
+            ],
+            [
+                'rule_key'   => 'R6',
+                'label'      => 'Order Match Duplicate PO',
+                'channels'   => ['email'],
+                'is_enabled' => true,
+            ],
         ];
 
         foreach ($rules as $rule) {

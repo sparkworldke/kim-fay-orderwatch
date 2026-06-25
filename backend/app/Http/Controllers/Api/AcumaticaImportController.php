@@ -98,8 +98,10 @@ class AcumaticaImportController extends Controller
         $dateFrom = $request->input('date_from', $today);
         $dateTo   = $request->input('date_to',   $today);
         $q        = trim((string) $request->input('q', ''));
+        $orderType = strtoupper(trim((string) $request->input('order_type', 'all')));
 
         $query = AcumaticaSalesOrder::query()
+            ->ofOrderType($orderType === 'ALL' ? null : $orderType)
             ->leftJoin('acumatica_customers as ac', 'acumatica_sales_orders.customer_acumatica_id', '=', 'ac.acumatica_id')
             ->select([
                 'acumatica_sales_orders.id',
@@ -153,26 +155,13 @@ class AcumaticaImportController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $today    = now()->toDateString();
-        $dateFrom = $request->input('date_from', $today);
-        $dateTo   = $request->input('date_to',   $today);
-        $status   = $request->input('status', 'all'); // all | successful | failed
+        $today     = now()->toDateString();
+        $dateFrom  = $request->input('date_from', $today);
+        $dateTo    = $request->input('date_to',   $today);
+        $status    = $request->input('status', 'all'); // all | successful | failed
+        $orderType = strtoupper(trim((string) $request->input('order_type', 'all')));
 
-        // Stats and list filtered by Acumatica order_date
-        $successfulCount = AcumaticaSalesOrder::whereDate('order_date', '>=', $dateFrom)
-            ->whereDate('order_date', '<=', $dateTo)
-            ->count();
-
-        $failedCount = AcumaticaDeadLetter::where('resource_type', 'sales_order')
-            ->whereDate('created_at', '>=', $dateFrom)
-            ->whereDate('created_at', '<=', $dateTo)
-            ->count();
-
-        $stats = [
-            'total'      => $successfulCount + $failedCount,
-            'successful' => $successfulCount,
-            'failed'     => $failedCount,
-        ];
+        $stats = $this->orderImportStats($dateFrom, $dateTo);
 
         if ($status === 'failed') {
             $items = AcumaticaDeadLetter::where('resource_type', 'sales_order')
@@ -185,6 +174,7 @@ class AcumaticaImportController extends Controller
         }
 
         $query = AcumaticaSalesOrder::query()
+            ->ofOrderType($orderType === 'ALL' ? null : $orderType)
             ->leftJoin('acumatica_customers as ac', 'acumatica_sales_orders.customer_acumatica_id', '=', 'ac.acumatica_id')
             ->select([
                 'acumatica_sales_orders.*',
@@ -194,10 +184,62 @@ class AcumaticaImportController extends Controller
             ->whereDate('acumatica_sales_orders.order_date', '<=', $dateTo)
             ->orderByDesc('acumatica_sales_orders.order_date');
 
+        $search = trim((string) $request->input('q', ''));
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search) {
+                $builder
+                    ->where('acumatica_sales_orders.acumatica_order_nbr', 'like', '%'.$search.'%')
+                    ->orWhere('acumatica_sales_orders.customer_order', 'like', '%'.$search.'%')
+                    ->orWhere('acumatica_sales_orders.customer_name', 'like', '%'.$search.'%')
+                    ->orWhere('ac.name', 'like', '%'.$search.'%')
+                    ->orWhere('acumatica_sales_orders.customer_acumatica_id', 'like', '%'.$search.'%');
+            });
+        }
+
         return response()->json([
             'stats' => $stats,
             'items' => $query->paginate(min((int) $request->input('per_page', 50), 200)),
             'mode'  => 'successful',
         ]);
+    }
+
+    /** @return array{total: int, successful: int, failed: int, so: int, qt: int, rc: int, other: int, in_scope_so: int} */
+    private function orderImportStats(string $dateFrom, string $dateTo): array
+    {
+        $byType = AcumaticaSalesOrder::query()
+            ->whereDate('order_date', '>=', $dateFrom)
+            ->whereDate('order_date', '<=', $dateTo)
+            ->select(['order_type', DB::raw('COUNT(*) as cnt')])
+            ->groupBy('order_type')
+            ->pluck('cnt', 'order_type');
+
+        $so = (int) ($byType[AcumaticaSalesOrder::TYPE_SALES_ORDER] ?? 0);
+        $qt = (int) ($byType[AcumaticaSalesOrder::TYPE_QUOTE] ?? 0)
+            + (int) ($byType['QO'] ?? 0);
+        $rc = (int) ($byType[AcumaticaSalesOrder::TYPE_CREDIT_NOTE] ?? 0);
+        $other = (int) $byType->except([
+            AcumaticaSalesOrder::TYPE_SALES_ORDER,
+            AcumaticaSalesOrder::TYPE_QUOTE,
+            'QO',
+            AcumaticaSalesOrder::TYPE_CREDIT_NOTE,
+        ])->sum();
+
+        $successful = $so + $qt + $rc + $other;
+
+        $failed = (int) AcumaticaDeadLetter::where('resource_type', 'sales_order')
+            ->whereDate('created_at', '>=', $dateFrom)
+            ->whereDate('created_at', '<=', $dateTo)
+            ->count();
+
+        return [
+            'total'       => $successful + $failed,
+            'successful'  => $successful,
+            'failed'      => $failed,
+            'so'          => $so,
+            'qt'          => $qt,
+            'rc'          => $rc,
+            'other'       => $other,
+            'in_scope_so' => $so,
+        ];
     }
 }

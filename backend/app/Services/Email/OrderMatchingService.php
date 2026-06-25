@@ -7,18 +7,22 @@ use App\Models\Email;
 use App\Models\EmailImportConfig;
 use App\Models\EmailMatchAttempt;
 use App\Models\OrderMatchRun;
+use App\Services\OrderMatch\CustomerPoMatchResolver;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class OrderMatchingService
 {
-    public const RULE_VERSION = 'po-email-v2';
+    public const RULE_VERSION = 'po-email-v3';
+    public const MATCH_WINDOW_HOURS = 72;
     private ?int $activeCronRunLogId = null;
 
     public function __construct(
         private readonly PoNumberExtractorService $extractor,
         private readonly SupportingFieldComparator $comparator,
+        private readonly CustomerPoMatchResolver $poResolver,
     ) {
     }
 
@@ -33,18 +37,30 @@ class OrderMatchingService
             return compact('processed', 'extracted');
         }
 
-        Email::with('attachments')->where('po_extraction_attempted', false)
+        Email::with('attachments')
+            ->where('received_at', '>=', now()->subHours(self::MATCH_WINDOW_HOURS))
+            ->where(function ($query) {
+                $query->where('po_extraction_attempted', false)
+                    ->orWhere(function ($retry) {
+                        $retry->where('po_extraction_attempted', true)
+                            ->whereNull('extracted_po_number');
+                    });
+            })
             ->orderByDesc('received_at')
             ->chunkById(200, function ($emails) use ($configs, &$processed, &$extracted): void {
                 foreach ($emails as $email) {
-                    $email->po_extraction_attempted = true;
                     $config = $configs->first(fn ($item) => $item->matchesSender($email->from_email ?? ''));
 
                     if (! $config) {
-                        $email->save();
-                        $processed++;
+                        if (! $email->po_extraction_attempted) {
+                            $email->po_extraction_attempted = true;
+                            $email->save();
+                            $processed++;
+                        }
                         continue;
                     }
+
+                    $email->po_extraction_attempted = true;
 
                     $sources = [
                         'subject' => $email->subject,
@@ -75,8 +91,23 @@ class OrderMatchingService
                     $chosen = $unique->count() === 1 ? $unique->first() : null;
                     $best = collect($candidates)->sortByDesc('confidence')->first();
 
+                    $canonicalPo = null;
+                    $customerName = $email->mailboxFolder?->customer?->name;
+                    if ($chosen !== null && $this->poResolver->isNaivas($email->from_email, $customerName)) {
+                        $canonicalPo = $this->poResolver->naivasCustomerOrderId($chosen)
+                            ?? $this->poResolver->naivasCustomerOrderIdFromSubject($email->subject);
+                    } elseif ($chosen !== null && $this->poResolver->isCarrefour($email->from_email, $customerName)) {
+                        $canonicalPo = $this->poResolver->carrefourCustomerOrderId($chosen)
+                            ?? $this->poResolver->carrefourDigitsFromSubject($email->subject);
+                    } elseif ($chosen !== null && $this->poResolver->isQuickmart($email->from_email, $customerName)) {
+                        $canonicalPo = $this->poResolver->quickmartCustomerOrderId($chosen);
+                    } elseif ($chosen !== null && $this->poResolver->isChandarana($email->from_email, $customerName)) {
+                        $canonicalPo = $this->poResolver->chandaranaCustomerOrderId($chosen);
+                    }
+
                     $email->fill([
                         'extracted_po_number' => $chosen,
+                        'canonical_po' => $canonicalPo,
                         'po_extraction_method' => $best['method'] ?? null,
                         'po_extraction_confidence' => $best['confidence'] ?? null,
                         'match_sources' => collect($candidates)->pluck('source')->unique()->values()->all(),
@@ -107,11 +138,12 @@ class OrderMatchingService
             'started_at' => now(),
             'status' => 'running',
         ]);
-        $counts = ['matched' => 0, 'unmatched' => 0, 'duplicate' => 0, 'missing_in_acumatica' => 0];
+        $counts = ['matched' => 0, 'unmatched' => 0, 'needs_review' => 0, 'missing_in_acumatica' => 0];
 
         try {
-            $emails = Email::with(['attachments', 'matchedOrder'])
+            $emails = Email::with(['attachments', 'matchedOrder', 'mailboxFolder.customer'])
                 ->where('po_extraction_attempted', true)
+                ->where('received_at', '>=', now()->subHours(self::MATCH_WINDOW_HOURS))
                 ->where(function ($query) {
                     $query->whereNull('ingestion_classification')
                         ->orWhereIn('ingestion_classification', ['po_processing', 'needs_review']);
@@ -124,7 +156,7 @@ class OrderMatchingService
                     $classification = $this->classify($email, $userId);
                     match ($classification) {
                         'matched', 'matched_discrepancies' => $counts['matched']++,
-                        'needs_review' => $counts['duplicate']++,
+                        'needs_review' => $counts['needs_review']++,
                         default => $counts['unmatched']++,
                     };
                 });
@@ -132,15 +164,25 @@ class OrderMatchingService
 
             AcumaticaSalesOrder::whereNull('email_received_at')
                 ->whereNotIn('match_status', ['matched', 'matched_discrepancies', 'needs_review'])
-                ->whereDate('order_date', '>=', now()->subDays(90))
+                ->where('order_date', '>=', now()->subHours(self::MATCH_WINDOW_HOURS))
                 ->update(['match_status' => 'missing', 'flag_source' => 'email']);
 
             $counts['missing_in_acumatica'] = Email::where('match_classification', 'not_matched')
                 ->whereNotNull('extracted_po_number')->count();
 
             $run->update([
-                'ended_at' => now(), 'status' => 'completed', 'emails_processed' => $emails->count(),
-                ...$counts, 'summary' => [...$counts, 'rule_version' => self::RULE_VERSION],
+                'ended_at'             => now(),
+                'status'               => 'completed',
+                'emails_processed'     => $emails->count(),
+                'matched'              => $counts['matched'],
+                'unmatched'            => $counts['unmatched'],
+                'duplicate'            => $counts['needs_review'],
+                'missing_in_acumatica' => $counts['missing_in_acumatica'],
+                'summary'              => [
+                    ...$counts,
+                    'duplicate'     => $counts['needs_review'],
+                    'rule_version'  => self::RULE_VERSION,
+                ],
             ]);
         } catch (\Throwable $exception) {
             $run->update(['ended_at' => now(), 'status' => 'failed', 'error_message' => $exception->getMessage()]);
@@ -154,6 +196,13 @@ class OrderMatchingService
 
     private function classify(Email $email, ?int $userId): string
     {
+        if (
+            $email->matched_order_id
+            && in_array($email->match_classification, ['matched', 'matched_discrepancies'], true)
+        ) {
+            return $email->match_classification;
+        }
+
         $evidence = collect($email->match_evidence ?? []);
         $reasonCodes = [];
 
@@ -184,12 +233,25 @@ class OrderMatchingService
         }
 
         $po = $unique->first();
+        $customerName = $email->mailboxFolder?->customer?->name;
+        $guardReasons = $this->poResolver->validateEvidence(
+            $po,
+            $evidence->values()->all(),
+            $email->from_email,
+            $customerName,
+            $email->subject,
+        );
+
+        if ($guardReasons !== []) {
+            return $this->record($email, null, $userId, $evidence, [], $guardReasons, 'needs_review');
+        }
+
         $isAiOnly = $evidence->every(fn ($item) => ! ($item['deterministic'] ?? false));
         $lowConfidence = $evidence->max('confidence') < 100;
         $threadOnly = $evidence->every(fn ($item) => ($item['source'] ?? '') === 'thread_history');
         $trustedThread = $threadOnly && $evidence->contains(fn ($item) => ($item['trusted_thread'] ?? false) === true);
 
-        $orders = $this->ordersForPo($po);
+        $orders = $this->ordersForPo($po, $email->received_at, $email);
         if ($orders->count() > 1) {
             foreach ($orders as $order) {
                 $order->update(['match_status' => 'needs_review', 'flag_source' => 'email']);
@@ -211,7 +273,7 @@ class OrderMatchingService
 
         $text = collect([$email->body_content, $email->body_preview])
             ->merge($email->attachments->pluck('extracted_text'))->filter()->implode("\n");
-        $conflicts = $this->comparator->compare($order, $text);
+        $conflicts = $this->comparator->compare($order, $text, $email->from_email, $customerName);
         $classification = $conflicts === [] ? 'matched' : 'matched_discrepancies';
         if ($conflicts !== []) $reasonCodes[] = 'material_supporting_field_conflict';
 
@@ -270,10 +332,54 @@ class OrderMatchingService
             ]);
     }
 
-    private function ordersForPo(string $po): Collection
+    private function ordersForPo(string $po, ?Carbon $emailReceivedAt = null, ?Email $email = null): Collection
     {
-        return AcumaticaSalesOrder::with('lines')
-            ->whereRaw('UPPER(TRIM(customer_order)) = ?', [$this->normalise($po)])->get();
+        $lookupKeys = $this->poResolver->acumaticaLookupKeys(
+            $po,
+            $email?->from_email,
+            $email?->mailboxFolder?->customer?->name,
+            $email?->subject,
+        );
+
+        $query = AcumaticaSalesOrder::with('lines')->salesOrdersOnly();
+
+        if ($emailReceivedAt) {
+            $query->whereBetween('order_date', [
+                $emailReceivedAt->copy()->subHours(self::MATCH_WINDOW_HOURS),
+                $emailReceivedAt->copy()->addHours(self::MATCH_WINDOW_HOURS),
+            ]);
+        }
+
+        $customerName = $email?->mailboxFolder?->customer?->name;
+        $isNaivas = $email && $this->poResolver->isNaivas($email->from_email, $customerName);
+        $isCarrefour = $email && $this->poResolver->isCarrefour($email->from_email, $customerName);
+        $isQuickmart = $email && $this->poResolver->isQuickmart($email->from_email, $customerName);
+        $isChandarana = $email && $this->poResolver->isChandarana($email->from_email, $customerName);
+
+        if (($isNaivas || $isCarrefour || $isQuickmart || $isChandarana) && $lookupKeys !== []) {
+            return $query->whereNotNull('customer_order')->get()->filter(function ($order) use ($lookupKeys, $email) {
+                foreach ($lookupKeys as $key) {
+                    if ($this->poResolver->customerOrderMatchesCanonical(
+                        $order->customer_order,
+                        $key,
+                        $email?->from_email,
+                        $email?->mailboxFolder?->customer?->name,
+                    )) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })->values();
+        }
+
+        $query->where(function ($builder) use ($lookupKeys) {
+            foreach ($lookupKeys as $key) {
+                $builder->orWhereRaw('UPPER(TRIM(customer_order)) = ?', [$this->normalise($key)]);
+            }
+        });
+
+        return $query->get();
     }
 
     public function manualPoOverride(Email $email, string $poNumber, int $userId, string $reason): ?AcumaticaSalesOrder

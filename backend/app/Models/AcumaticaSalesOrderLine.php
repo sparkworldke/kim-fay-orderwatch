@@ -13,6 +13,17 @@ class AcumaticaSalesOrderLine extends Model
         'inventory_id',
         'description',
         'order_qty',
+        'shipped_qty',
+        'open_qty',
+        'cancelled_qty',
+        'qty_at_approval',
+        'backorder_qty',
+        'fill_rate_pct',
+        'line_type',
+        'completed',
+        'fulfillment_status',
+        'warehouse_id',
+        'uom',
         'unit_price',
         'ext_cost',
         'discount_amount',
@@ -22,10 +33,17 @@ class AcumaticaSalesOrderLine extends Model
     protected function casts(): array
     {
         return [
-            'order_qty'       => 'decimal:4',
-            'unit_price'      => 'decimal:4',
-            'ext_cost'        => 'decimal:2',
-            'discount_amount' => 'decimal:2',
+            'order_qty'          => 'decimal:4',
+            'shipped_qty'        => 'decimal:4',
+            'open_qty'           => 'decimal:4',
+            'cancelled_qty'      => 'decimal:4',
+            'qty_at_approval'    => 'decimal:4',
+            'backorder_qty'      => 'decimal:4',
+            'fill_rate_pct'      => 'decimal:2',
+            'completed'          => 'boolean',
+            'unit_price'         => 'decimal:4',
+            'ext_cost'           => 'decimal:2',
+            'discount_amount'    => 'decimal:2',
         ];
     }
 

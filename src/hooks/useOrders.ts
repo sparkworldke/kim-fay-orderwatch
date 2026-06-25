@@ -8,6 +8,10 @@ interface OrderFilters {
   date_to?: string;
   customer_id?: string;
   status?: string;
+  match_status?: string;
+  has_email?: boolean;
+  flag_source?: string;
+  order_type?: string;
   sort?: "latest" | "oldest";
   page?: number;
   per_page?: number;
@@ -19,7 +23,12 @@ export function useOrders(filters: OrderFilters = {}) {
   if (filters.date_from)   params.set("date_from", filters.date_from);
   if (filters.date_to)     params.set("date_to", filters.date_to);
   if (filters.customer_id) params.set("customer_id", filters.customer_id);
-  if (filters.status)      params.set("status", filters.status);
+  if (filters.status)       params.set("status", filters.status);
+  if (filters.match_status) params.set("match_status", filters.match_status);
+  if (filters.has_email === true) params.set("has_email", "1");
+  if (filters.has_email === false) params.set("has_email", "0");
+  if (filters.flag_source)  params.set("flag_source", filters.flag_source);
+  if (filters.order_type)   params.set("order_type", filters.order_type);
   if (filters.sort)        params.set("sort", filters.sort);
   if (filters.page)        params.set("page",     String(filters.page));
   if (filters.per_page)   params.set("per_page", String(filters.per_page));
@@ -40,6 +49,13 @@ export interface OrderStats {
   rejected: number;
   on_hold: number;
   open: number;
+  email_in: number;
+  matched: number;
+  matched_discrepancies: number;
+  needs_review: number;
+  missing: number;
+  pending: number;
+  unmatched: number;
 }
 
 export function useOrderStats(filters: OrderFilters = {}) {
@@ -48,6 +64,7 @@ export function useOrderStats(filters: OrderFilters = {}) {
   if (filters.date_from)   params.set("date_from", filters.date_from);
   if (filters.date_to)     params.set("date_to", filters.date_to);
   if (filters.customer_id) params.set("customer_id", filters.customer_id);
+  if (filters.order_type)  params.set("order_type", filters.order_type);
   const qs = params.toString();
 
   return useQuery({

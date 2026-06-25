@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { LogOut, RefreshCw, Loader2 } from "lucide-react";
+import { LogoImage } from "@/components/logo-image";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
@@ -29,6 +30,12 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <SidebarTrigger />
+
+      {/* Logo — visible on mobile when sidebar is hidden as drawer */}
+      <div className="flex h-8 items-center overflow-hidden rounded bg-white px-2 shadow-sm md:hidden">
+        <LogoImage className="h-6 w-auto max-w-[110px] object-contain" />
+      </div>
+
       <div className="ml-auto flex items-center gap-1">
         <Button
           variant="ghost"

@@ -33,8 +33,18 @@ export const Route = createFileRoute("/app/so-imports")({
 // Types
 // -------------------------------------------------------------------------
 
-type ImportStats = { total: number; successful: number; failed: number };
+type ImportStats = {
+  total: number;
+  successful: number;
+  failed: number;
+  so: number;
+  qt: number;
+  rc: number;
+  other: number;
+  in_scope_so: number;
+};
 type StatusFilter = "all" | "successful" | "failed";
+type OrderTypeFilter = "all" | "SO" | "QT" | "RC";
 
 type SuccessfulOrder = {
   id: number;
@@ -97,10 +107,16 @@ function buildQs(base: Record<string, string>, paging: PagingParams) {
   return new URLSearchParams({ ...base, page: String(paging.page), per_page: String(paging.perPage) }).toString();
 }
 
-function useOrderImports(params: { dateFrom: string; dateTo: string; status: StatusFilter } & PagingParams) {
-  const qs = buildQs({ date_from: params.dateFrom, date_to: params.dateTo, status: params.status }, params);
+function useOrderImports(params: { dateFrom: string; dateTo: string; status: StatusFilter; orderType: OrderTypeFilter; q: string } & PagingParams) {
+  const qs = buildQs({
+    date_from: params.dateFrom,
+    date_to: params.dateTo,
+    status: params.status,
+    order_type: params.orderType,
+    ...(params.q ? { q: params.q } : {}),
+  }, params);
   return useQuery({
-    queryKey: ["so-imports", "orders", params.dateFrom, params.dateTo, params.status, params.page, params.perPage],
+    queryKey: ["so-imports", "orders", params.dateFrom, params.dateTo, params.status, params.orderType, params.q, params.page, params.perPage],
     queryFn: () => apiFetch<ImportsResponse<SuccessfulOrder>>(`so-imports?${qs}`),
   });
 }
@@ -240,15 +256,24 @@ function SoImportsPage() {
 // -------------------------------------------------------------------------
 
 function OrdersTab({ isAdmin }: { isAdmin: boolean }) {
-  const [dateFrom, setDateFrom] = useState(today);
-  const [dateTo, setDateTo]     = useState(today);
-  const [status, setStatus]     = useState<StatusFilter>("all");
-  const [page, setPage]         = useState(1);
-  const [perPage, setPerPage]   = useState(50);
-  const truncate                = useTruncate("orders");
+  const [dateFrom, setDateFrom]     = useState(today);
+  const [dateTo, setDateTo]         = useState(today);
+  const [status, setStatus]         = useState<StatusFilter>("all");
+  const [orderType, setOrderType]   = useState<OrderTypeFilter>("all");
+  const [q, setQ]                   = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [page, setPage]             = useState(1);
+  const [perPage, setPerPage]       = useState(50);
+  const truncate                    = useTruncate("orders");
 
-  const { data, isLoading, isError, refetch, isFetching } = useOrderImports({ dateFrom, dateTo, status, page, perPage });
-  const stats = data?.stats ?? { total: 0, successful: 0, failed: 0 };
+  const handleQ = (v: string) => {
+    setQ(v);
+    clearTimeout((handleQ as { _t?: ReturnType<typeof setTimeout> })._t);
+    (handleQ as { _t?: ReturnType<typeof setTimeout> })._t = setTimeout(() => { setDebouncedQ(v); setPage(1); }, 400);
+  };
+
+  const { data, isLoading, isError, refetch, isFetching } = useOrderImports({ dateFrom, dateTo, status, orderType, q: debouncedQ, page, perPage });
+  const stats = data?.stats ?? { total: 0, successful: 0, failed: 0, so: 0, qt: 0, rc: 0, other: 0, in_scope_so: 0 };
 
   function handleClear() {
     if (!confirm("This will permanently delete ALL imported sales orders and line items. Continue?")) return;
@@ -261,7 +286,9 @@ function OrdersTab({ isAdmin }: { isAdmin: boolean }) {
       statsLoading={isLoading}
       dateFrom={dateFrom} setDateFrom={setDateFrom}
       dateTo={dateTo}     setDateTo={setDateTo}
-      status={status}     setStatus={setStatus}
+      status={status}     setStatus={(v) => { setStatus(v); setPage(1); }}
+      orderType={orderType} setOrderType={(v) => { setOrderType(v); setPage(1); }}
+      search={q} onSearchChange={handleQ}
       isFetching={isFetching}
       onRefresh={() => refetch()}
       isAdmin={isAdmin}
@@ -615,6 +642,8 @@ function TabContent({
   stats, statsLoading,
   dateFrom, setDateFrom, dateTo, setDateTo,
   status, setStatus,
+  orderType, setOrderType,
+  search, onSearchChange,
   isFetching, onRefresh,
   isAdmin, onClear, clearPending, clearLabel,
   children,
@@ -623,18 +652,40 @@ function TabContent({
   dateFrom: string; setDateFrom: (v: string) => void;
   dateTo: string;   setDateTo:   (v: string) => void;
   status: StatusFilter; setStatus: (v: StatusFilter) => void;
+  orderType?: OrderTypeFilter; setOrderType?: (v: OrderTypeFilter) => void;
+  search?: string; onSearchChange?: (v: string) => void;
   isFetching: boolean; onRefresh: () => void;
   isAdmin: boolean; onClear: () => void; clearPending: boolean; clearLabel: string;
   children: React.ReactNode;
 }) {
+  const showOrderTypeBreakdown = stats.so !== undefined;
+
   return (
     <div className="space-y-5">
       {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Total Imported" value={stats.total}      icon={TrendingUp}   color="blue"  loading={statsLoading} />
-        <StatCard label="Successful"     value={stats.successful} icon={CheckCircle2} color="green" loading={statsLoading} />
-        <StatCard label="Failed"         value={stats.failed}     icon={XCircle}      color="red"   loading={statsLoading} />
-      </div>
+      {showOrderTypeBreakdown ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+          <StatCard label="Sales Orders (SO)" value={stats.so} icon={PackageCheck} color="blue" loading={statsLoading} />
+          <StatCard label="Quotes (QT)" value={stats.qt} icon={TrendingUp} color="amber" loading={statsLoading} />
+          <StatCard label="Credit Notes (RC)" value={stats.rc} icon={XCircle} color="red" loading={statsLoading} />
+          <StatCard label="Other Types" value={stats.other} icon={TrendingUp} color="amber" loading={statsLoading} />
+          <StatCard label="Sync Failed" value={stats.failed} icon={XCircle} color="red" loading={statsLoading} />
+          <StatCard label="Total Records" value={stats.total} icon={CheckCircle2} color="green" loading={statsLoading} />
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard label="Total Imported" value={stats.total} icon={TrendingUp} color="blue" loading={statsLoading} />
+          <StatCard label="Successful" value={stats.successful} icon={CheckCircle2} color="green" loading={statsLoading} />
+          <StatCard label="Failed" value={stats.failed} icon={XCircle} color="red" loading={statsLoading} />
+        </div>
+      )}
+
+      {showOrderTypeBreakdown && (
+        <p className="text-xs text-muted-foreground">
+          Dashboards and Order Match use <span className="font-mono font-medium">SO</span> only ({stats.in_scope_so} in this range).
+          QT and RC are visible here for audit but excluded from operational views.
+        </p>
+      )}
 
       {/* Filters row */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
@@ -663,6 +714,41 @@ function TabContent({
             ))}
           </div>
         </div>
+
+        {onSearchChange && (
+          <div className="grid gap-1.5 flex-1 min-w-48">
+            <Label>Order #</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search ?? ""}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Order #, customer, PO…"
+                className="pl-9"
+              />
+            </div>
+          </div>
+        )}
+
+        {setOrderType && orderType !== undefined && (
+          <div className="grid gap-1.5">
+            <Label>Document Type</Label>
+            <div className="flex rounded-lg border bg-muted/40 p-1 gap-1">
+              {(["all", "SO", "QT", "RC"] as OrderTypeFilter[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setOrderType(t)}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+                    orderType === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t === "all" ? "All" : t}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="ml-auto flex items-end gap-2">
           <Button variant="outline" size="sm" onClick={onRefresh} disabled={isFetching}>

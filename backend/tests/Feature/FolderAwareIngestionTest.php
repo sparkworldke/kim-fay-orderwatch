@@ -10,6 +10,7 @@ use App\Services\Admin\EncryptionService;
 use App\Services\Email\EmailFilterEngine;
 use App\Services\Email\EmailIngestionDecisionService;
 use App\Services\Email\OutlookEmailService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Mockery;
@@ -116,6 +117,91 @@ class FolderAwareIngestionTest extends TestCase
         $this->assertSame(0, $service->syncEmails($account));
         $this->assertSame('https://graph.microsoft.com/v1.0/inbox-delta', $inbox->fresh()->delta_token);
         $this->assertNotNull($broken->fresh()->last_sync_error);
+    }
+
+    public function test_folder_date_range_sync_fetches_every_matching_page(): void
+    {
+        $account = $this->mailbox();
+        $folder = MailboxFolder::create([
+            'mailbox_account_id' => $account->id,
+            'external_folder_id' => 'naivas-id',
+            'display_name' => 'Naivas POs',
+            'is_sync_enabled' => true,
+            'trust_level' => 'standard',
+        ]);
+
+        $message = fn (string $id): array => [
+            'id' => $id,
+            'subject' => 'PO 123',
+            'from' => ['emailAddress' => ['address' => 'buyer@example.com']],
+            'receivedDateTime' => '2026-06-24T10:00:00Z',
+            'hasAttachments' => false,
+        ];
+
+        Http::fake([
+            'https://graph.microsoft.com/v1.0/me/mailFolders/naivas-id/messages*' => Http::sequence()
+                ->push([
+                    'value' => [$message('msg-1')],
+                    '@odata.nextLink' => 'https://graph.microsoft.com/v1.0/me/mailFolders/naivas-id/messages?$skiptoken=page-2',
+                ])
+                ->push([
+                    'value' => [$message('msg-2')],
+                ]),
+        ]);
+
+        $encryption = Mockery::mock(EncryptionService::class);
+        $encryption->shouldReceive('decrypt')->andReturn('token');
+        $this->instance(EncryptionService::class, $encryption);
+
+        $stats = app(OutlookEmailService::class)
+            ->syncFolderDateRange($account, $folder, Carbon::parse('2026-06-24'), Carbon::parse('2026-06-24'));
+
+        $this->assertSame(2, $stats['fetched']);
+        $this->assertSame(2, $stats['stored']);
+        $this->assertSame(2, Email::where('mailbox_folder_id', $folder->id)->count());
+    }
+
+    public function test_folder_date_range_sync_stops_when_graph_repeats_a_page(): void
+    {
+        $account = $this->mailbox();
+        $folder = MailboxFolder::create([
+            'mailbox_account_id' => $account->id,
+            'external_folder_id' => 'naivas-id',
+            'display_name' => 'Naivas POs',
+            'is_sync_enabled' => true,
+            'trust_level' => 'standard',
+        ]);
+
+        $message = [
+            'id' => 'msg-repeat',
+            'subject' => 'PO 123',
+            'from' => ['emailAddress' => ['address' => 'buyer@example.com']],
+            'receivedDateTime' => '2026-06-24T10:00:00Z',
+            'hasAttachments' => false,
+        ];
+
+        Http::fake([
+            'https://graph.microsoft.com/v1.0/me/mailFolders/naivas-id/messages*' => Http::sequence()
+                ->push([
+                    'value' => [$message],
+                    '@odata.nextLink' => 'https://graph.microsoft.com/v1.0/me/mailFolders/naivas-id/messages?$skiptoken=page-2',
+                ])
+                ->push([
+                    'value' => [$message],
+                    '@odata.nextLink' => 'https://graph.microsoft.com/v1.0/me/mailFolders/naivas-id/messages?$skiptoken=page-3',
+                ]),
+        ]);
+
+        $encryption = Mockery::mock(EncryptionService::class);
+        $encryption->shouldReceive('decrypt')->andReturn('token');
+        $this->instance(EncryptionService::class, $encryption);
+
+        $stats = app(OutlookEmailService::class)
+            ->syncFolderDateRange($account, $folder, Carbon::parse('2026-06-24'), Carbon::parse('2026-06-24'));
+
+        $this->assertSame(1, $stats['fetched']);
+        $this->assertSame(1, $stats['stored']);
+        $this->assertSame(1, Email::where('mailbox_folder_id', $folder->id)->count());
     }
 
     public function test_immutable_message_seen_in_two_folders_is_updated_not_duplicated(): void

@@ -2,29 +2,37 @@
 
 namespace App\Services\Email\Extractors;
 
+use App\Services\Email\PartnerPoPdfContextService;
 use Throwable;
 
 class PdfTextExtractor
 {
+    public function __construct(
+        private readonly PartnerPoPdfContextService $partnerPdf = new PartnerPoPdfContextService,
+        private readonly ?ImageTextExtractor $imageText = null,
+    ) {
+    }
+
     /**
      * Extract plain text from raw PDF bytes.
-     * Uses smalot/pdfparser; returns null if extraction fails or yields nothing.
+     * Includes Carrefour fax metadata when the body text layer is empty.
+     * Scanned PDFs (QuickMart) fall back to embedded JPEG + AI vision when configured.
      */
     public function extract(string $pdfBytes): ?string
     {
-        if (! class_exists(\Smalot\PdfParser\Parser::class)) {
-            return null;
+        $text = $this->partnerPdf->buildSearchableText($pdfBytes);
+        if ($text !== null && trim($text) !== '') {
+            return $text;
         }
 
-        try {
-            $parser = new \Smalot\PdfParser\Parser();
-            $pdf    = $parser->parseContent($pdfBytes);
-            $text   = $pdf->getText();
-
-            return mb_strlen(trim($text)) > 0 ? $text : null;
-        } catch (Throwable) {
-            return null;
+        $jpeg = $this->partnerPdf->extractFirstEmbeddedJpeg($pdfBytes);
+        if ($jpeg === null || $this->imageText === null) {
+            return $text;
         }
+
+        $ocr = $this->imageText->extract($jpeg, 'image/jpeg');
+
+        return $ocr !== null && trim($ocr) !== '' ? trim($ocr) : $text;
     }
 
     public function supports(string $contentType): bool

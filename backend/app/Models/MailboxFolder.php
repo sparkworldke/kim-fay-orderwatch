@@ -12,7 +12,7 @@ class MailboxFolder extends Model
         'mailbox_account_id', 'external_folder_id', 'display_name', 'parent_external_folder_id',
         'parent_display_name', 'total_item_count', 'unread_item_count', 'is_sync_enabled',
         'is_order_folder', 'customer_id', 'trust_level', 'sync_priority', 'delta_token',
-        'is_active', 'last_discovered_at', 'last_synced_at', 'last_sync_error',
+        'is_active', 'last_discovered_at', 'last_synced_at', 'last_sync_error', 'auto_sync_cron',
     ];
 
     protected function casts(): array

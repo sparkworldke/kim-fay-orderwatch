@@ -16,12 +16,16 @@ use App\Http\Controllers\Api\Admin\AiPromptLogController;
 use App\Http\Controllers\Api\Admin\CronJobController;
 use App\Http\Controllers\Api\Admin\DailyReportController;
 use App\Http\Controllers\Api\AiChatController;
+use App\Http\Controllers\Api\AiIntelligenceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\CustomerFeedController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EmailController;
 use App\Http\Controllers\Api\EmailFilterController;
 use App\Http\Controllers\Api\MailboxController;
+use App\Http\Controllers\Api\OrderMatchController;
+use App\Http\Controllers\Api\OperationsController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\ProfileController;
@@ -62,6 +66,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboard/kpis',   [DashboardController::class, 'kpis']);
     Route::get('dashboard/trend',  [DashboardController::class, 'trend']);
 
+    // Customer Feed — grouped customer performance
+    Route::get('customer-feed',                    [CustomerFeedController::class, 'index']);
+    Route::get('customer-feed/{groupKey}/insights', [CustomerFeedController::class, 'insights']);
+
+    // Operations — inventory, backorders, fill rate
+    Route::prefix('operations')->group(function () {
+        Route::get('inventory/summary',              [OperationsController::class, 'inventorySummary']);
+        Route::get('inventory',                       [OperationsController::class, 'inventory']);
+        Route::get('inventory/{id}/prediction',       [OperationsController::class, 'inventoryPrediction']);
+        Route::get('backorders/summary',              [OperationsController::class, 'backordersSummary']);
+        Route::get('backorders',                      [OperationsController::class, 'backorders']);
+        Route::get('backorders/by-account',           [OperationsController::class, 'backordersByAccount']);
+        Route::get('fill-rate/summary',               [OperationsController::class, 'fillRateSummary']);
+        Route::get('fill-rate',                       [OperationsController::class, 'fillRate']);
+    });
+
     // Orders
     Route::get('orders/stats', [OrderController::class, 'stats']);
     Route::apiResource('orders', OrderController::class);
@@ -71,6 +91,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('so-imports/customers',    [AcumaticaImportController::class, 'customers']);
     Route::get('so-imports/emails',       [AcumaticaImportController::class, 'emails']);
     Route::get('so-imports/workflow',     [AcumaticaImportController::class, 'workflow']);
+
+    // Order Match (PRD)
+    Route::prefix('order-match')->group(function () {
+        Route::get('folders', [OrderMatchController::class, 'listFolders']);
+        Route::post('folders', [OrderMatchController::class, 'registerFolder']);
+        Route::post('folders/{folderId}/sync', [OrderMatchController::class, 'syncFolder']);
+        Route::post('run', [OrderMatchController::class, 'runPipeline']);
+        Route::get('queue', [OrderMatchController::class, 'queue']);
+        Route::get('audit-log', [OrderMatchController::class, 'auditLog']);
+        Route::get('audit-log/export', [OrderMatchController::class, 'exportAuditLog']);
+        Route::post('matches/{email}/accept', [OrderMatchController::class, 'accept']);
+        Route::post('matches/{email}/reject', [OrderMatchController::class, 'reject']);
+        Route::post('matches/{email}/duplicate', [OrderMatchController::class, 'markDuplicate']);
+        Route::post('matches/{email}/rerun', [OrderMatchController::class, 'rerun']);
+    });
 
     // Customers
     Route::get('customers/categories',               [CustomerController::class, 'categories']);
@@ -102,6 +137,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('acumatica/sync/customers',       [AcumaticaController::class, 'syncCustomers']);
         Route::post('acumatica/sync/orders',          [AcumaticaController::class, 'syncOrders']);
         Route::post('acumatica/sync/customer-orders', [AcumaticaController::class, 'syncCustomerOrders']);
+        Route::post('acumatica/sync/inventory',       [AcumaticaController::class, 'syncInventory']);
+        Route::post('acumatica/sync/backorders',      [AcumaticaController::class, 'syncBackorders']);
+        Route::post('acumatica/sync/fill-rate',       [AcumaticaController::class, 'syncFillRate']);
+        Route::post('acumatica/sync/credit-notes-more', [AcumaticaController::class, 'syncCreditNotesAndMore']);
         Route::get('acumatica/sync/logs',             [AcumaticaController::class, 'syncLogs']);
 
         // Reconciliation
@@ -173,6 +212,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('mailboxes/{mailbox}/folders',         [MailboxFolderController::class, 'index']);
         Route::post('mailboxes/{mailbox}/folders/discover', [MailboxFolderController::class, 'discover']);
         Route::patch('mailbox-folders/{folder}',          [MailboxFolderController::class, 'update']);
+        Route::post('mailbox-folders/{folder}/sync',       [MailboxFolderController::class, 'sync']);
+        Route::get('mailbox-folder-sync-runs/{run}', [MailboxFolderController::class, 'syncRun']);
+        Route::get('mailbox-folder-sync-runs/{run}/emails', [MailboxFolderController::class, 'syncRunEmails']);
         Route::post('mailbox-folders/{folder}/test',      [MailboxFolderController::class, 'test']);
         Route::post('mailbox-rule-mappings',              [MailboxFolderController::class, 'storeRule']);
         Route::patch('mailbox-rule-mappings/{rule}',      [MailboxFolderController::class, 'updateRule']);
@@ -184,8 +226,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // AI chat — available to all authenticated users
     Route::post('ai/chat', [AiChatController::class, 'chat']);
+    Route::get('ai/intelligence', [AiIntelligenceController::class, 'briefing']);
+    Route::post('ai/intelligence/generate', [AiIntelligenceController::class, 'generate']);
 
     // Emails (readable by any authenticated user)
+    Route::get('emails/inbox-groups',                     [EmailController::class, 'inboxGroups']);
     Route::get('emails',                                  [EmailController::class, 'index']);
 
     // Email filters

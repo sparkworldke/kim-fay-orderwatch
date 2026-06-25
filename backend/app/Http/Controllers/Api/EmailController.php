@@ -4,11 +4,21 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Email;
+use App\Services\Email\InboxEmailGroupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class EmailController extends Controller
 {
+    public function __construct(private readonly InboxEmailGroupService $inboxGroups)
+    {
+    }
+
+    public function inboxGroups(Request $request): JsonResponse
+    {
+        return response()->json($this->inboxGroups->build($request));
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = Email::with(['mailboxFolder.rules'])->orderByDesc('received_at');

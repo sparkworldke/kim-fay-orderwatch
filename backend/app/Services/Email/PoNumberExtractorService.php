@@ -4,6 +4,11 @@ namespace App\Services\Email;
 
 use App\Contracts\PoExtractorContract;
 use App\Models\EmailImportConfig;
+use App\Services\OrderMatch\CarrefourPoNormalizer;
+use App\Services\OrderMatch\ChandaranaPoNormalizer;
+use App\Services\OrderMatch\PoCanonicalNormalizer;
+use App\Services\OrderMatch\QuickmartPoNormalizer;
+
 
 /**
  * Extracts PO numbers from email subjects, body text, and OCR'd PDF content.
@@ -27,17 +32,17 @@ class PoNumberExtractorService
             'patterns' => [
                 // "Purchase order Confirmation: P042539739 - KIM-FAY..."
                 '/Purchase order Confirmation:\s*(P\d{6,12})/i',
-                // Generic Naivas P-number
+                // Attachment filename starts with P042562296...
+                '/^(P0\d{7,10})/i',
+                // Subject or body token
                 '/\bP0\d{7,10}\b/',
             ],
         ],
         'carrefour' => [
             'emails'   => ['kencarrefourorders@maf.ae'],
             'patterns' => [
-                // "C4 GCM XGCM     26020742"
-                '/\bC4\b\s+\w+\s+\w+\s+(\d{7,9})\b/i',
-                // Fallback: 8-digit standalone number
-                '/\b(\d{8})\b/',
+                // "C4 GCM XGCM     26021220" — digits = Acumatica CustomerOrder
+                '/\bC4\b\s+\S+\s+\S+\s+(\d{7,9})\b/i',
             ],
         ],
         'quickmart' => [
@@ -77,8 +82,14 @@ class PoNumberExtractorService
     ];
 
     /** @param PoExtractorContract[] $aiExtractors Ordered list to try if patterns fail */
-    public function __construct(private readonly array $aiExtractors = [])
-    {
+    public function __construct(
+        private readonly array $aiExtractors = [],
+        private readonly PoCanonicalNormalizer $canonical = new PoCanonicalNormalizer,
+        private readonly CarrefourPoNormalizer $carrefour = new CarrefourPoNormalizer,
+        private readonly QuickmartPoNormalizer $quickmart = new QuickmartPoNormalizer,
+        private readonly ChandaranaPoNormalizer $chandarana = new ChandaranaPoNormalizer,
+        private readonly PartnerPoPdfContextService $partnerPdf = new PartnerPoPdfContextService,
+    ) {
     }
 
     // -------------------------------------------------------------------------
@@ -148,6 +159,26 @@ class PoNumberExtractorService
     /** Deterministic-only scan used by ingestion; never invokes an AI provider. */
     public function extractDeterministicAll(string $senderEmail, array $sources): array
     {
+        $naivasCandidates = $this->extractNaivasCanonicalCandidates($senderEmail, $sources);
+        if ($naivasCandidates !== []) {
+            return $naivasCandidates;
+        }
+
+        $carrefourCandidates = $this->extractCarrefourCanonicalCandidates($senderEmail, $sources);
+        if ($carrefourCandidates !== []) {
+            return $carrefourCandidates;
+        }
+
+        $chandaranaCandidates = $this->extractChandaranaCanonicalCandidates($senderEmail, $sources);
+        if ($chandaranaCandidates !== []) {
+            return $chandaranaCandidates;
+        }
+
+        $quickmartCandidates = $this->extractQuickmartCanonicalCandidates($senderEmail, $sources);
+        if ($quickmartCandidates !== []) {
+            return $quickmartCandidates;
+        }
+
         $patterns = $this->resolvePatterns($senderEmail);
         $found = [];
 
@@ -289,5 +320,225 @@ class PoNumberExtractorService
     private function normalise(string $po): string
     {
         return strtoupper(trim($po));
+    }
+
+    /**
+     * Naivas edge-case path: unified sanitise/normalise for subjects and attachment names.
+     *
+     * @param  array<string, string|null>  $sources
+     * @return array<int, array{po_number:string,source:string,method:string,confidence:int,raw_match:string,deterministic:bool}>
+     */
+    private function extractNaivasCanonicalCandidates(string $senderEmail, array $sources): array
+    {
+        if (! $this->senderMatchesRule($senderEmail, self::BUILT_IN_RULES['naivas'])) {
+            return [];
+        }
+
+        $found = [];
+        foreach ($sources as $source => $text) {
+            if (! is_string($text) || trim($text) === '') {
+                continue;
+            }
+
+            $scanText = str_starts_with($source, 'attachment_filename:')
+                ? pathinfo($text, PATHINFO_FILENAME)
+                : $text;
+
+            if ($this->carrefour->isCarrefourFormat($scanText)) {
+                continue;
+            }
+
+            if (str_starts_with($source, 'attachment_content:')) {
+                $structured = $this->partnerPdf->parseStructured($scanText, $senderEmail);
+                $canonical = $structured['canonical_po']
+                    ?? $this->canonical->normalisePo($structured['po_number'] ?? '');
+            } elseif (str_starts_with($source, 'attachment_filename:')) {
+                $canonical = $this->canonical->normalisePo($scanText);
+            } else {
+                $canonical = $this->canonical->extractPoFromSubject($scanText);
+            }
+
+            if ($canonical === null && preg_match('/\*(P0\d{7,10})\*/i', $scanText, $starMatch)) {
+                $canonical = $this->canonical->normalisePo($starMatch[1]);
+            }
+
+            if ($canonical === null) {
+                continue;
+            }
+
+            $raw = $this->canonical->extractNaivasRawToken($scanText) ?? ('P0'.$canonical);
+            $key = $raw.'|'.$source;
+            $found[$key] = [
+                'po_number' => $this->normalise($raw),
+                'source' => $source,
+                'method' => 'naivas_canonical',
+                'confidence' => 100,
+                'raw_match' => $scanText,
+                'deterministic' => true,
+            ];
+        }
+
+        return array_values($found);
+    }
+
+    /**
+     * Carrefour edge-case path: C4 prefix with trailing numeric PO segment.
+     *
+     * @param  array<string, string|null>  $sources
+     * @return array<int, array{po_number:string,source:string,method:string,confidence:int,raw_match:string,deterministic:bool}>
+     */
+    private function extractCarrefourCanonicalCandidates(string $senderEmail, array $sources): array
+    {
+        if (! $this->senderMatchesRule($senderEmail, self::BUILT_IN_RULES['carrefour'])) {
+            return [];
+        }
+
+        $found = [];
+        foreach ($sources as $source => $text) {
+            if (! is_string($text) || trim($text) === '') {
+                continue;
+            }
+
+            $scanText = $source === 'subject'
+                ? $this->carrefour->stripThreadPrefix($text)
+                : $text;
+
+            if (str_starts_with($source, 'attachment_content:') && preg_match('/Subject:\s*(.+)/i', $scanText, $metaMatch)) {
+                $scanText = trim($metaMatch[1]);
+            }
+
+            [$canonical, $extractionMethod] = $this->carrefour->extractPoForCarrefour($scanText);
+            if ($canonical === null) {
+                continue;
+            }
+
+            $method = $extractionMethod === 'carrefour' ? 'carrefour_canonical' : 'carrefour_fallback';
+            $key = $canonical.'|'.$source;
+            $found[$key] = [
+                'po_number' => $canonical,
+                'source' => $source,
+                'method' => $method,
+                'confidence' => $extractionMethod === 'carrefour' ? 100 : 85,
+                'raw_match' => $text,
+                'deterministic' => true,
+            ];
+        }
+
+        return array_values($found);
+    }
+
+    /**
+     * @param  array<string, string|null>  $sources
+     * @return array<int, array{po_number:string,source:string,method:string,confidence:int,raw_match:string,deterministic:bool}>
+     */
+    private function extractChandaranaCanonicalCandidates(string $senderEmail, array $sources): array
+    {
+        if (! $this->senderMatchesRule($senderEmail, self::BUILT_IN_RULES['chandarana'])
+            && ! $this->textLooksChandarana($sources)) {
+            return [];
+        }
+
+        $found = [];
+        foreach ($sources as $source => $text) {
+            if (! is_string($text) || trim($text) === '') {
+                continue;
+            }
+
+            $structured = str_starts_with($source, 'attachment_content:')
+                ? $this->partnerPdf->parseStructured($text, $senderEmail)
+                : null;
+
+            $rawPo = $structured['po_number']
+                ?? $this->chandarana->extractFromText($text)['po_number']
+                ?? null;
+
+            if ($rawPo === null) {
+                continue;
+            }
+
+            $key = $rawPo.'|'.$source;
+            $found[$key] = [
+                'po_number'     => $this->normalise($rawPo),
+                'source'        => $source,
+                'method'        => 'chandarana_canonical',
+                'confidence'    => 100,
+                'raw_match'     => $text,
+                'deterministic' => true,
+            ];
+        }
+
+        return array_values($found);
+    }
+
+    /**
+     * @param  array<string, string|null>  $sources
+     * @return array<int, array{po_number:string,source:string,method:string,confidence:int,raw_match:string,deterministic:bool}>
+     */
+    private function extractQuickmartCanonicalCandidates(string $senderEmail, array $sources): array
+    {
+        if (! $this->senderMatchesRule($senderEmail, self::BUILT_IN_RULES['quickmart'])
+            && ! $this->textLooksQuickmart($sources)) {
+            return [];
+        }
+
+        $found = [];
+        foreach ($sources as $source => $text) {
+            if (! is_string($text) || trim($text) === '') {
+                continue;
+            }
+
+            $structured = str_starts_with($source, 'attachment_content:')
+                ? $this->partnerPdf->parseStructured($text, $senderEmail)
+                : null;
+
+            $rawPo = $structured['po_number']
+                ?? $this->quickmart->extractRawPo($text);
+
+            if ($rawPo === null) {
+                continue;
+            }
+
+            $matchKey = $this->quickmart->primaryMatchKey($rawPo) ?? $rawPo;
+            $key = $matchKey.'|'.$source;
+            $found[$key] = [
+                'po_number'     => $this->normalise($matchKey),
+                'source'        => $source,
+                'method'        => 'quickmart_canonical',
+                'confidence'    => 100,
+                'raw_match'     => $text,
+                'deterministic' => true,
+            ];
+        }
+
+        return array_values($found);
+    }
+
+    /** @param  array<string, string|null>  $sources */
+    private function textLooksChandarana(array $sources): bool
+    {
+        foreach ($sources as $text) {
+            if (! is_string($text)) {
+                continue;
+            }
+
+            if (preg_match('/\bCHANDARANA\b/i', $text)
+                || preg_match('/Order\s+No\.?\s*&\s*Date\s*[-–:]/i', $text)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param  array<string, string|null>  $sources */
+    private function textLooksQuickmart(array $sources): bool
+    {
+        foreach ($sources as $text) {
+            if (is_string($text) && preg_match('/\bQUICK\s*MART\b|Backoffice\s+PURCHASE\s+ORDER/i', $text)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

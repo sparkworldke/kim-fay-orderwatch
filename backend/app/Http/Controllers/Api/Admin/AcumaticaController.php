@@ -8,7 +8,10 @@ use App\Models\AcumaticaDeadLetter;
 use App\Models\AcumaticaReconciliationResult;
 use App\Models\AcumaticaSyncLog;
 use App\Services\Admin\AcumaticaClient;
+use App\Services\Admin\AcumaticaBackorderSyncService;
 use App\Services\Admin\AcumaticaCustomerSyncService;
+use App\Services\Admin\AcumaticaFillRateSyncService;
+use App\Services\Admin\AcumaticaInventorySyncService;
 use App\Services\Admin\AcumaticaSalesOrderSyncService;
 use App\Services\Admin\AcumaticaService;
 use App\Services\Admin\AuditLogger;
@@ -22,6 +25,9 @@ class AcumaticaController extends Controller
         private readonly AcumaticaClient $client,
         private readonly AcumaticaCustomerSyncService $customerSync,
         private readonly AcumaticaSalesOrderSyncService $salesOrderSync,
+        private readonly AcumaticaInventorySyncService $inventorySync,
+        private readonly AcumaticaBackorderSyncService $backorderSync,
+        private readonly AcumaticaFillRateSyncService $fillRateSync,
         private readonly AuditLogger $audit,
     ) {
     }
@@ -110,6 +116,52 @@ class AcumaticaController extends Controller
 
         $run = $this->salesOrderSync->syncForCustomers(
             $validated['customer_ids'],
+            $request->user()?->id,
+        );
+
+        return response()->json(['sync_run' => $run]);
+    }
+
+    public function syncInventory(Request $request): JsonResponse
+    {
+        $run = $this->inventorySync->run($request->user()?->id);
+
+        return response()->json(['sync_run' => $run]);
+    }
+
+    public function syncBackorders(Request $request): JsonResponse
+    {
+        $run = $this->backorderSync->run($request->user()?->id);
+
+        return response()->json(['sync_run' => $run]);
+    }
+
+    public function syncFillRate(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date_from' => ['required', 'date', 'before_or_equal:date_to'],
+            'date_to'   => ['required', 'date'],
+        ]);
+
+        $run = $this->fillRateSync->syncDateRange(
+            $validated['date_from'],
+            $validated['date_to'],
+            $request->user()?->id,
+        );
+
+        return response()->json(['sync_run' => $run]);
+    }
+
+    public function syncCreditNotesAndMore(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date_from' => ['required', 'date', 'before_or_equal:date_to'],
+            'date_to'   => ['required', 'date'],
+        ]);
+
+        $run = $this->salesOrderSync->syncCreditNotesAndMore(
+            $validated['date_from'],
+            $validated['date_to'],
             $request->user()?->id,
         );
 

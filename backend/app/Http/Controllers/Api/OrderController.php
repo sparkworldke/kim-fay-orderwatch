@@ -4,15 +4,24 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcumaticaSalesOrder;
+use App\Models\Email;
+use App\Services\OrderMatch\CustomerPoMatchResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
+    public function __construct(
+        private readonly CustomerPoMatchResolver $poResolver = new CustomerPoMatchResolver,
+    ) {
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $query = AcumaticaSalesOrder::query()
+        $query = $this->scopedOrderQuery($request)
             ->leftJoin('acumatica_customers as ac', 'acumatica_sales_orders.customer_acumatica_id', '=', 'ac.acumatica_id')
             ->withCount('lines')
             ->select([
@@ -31,6 +40,7 @@ class OrderController extends Controller
                 'acumatica_sales_orders.requested_on',
                 'acumatica_sales_orders.last_modified_at',
                 'acumatica_sales_orders.approved_at',
+                'acumatica_sales_orders.approved_by_id',
                 'acumatica_sales_orders.shipped_at',
                 'acumatica_sales_orders.completed_at',
                 'acumatica_sales_orders.order_total',
@@ -63,6 +73,27 @@ class OrderController extends Controller
             $query->where('acumatica_sales_orders.status', $request->input('status'));
         }
 
+        if ($request->filled('match_status')) {
+            $query->where('acumatica_sales_orders.match_status', $request->input('match_status'));
+        }
+
+        if ($request->has('flag_source')) {
+            $flag = $request->input('flag_source');
+            if ($flag === 'none') {
+                $query->whereNull('acumatica_sales_orders.flag_source');
+            } elseif (in_array($flag, ['acumatica', 'email'], true)) {
+                $query->where('acumatica_sales_orders.flag_source', $flag);
+            }
+        }
+
+        if ($request->has('has_email')) {
+            if ($request->boolean('has_email')) {
+                $query->whereNotNull('acumatica_sales_orders.email_received_at');
+            } else {
+                $query->whereNull('acumatica_sales_orders.email_received_at');
+            }
+        }
+
         $q = trim((string) $request->input('q', ''));
         if ($q !== '') {
             $query->where(function ($qb) use ($q) {
@@ -73,7 +104,10 @@ class OrderController extends Controller
             });
         }
 
-        return response()->json($query->paginate(min((int) $request->input('per_page', 50), 200)));
+        $paginator = $query->paginate(min((int) $request->input('per_page', 50), 200));
+        $this->attachMatchDiscrepancies($paginator);
+
+        return response()->json($paginator);
     }
 
     public function show(string $id): JsonResponse
@@ -88,6 +122,8 @@ class OrderController extends Controller
             $order->customer_name = $order->customer->name;
         }
 
+        $this->attachMatchDiscrepanciesToOrder($order);
+
         return response()->json($order);
     }
 
@@ -97,7 +133,7 @@ class OrderController extends Controller
      */
     public function stats(Request $request): JsonResponse
     {
-        $base = AcumaticaSalesOrder::query()
+        $base = $this->scopedOrderQuery($request)
             ->leftJoin('acumatica_customers as ac', 'acumatica_sales_orders.customer_acumatica_id', '=', 'ac.acumatica_id');
 
         if ($request->has('date_from')) {
@@ -120,10 +156,17 @@ class OrderController extends Controller
         }
 
         $rows = (clone $base)
-            ->select(['acumatica_sales_orders.status', \Illuminate\Support\Facades\DB::raw('COUNT(*) as cnt')])
+            ->select(['acumatica_sales_orders.status', DB::raw('COUNT(*) as cnt')])
             ->groupBy('acumatica_sales_orders.status')
             ->pluck('cnt', 'status')
             ->mapWithKeys(fn ($cnt, $status) => [strtolower(trim($status ?? 'unknown')) => (int) $cnt])
+            ->toArray();
+
+        $matchRows = (clone $base)
+            ->select(['acumatica_sales_orders.match_status', DB::raw('COUNT(*) as cnt')])
+            ->groupBy('acumatica_sales_orders.match_status')
+            ->pluck('cnt', 'match_status')
+            ->mapWithKeys(fn ($cnt, $status) => [strtolower(trim($status ?? 'pending')) => (int) $cnt])
             ->toArray();
 
         return response()->json([
@@ -134,6 +177,13 @@ class OrderController extends Controller
             'rejected'         => $rows['rejected']         ?? 0,
             'on_hold'          => ($rows['on hold'] ?? 0) + ($rows['credit hold'] ?? 0),
             'open'             => $rows['open']             ?? 0,
+            'email_in'         => (int) (clone $base)->whereNotNull('acumatica_sales_orders.email_received_at')->count(),
+            'matched'          => $matchRows['matched'] ?? 0,
+            'matched_discrepancies' => $matchRows['matched_discrepancies'] ?? 0,
+            'needs_review'     => $matchRows['needs_review'] ?? 0,
+            'missing'          => $matchRows['missing'] ?? 0,
+            'pending'          => $matchRows['pending'] ?? 0,
+            'unmatched'        => $matchRows['unmatched'] ?? 0,
         ]);
     }
 
@@ -165,5 +215,101 @@ class OrderController extends Controller
     public function destroy(string $id): JsonResponse
     {
         return response()->json(['message' => 'Orders are managed via Acumatica sync.'], 405);
+    }
+
+    /**
+     * Guardrail: dashboard/orders use SO only; Credit Notes & More page uses CREDIT_NOTES_MORE.
+     */
+    private function scopedOrderQuery(Request $request)
+    {
+        $type = strtoupper(trim((string) $request->input('order_type', 'SO')));
+
+        if ($type === 'CREDIT_NOTES_MORE') {
+            return AcumaticaSalesOrder::query()->creditNotesAndMore();
+        }
+
+        return AcumaticaSalesOrder::query()->salesOrdersOnly();
+    }
+
+    private function attachMatchDiscrepancies(LengthAwarePaginator $paginator): void
+    {
+        $paginator->setCollection(
+            $this->enrichOrdersWithMatchDiscrepancies(collect($paginator->items()))
+        );
+    }
+
+    private function attachMatchDiscrepanciesToOrder(AcumaticaSalesOrder $order): void
+    {
+        $this->enrichOrdersWithMatchDiscrepancies(collect([$order]))->first();
+    }
+
+    /**
+     * @param  Collection<int, AcumaticaSalesOrder|object>  $orders
+     * @return Collection<int, AcumaticaSalesOrder|object>
+     */
+    private function enrichOrdersWithMatchDiscrepancies(Collection $orders): Collection
+    {
+        if ($orders->isEmpty()) {
+            return $orders;
+        }
+
+        $orderIds = $orders->pluck('id')->filter()->values();
+        $emailsByOrder = Email::query()
+            ->whereIn('matched_order_id', $orderIds)
+            ->where(function ($query) {
+                $query->where('match_classification', 'matched_discrepancies')
+                    ->orWhereNotNull('match_conflicts');
+            })
+            ->orderByDesc('updated_at')
+            ->get(['matched_order_id', 'extracted_po_number', 'canonical_po', 'match_conflicts'])
+            ->unique('matched_order_id')
+            ->keyBy('matched_order_id');
+
+        return $orders->map(function ($order) use ($emailsByOrder) {
+            $email = $emailsByOrder->get($order->id);
+            $order->matched_po_number = $email?->canonical_po ?? $email?->extracted_po_number;
+            $order->extracted_po_number = $email?->extracted_po_number;
+            $order->match_conflicts = $email?->match_conflicts ?? [];
+            $order->sanitized_po_number = $this->resolveSanitizedPo(
+                $order->customer_order,
+                $order->customer_name,
+                $order->matched_po_number,
+            );
+
+            return $order;
+        });
+    }
+
+    private function resolveSanitizedPo(
+        ?string $customerOrder,
+        ?string $customerName,
+        ?string $matchedPo,
+    ): ?string {
+        if ($customerOrder !== null && trim($customerOrder) !== '') {
+            $sender = $this->inferSenderForCustomer($customerName);
+            $sanitized = $this->poResolver->toCustomerOrderId($customerOrder, $sender, $customerName);
+            if ($sanitized !== null) {
+                return $sanitized;
+            }
+        }
+
+        return $matchedPo !== null && trim($matchedPo) !== '' ? $matchedPo : null;
+    }
+
+    private function inferSenderForCustomer(?string $customerName): ?string
+    {
+        if ($customerName === null) {
+            return null;
+        }
+
+        if (stripos($customerName, 'naivas') !== false) {
+            return CustomerPoMatchResolver::NAIVAS_SENDER;
+        }
+
+        if (stripos($customerName, 'carrefour') !== false) {
+            return CustomerPoMatchResolver::CARREFOUR_SENDER;
+        }
+
+        return null;
     }
 }

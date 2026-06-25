@@ -39,6 +39,10 @@ interface KpiData {
   active_days: number;
   date_from: string;
   date_to: string;
+  open_so: number;
+  open_qt: number;
+  open_rc: number;
+  open_other: number;
 }
 
 interface TrendDay {
@@ -50,6 +54,9 @@ interface TrendDay {
   rejected: number;
   on_hold: number;
   open: number;
+  fill_shipped_qty?: number;
+  fill_ordered_qty?: number;
+  fill_rate_pct?: number | null;
 }
 
 interface TrendData {
@@ -270,6 +277,13 @@ function CompletionRateBadge({ rate, row }: { rate: number | null; row?: RateRow
   );
 }
 
+const FILL_RATE_TOOLTIP =
+  "Fill Rate Formula:\n" +
+  "Shipped Qty ÷ Qty at Approval × 100\n" +
+  "(falls back to Order Qty when approval qty is unavailable)\n\n" +
+  "Aggregated per day from synced fill-rate snapshots.\n" +
+  "Shows — when no eligible orders exist for that day.";
+
 const COMPLETION_TOOLTIP =
   "Completion Rate Formula:\n" +
   "Completed ÷ (Total − Open − Rejected − On Hold) × 100\n\n" +
@@ -282,6 +296,48 @@ const COMPLETION_TOOLTIP =
   "Example: 80 Completed, 10 Open, 5 Rejected, 5 On Hold, 100 Total\n" +
   "  Denominator = 100 − 10 − 5 − 5 = 80\n" +
   "  Rate = 80 ÷ 80 × 100 = 100 %";
+
+type FillRateRow = { fill_shipped_qty?: number; fill_ordered_qty?: number; fill_rate_pct?: number | null };
+
+function fillRateTooltip(row: FillRateRow, pct: string): string {
+  const shipped = row.fill_shipped_qty ?? 0;
+  const ordered = row.fill_ordered_qty ?? 0;
+  return (
+    "How this rate is calculated:\n" +
+    "\n" +
+    `  Shipped Qty      ${shipped.toLocaleString()}\n` +
+    `  ÷ Approved Qty   ${ordered.toLocaleString()}\n` +
+    `  × 100            = ${pct}%\n` +
+    "\n" +
+    "Rolled up from fill-rate snapshots for orders on this day."
+  );
+}
+
+function FillRateBadge({ rate, row }: { rate: number | null | undefined; row?: FillRateRow }) {
+  if (rate == null) return <span className="text-muted-foreground/50">—</span>;
+
+  const pct = rate.toFixed(1);
+  const color =
+    rate >= 95 ? "text-green-700 bg-green-50 border-green-200 dark:text-green-300 dark:bg-green-950/40 dark:border-green-800"
+    : rate >= 80 ? "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/40 dark:border-amber-800"
+    : "text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/40 dark:border-red-800";
+
+  return (
+    <span
+      title={row ? fillRateTooltip(row, pct) : undefined}
+      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-semibold tabular-nums ${row ? "cursor-help" : ""} ${color}`}
+    >
+      {pct}%
+    </span>
+  );
+}
+
+function aggregateFillRate(rows: FillRateRow[]): number | null {
+  const shipped = rows.reduce((sum, row) => sum + (row.fill_shipped_qty ?? 0), 0);
+  const ordered = rows.reduce((sum, row) => sum + (row.fill_ordered_qty ?? 0), 0);
+  if (ordered <= 0) return null;
+  return Math.min(100, (shipped / ordered) * 100);
+}
 
 function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -321,6 +377,17 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                 ))}
                 <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
                   <span className="inline-flex items-center gap-1">
+                    Fill Rate
+                    <span
+                      title={FILL_RATE_TOOLTIP}
+                      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
+                    >
+                      ?
+                    </span>
+                  </span>
+                </th>
+                <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1">
                     Completion Rate
                     <span
                       title={COMPLETION_TOOLTIP}
@@ -353,6 +420,9 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                     );
                   })}
                   <td className="px-3 py-2 text-right tabular-nums">
+                    <FillRateBadge rate={row.fill_rate_pct} row={row} />
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
                     <CompletionRateBadge rate={calcCompletionRate(row)} row={row} />
                   </td>
                 </tr>
@@ -377,6 +447,11 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                   rejected:  totals.rejected  ?? 0,
                   on_hold:   totals.on_hold   ?? 0,
                 };
+                const fillTotalsRow = {
+                  fill_shipped_qty: rows.reduce((sum, row) => sum + (row.fill_shipped_qty ?? 0), 0),
+                  fill_ordered_qty: rows.reduce((sum, row) => sum + (row.fill_ordered_qty ?? 0), 0),
+                  fill_rate_pct:    aggregateFillRate(rows),
+                };
                 return (
                   <tr className="border-t bg-muted/40 font-semibold">
                     <td className="px-4 py-2 text-muted-foreground">Totals</td>
@@ -388,6 +463,9 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                           : <span className="text-muted-foreground/50">—</span>}
                       </td>
                     ))}
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      <FillRateBadge rate={fillTotalsRow.fill_rate_pct} row={fillTotalsRow} />
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       <CompletionRateBadge rate={calcCompletionRate(totalsRow)} row={totalsRow} />
                     </td>
@@ -434,6 +512,8 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
     month: string; label: string; total: number;
     open: number; pending_approval: number; shipping: number;
     completed: number; rejected: number; on_hold: number;
+    fill_shipped_qty: number; fill_ordered_qty: number;
+    days: TrendDay[];
   }> = {};
 
   for (const row of trendData) {
@@ -445,6 +525,7 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
         label: d.toLocaleDateString("en-KE", { month: "long", year: "numeric" }),
         total: 0, open: 0, pending_approval: 0,
         shipping: 0, completed: 0, rejected: 0, on_hold: 0,
+        fill_shipped_qty: 0, fill_ordered_qty: 0, days: [],
       };
     }
     const m = byMonth[month];
@@ -455,6 +536,9 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
     m.completed        += row.completed;
     m.rejected         += row.rejected;
     m.on_hold          += row.on_hold;
+    m.fill_shipped_qty += row.fill_shipped_qty ?? 0;
+    m.fill_ordered_qty += row.fill_ordered_qty ?? 0;
+    m.days.push(row);
   }
 
   const rows = Object.values(byMonth).sort((a, b) => b.month.localeCompare(a.month));
@@ -483,7 +567,7 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
       >
         <div>
           <h3 className="text-sm font-semibold">Cumulative Orders by Month</h3>
-          <p className="text-xs text-muted-foreground">Monthly totals with completion rate</p>
+          <p className="text-xs text-muted-foreground">Monthly totals with fill rate and completion rate</p>
         </div>
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -504,6 +588,17 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                     {col.label}
                   </th>
                 ))}
+                <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1">
+                    Fill Rate
+                    <span
+                      title={FILL_RATE_TOOLTIP}
+                      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
+                    >
+                      ?
+                    </span>
+                  </span>
+                </th>
                 <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
                   <span className="inline-flex items-center gap-1">
                     Completion Rate
@@ -538,12 +633,25 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                     );
                   })}
                   <td className="px-3 py-2 text-right tabular-nums">
+                    <FillRateBadge
+                      rate={aggregateFillRate(row.days)}
+                      row={{ fill_shipped_qty: row.fill_shipped_qty, fill_ordered_qty: row.fill_ordered_qty }}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
                     <CompletionRateBadge rate={calcCompletionRate(row)} row={row} />
                   </td>
                 </tr>
               ))}
 
-              {rows.length > 0 && (
+              {rows.length > 0 && (() => {
+                const allDays = rows.flatMap((row) => row.days);
+                const grandFillRow = {
+                  fill_shipped_qty: rows.reduce((sum, row) => sum + row.fill_shipped_qty, 0),
+                  fill_ordered_qty: rows.reduce((sum, row) => sum + row.fill_ordered_qty, 0),
+                  fill_rate_pct: aggregateFillRate(allDays),
+                };
+                return (
                 <tr className="border-t bg-muted/40 font-semibold">
                   <td className="px-4 py-2 text-muted-foreground">Grand Total</td>
                   <td className="px-3 py-2 text-right tabular-nums">{grand.total.toLocaleString()}</td>
@@ -556,10 +664,14 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                     );
                   })}
                   <td className="px-3 py-2 text-right tabular-nums">
+                    <FillRateBadge rate={grandFillRow.fill_rate_pct} row={grandFillRow} />
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
                     <CompletionRateBadge rate={calcCompletionRate(grand)} row={grand} />
                   </td>
                 </tr>
-              )}
+                );
+              })()}
             </tbody>
           </table>
 
@@ -638,7 +750,7 @@ function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Operations Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Live order status — Acumatica</p>
+          <p className="text-sm text-muted-foreground">Sales orders (SO) only — Open Orders card shows SO / QT / RC breakdown</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div className="grid gap-1">
@@ -684,7 +796,28 @@ function DashboardPage() {
               <div className={`text-2xl font-bold tabular-nums ${s.color}`}>
                 {kpi ? (kpi[s.key] ?? 0).toLocaleString() : "—"}
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              {s.key === "open" && kpi && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {(
+                    [
+                      { type: "SO", count: kpi.open_so },
+                      { type: "QT", count: kpi.open_qt },
+                      { type: "RC", count: kpi.open_rc },
+                      { type: "Other", count: kpi.open_other },
+                    ] as { type: string; count: number }[]
+                  )
+                    .filter((t) => t.count > 0)
+                    .map((t) => (
+                      <span
+                        key={t.type}
+                        className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold bg-sky-100/80 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+                      >
+                        {t.type}: {t.count}
+                      </span>
+                    ))}
+                </div>
+              )}
+              <div className={`mt-1 text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ${s.key === "open" && kpi && (kpi.open_so + kpi.open_qt + kpi.open_rc + kpi.open_other) > 0 ? "mt-0.5" : "mt-1"}`}>
                 View orders →
               </div>
             </button>

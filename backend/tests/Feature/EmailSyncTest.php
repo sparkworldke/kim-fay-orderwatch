@@ -5,10 +5,13 @@ namespace Tests\Feature;
 use App\Models\Email;
 use App\Models\EmailFilter;
 use App\Models\MailboxAccount;
+use App\Models\MailboxFolder;
 use App\Models\MailboxSyncLog;
 use App\Models\MailboxSyncItemLog;
+use App\Models\OrderMatchSyncRun;
 use App\Models\User;
 use App\Services\Email\OutlookEmailService;
+use App\Services\OrderMatch\OrderMatchFolderSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -424,6 +427,108 @@ class EmailSyncTest extends TestCase
         $filters = collect($response->json())->keyBy('name');
         $this->assertEquals(1, $filters['Store']['match_count']);
         $this->assertEquals(1, $filters['Orders']['match_count']);
+    }
+
+    public function test_admin_can_sync_mailbox_folder_by_date_range(): void
+    {
+        \Illuminate\Support\Facades\Bus::fake();
+
+        $mailbox = $this->mailbox();
+        $folder = MailboxFolder::create([
+            'mailbox_account_id' => $mailbox->id,
+            'external_folder_id' => 'naivas-id',
+            'display_name' => 'Naivas POs',
+            'is_sync_enabled' => true,
+            'is_order_folder' => true,
+            'trust_level' => 'trusted_order',
+        ]);
+
+        $this->mock(OrderMatchFolderSyncService::class, function ($mock) use ($folder) {
+            $mock->shouldReceive('start')
+                ->once()
+                ->withArgs(fn (MailboxFolder $target, string $from, string $to) => $target->is($folder)
+                    && $from === '2026-06-24'
+                    && $to === '2026-06-24')
+                ->andReturn(OrderMatchSyncRun::create([
+                    'mailbox_folder_id' => $folder->id,
+                    'sync_from' => '2026-06-24',
+                    'sync_to' => '2026-06-24',
+                    'status' => 'processing',
+                    'started_at' => now(),
+                ]));
+        });
+
+        $this->actingAs($this->adminUser(), 'sanctum')
+            ->postJson("/api/admin/mailbox-folders/{$folder->id}/sync", [
+                'from' => '2026-06-24',
+                'to' => '2026-06-24',
+            ])
+            ->assertAccepted()
+            ->assertJsonFragment([
+                'folder_name' => 'Naivas POs',
+                'status' => 'processing',
+            ]);
+
+        \Illuminate\Support\Facades\Bus::assertDispatched(\App\Jobs\SyncMailboxFolderJob::class);
+    }
+
+    public function test_admin_can_sync_mailbox_folder_with_datetime_bounds(): void
+    {
+        \Illuminate\Support\Facades\Bus::fake();
+
+        $mailbox = $this->mailbox();
+        $folder = MailboxFolder::create([
+            'mailbox_account_id' => $mailbox->id,
+            'external_folder_id' => 'naivas-id',
+            'display_name' => 'Naivas POs',
+            'is_sync_enabled' => true,
+            'trust_level' => 'trusted_order',
+        ]);
+
+        $this->mock(OrderMatchFolderSyncService::class, function ($mock) use ($folder) {
+            $mock->shouldReceive('start')
+                ->once()
+                ->withArgs(fn (MailboxFolder $target, string $from, string $to) => $target->is($folder)
+                    && $from === '2026-06-24T08:00'
+                    && $to === '2026-06-24T18:30')
+                ->andReturn(OrderMatchSyncRun::create([
+                    'mailbox_folder_id' => $folder->id,
+                    'sync_from' => '2026-06-24',
+                    'sync_to' => '2026-06-24',
+                    'status' => 'processing',
+                    'started_at' => now(),
+                ]));
+        });
+
+        $this->actingAs($this->adminUser(), 'sanctum')
+            ->postJson("/api/admin/mailbox-folders/{$folder->id}/sync", [
+                'from' => '2026-06-24T08:00',
+                'to' => '2026-06-24T18:30',
+            ])
+            ->assertAccepted()
+            ->assertJsonFragment(['status' => 'processing']);
+
+        \Illuminate\Support\Facades\Bus::assertDispatched(\App\Jobs\SyncMailboxFolderJob::class);
+    }
+
+    public function test_mailbox_folder_sync_rejected_when_sync_disabled(): void
+    {
+        $mailbox = $this->mailbox();
+        $folder = MailboxFolder::create([
+            'mailbox_account_id' => $mailbox->id,
+            'external_folder_id' => 'archive-id',
+            'display_name' => 'Archive',
+            'is_sync_enabled' => false,
+            'trust_level' => 'untrusted',
+        ]);
+
+        $this->actingAs($this->adminUser(), 'sanctum')
+            ->postJson("/api/admin/mailbox-folders/{$folder->id}/sync", [
+                'from' => '2026-06-24',
+                'to' => '2026-06-24',
+            ])
+            ->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Enable sync for this folder before running a manual sync.']);
     }
 
     // --- OAuth start ---
