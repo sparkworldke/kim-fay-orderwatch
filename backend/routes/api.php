@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\HealthController;
 use App\Http\Controllers\Api\Admin\NotificationRuleController;
 use App\Http\Controllers\Api\Admin\PermissionController;
 use App\Http\Controllers\Api\Admin\RoleController;
+use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\AcumaticaImportController;
 use App\Http\Controllers\Api\Admin\EmailImportConfigController;
 use App\Http\Controllers\Api\Admin\OrderMatchingController;
@@ -122,6 +123,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Admin
     Route::prefix('admin')->middleware('admin.only')->group(function () {
+        Route::get('users', [UserController::class, 'index']);
+        Route::post('users', [UserController::class, 'store']);
         Route::get('users/{user}/sign-in-logs', [AdminController::class, 'userSignInLogs']);
 
         Route::get('health', [HealthController::class, 'index']);

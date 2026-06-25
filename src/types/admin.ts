@@ -157,6 +157,26 @@ export interface Role {
   permissions: Permission[];
 }
 
+export interface TeamMember {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  phone_number: string | null;
+  is_active: boolean;
+  is_account_manager: boolean;
+  is_super_admin: boolean;
+  created_at: string;
+}
+
+export interface CreateTeamMemberInput {
+  name: string;
+  email: string;
+  role: string;
+  phone_number?: string;
+  is_account_manager?: boolean;
+}
+
 export interface NotificationRule {
   id: number;
   rule_key: string;

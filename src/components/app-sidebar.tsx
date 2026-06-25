@@ -31,19 +31,21 @@ import {
 import { LogoImage } from "@/components/logo-image";
 
 const NAV = [
-  { group: "Operations", items: [
+  { group: "Overview", items: [
     { title: "Dashboard", url: "/app", icon: LayoutDashboard, exact: true },
     { title: "Orders", url: "/app/orders", icon: PackageSearch },
+    { title: "Business Optimization", url: "/app/business-optimization", icon: Target },
+    { title: "AI Intelligence", url: "/app/ai-intelligence", icon: Sparkles },
+    { title: "Customer Feed", url: "/app/customer-feed", icon: Radio },
+  ]},
+  { group: "Operations", items: [
     { title: "Credit Notes & More", url: "/app/credit-notes-more", icon: FileText },
     { title: "Inventory", url: "/app/inventory", icon: Boxes },
     { title: "Backorders", url: "/app/backorders", icon: PackageX },
     { title: "Fill Rate", url: "/app/fill-rate", icon: Gauge },
-    { title: "Business Optimization", url: "/app/business-optimization", icon: Target },
     { title: "Customers", url: "/app/customers", icon: Users },
-    { title: "Customer Feed", url: "/app/customer-feed", icon: Radio },
   ]},
-  { group: "Intelligence", items: [
-    { title: "AI Intelligence", url: "/app/ai-intelligence", icon: Sparkles },
+  { group: "Workflow", items: [
     { title: "Order Match", url: "/app/order-match", icon: GitMerge },
     { title: "Mailbox", url: "/app/mailbox", icon: Inbox },
   ]},

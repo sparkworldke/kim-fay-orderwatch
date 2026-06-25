@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, AlertTriangle, Bot, Boxes, ChevronDown, ChevronRight, Clock, Copy, Database, FlaskConical, Gauge, History, KeyRound, Mail, PackageX, Play, Plus, RefreshCw, Search, ShieldCheck, ToggleLeft, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, Bot, Boxes, ChevronDown, ChevronRight, Clock, Copy, Database, FlaskConical, Gauge, History, KeyRound, Mail, PackageX, Play, Plus, RefreshCw, Search, ShieldCheck, ToggleLeft, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useState, type ComponentType, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -35,6 +36,8 @@ import {
   usePreviewOrder,
   useReconciliation,
   useRoles,
+  useTeamMembers,
+  useCreateTeamMember,
   useAiPromptLogs,
   useAiPromptLogStats,
   useRunCronJob,
@@ -84,6 +87,7 @@ function AdminPage() {
           <TabsTrigger value="sync">Sync Operations</TabsTrigger>
           <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
           <TabsTrigger value="ai">AI Keys</TabsTrigger>
+          <TabsTrigger value="team">Team Members</TabsTrigger>
           <TabsTrigger value="roles">Roles</TabsTrigger>
           <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="notifications">Notification Rules</TabsTrigger>
@@ -98,6 +102,7 @@ function AdminPage() {
         <TabsContent value="sync"><SyncPanel /></TabsContent>
         <TabsContent value="reconciliation"><ReconciliationPanel /></TabsContent>
         <TabsContent value="ai"><AiKeysPanel /></TabsContent>
+        <TabsContent value="team"><TeamMembersPanel /></TabsContent>
         <TabsContent value="roles"><RolesPanel /></TabsContent>
         <TabsContent value="permissions"><PermissionsPanel /></TabsContent>
         <TabsContent value="notifications"><NotificationRulesPanel /></TabsContent>
@@ -882,6 +887,87 @@ function AiKeysPanel() {
         </div>
       </form>
     </Panel>
+  );
+}
+
+function TeamMembersPanel() {
+  const members = useTeamMembers();
+  const roles = useRoles();
+  const create = useCreateTeamMember();
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    role: "Customer Service Agent",
+    phone_number: "",
+  });
+
+  function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    create.mutate(
+      {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        role: form.role,
+        phone_number: form.phone_number.trim() || undefined,
+      },
+      {
+        onSuccess: () => setForm({ name: "", email: "", role: "Customer Service Agent", phone_number: "" }),
+      },
+    );
+  }
+
+  if (members.isLoading || roles.isLoading) return <PanelSkeleton />;
+  if (members.isError || roles.isError || !members.data || !roles.data) {
+    return (
+      <ErrorBlock
+        message="Team members could not be loaded."
+        onRetry={() => { members.refetch(); roles.refetch(); }}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Create Team Member" icon={UserPlus}>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Add a new OrderWatch user. A welcome email with sign-in instructions is sent automatically.
+        </p>
+        <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreate}>
+          <Field label="Full name" value={form.name} onChange={(name) => setForm((v) => ({ ...v, name }))} placeholder="Jane Wanjiru" />
+          <Field label="Work email" value={form.email} onChange={(email) => setForm((v) => ({ ...v, email }))} placeholder="jane@kimfay.co.ke" />
+          <div className="grid gap-1.5">
+            <Label>Role</Label>
+            <Select value={form.role} onValueChange={(role) => setForm((v) => ({ ...v, role }))}>
+              <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+              <SelectContent>
+                {roles.data.map((role) => (
+                  <SelectItem key={role.id} value={role.name}>{role.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Field label="Phone (optional)" value={form.phone_number} onChange={(phone_number) => setForm((v) => ({ ...v, phone_number }))} placeholder="+254..." />
+          <div className="md:col-span-2">
+            <Button type="submit" disabled={create.isPending || !form.name.trim() || !form.email.trim()}>
+              {create.isPending ? "Creating…" : "Create account & send email"}
+            </Button>
+          </div>
+        </form>
+      </Panel>
+
+      <Panel title="Team Members" icon={Users}>
+        <MiniTable
+          headers={["Name", "Email", "Role", "Status", "Created"]}
+          rows={members.data.map((member) => [
+            member.name,
+            member.email,
+            member.role,
+            member.is_active ? "Active" : "Inactive",
+            new Date(member.created_at).toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" }),
+          ])}
+        />
+      </Panel>
+    </div>
   );
 }
 

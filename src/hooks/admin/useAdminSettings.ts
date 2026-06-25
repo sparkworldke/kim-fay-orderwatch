@@ -21,6 +21,8 @@ import type {
   Permission,
   ReconciliationResult,
   Role,
+  TeamMember,
+  CreateTeamMemberInput,
 } from "@/types/admin";
 import type { AcumaticaInput, AiKeyInput } from "@/lib/admin-schemas";
 
@@ -251,6 +253,29 @@ export function useRoles() {
   return useQuery({
     queryKey: [...adminKey, "roles"],
     queryFn: () => apiFetch<Role[]>("admin/roles"),
+  });
+}
+
+export function useTeamMembers() {
+  return useQuery({
+    queryKey: [...adminKey, "team-members"],
+    queryFn: () => apiFetch<TeamMember[]>("admin/users"),
+  });
+}
+
+export function useCreateTeamMember() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: CreateTeamMemberInput) =>
+      apiFetch<TeamMember>("admin/users", { method: "POST", body: payload }),
+    onSuccess: () => {
+      toast.success("Team member created and welcome email sent");
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "roles"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
+    },
+    onError: showError,
   });
 }
 
