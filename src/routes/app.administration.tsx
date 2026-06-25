@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, AlertTriangle, Bot, ChevronDown, ChevronRight, Clock, Copy, Database, FlaskConical, History, KeyRound, Mail, Play, Plus, RefreshCw, Search, ShieldCheck, ToggleLeft, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, Bot, Boxes, ChevronDown, ChevronRight, Clock, Copy, Database, FlaskConical, Gauge, History, KeyRound, Mail, PackageX, Play, Plus, RefreshCw, Search, ShieldCheck, ToggleLeft, Trash2, X } from "lucide-react";
 import { useEffect, useState, type ComponentType, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +54,12 @@ import {
   type EmailImportConfig,
 } from "@/hooks/admin/useAdminSettings";
 import { acumaticaSchema, aiKeySchema, type AcumaticaInput, type AiKeyInput } from "@/lib/admin-schemas";
+import {
+  formatOpsSyncToast,
+  useSyncBackorders,
+  useSyncFillRate,
+  useSyncInventory,
+} from "@/hooks/useOperations";
 import type { AcumaticaCustomerSummary } from "@/types/admin";
 
 export const Route = createFileRoute("/app/administration")({
@@ -452,6 +458,8 @@ function SyncPanel() {
         </div>
       </Panel>
 
+      <OperationsUpdatePanel />
+
       <AcumaticaProbePanel />
 
       {/* Sync log */}
@@ -477,6 +485,127 @@ function SyncPanel() {
         )}
       </Panel>
     </div>
+  );
+}
+
+// -------------------------------------------------------------------------
+// Operations data refresh (inventory, backorders, fill rate)
+// -------------------------------------------------------------------------
+
+function opsDateStartOfMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function opsDateToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function OperationsUpdatePanel() {
+  const updateInventory = useSyncInventory();
+  const updateBackorders = useSyncBackorders();
+  const updateFillRate = useSyncFillRate();
+  const [fillDateFrom, setFillDateFrom] = useState(opsDateStartOfMonth);
+  const [fillDateTo, setFillDateTo] = useState(opsDateToday);
+
+  function runUpdate(
+    label: string,
+    mutation: ReturnType<typeof useSyncInventory>,
+    body?: Record<string, string>,
+  ) {
+    mutation.mutate(body, {
+      onSuccess: (res) => {
+        if (res.sync_run.status === "completed") {
+          toast.success(formatOpsSyncToast(label, res.sync_run));
+        } else {
+          toast.error(formatOpsSyncToast(label, res.sync_run));
+        }
+      },
+      onError: (e: Error) => toast.error(e.message),
+    });
+  }
+
+  function handleFillRateUpdate() {
+    if (!fillDateFrom || !fillDateTo) {
+      toast.error("Set a date range for fill rate");
+      return;
+    }
+    if (fillDateFrom > fillDateTo) {
+      toast.error("Start date must be before end date");
+      return;
+    }
+    runUpdate("Fill rate", updateFillRate, { date_from: fillDateFrom, date_to: fillDateTo });
+  }
+
+  return (
+    <Panel title="Operations Data — Inventory, Backorders & Fill Rate" icon={RefreshCw}>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Pull the latest data from Acumatica and upsert into OrderWatch. Existing rows are refreshed;
+        new inventory items, backorder lines, and fill-rate snapshots are added. No local data is wiped.
+      </p>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <Boxes className="h-4 w-4 text-muted-foreground" />
+            Inventory
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Active stock items — updates qty on hand and run-rate history.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => runUpdate("Inventory", updateInventory)}
+            disabled={updateInventory.isPending}
+          >
+            <RefreshCw className={`mr-2 h-3.5 w-3.5 ${updateInventory.isPending ? "animate-spin" : ""}`} />
+            {updateInventory.isPending ? "Updating…" : "Update inventory"}
+          </Button>
+        </div>
+
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <PackageX className="h-4 w-4 text-muted-foreground" />
+            Backorders
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Open SO lines with unshipped quantity — refreshes revenue at risk.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => runUpdate("Backorders", updateBackorders)}
+            disabled={updateBackorders.isPending}
+          >
+            <RefreshCw className={`mr-2 h-3.5 w-3.5 ${updateBackorders.isPending ? "animate-spin" : ""}`} />
+            {updateBackorders.isPending ? "Updating…" : "Update backorders"}
+          </Button>
+        </div>
+
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <Gauge className="h-4 w-4 text-muted-foreground" />
+            Fill rate
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Recomputes fill-rate snapshots for orders in the selected date range.
+          </p>
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <div className="grid gap-1">
+              <Label className="text-xs">From</Label>
+              <Input type="date" value={fillDateFrom} onChange={(e) => setFillDateFrom(e.target.value)} className="h-8 w-36 text-xs" />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">To</Label>
+              <Input type="date" value={fillDateTo} onChange={(e) => setFillDateTo(e.target.value)} className="h-8 w-36 text-xs" />
+            </div>
+          </div>
+          <Button size="sm" onClick={handleFillRateUpdate} disabled={updateFillRate.isPending}>
+            <RefreshCw className={`mr-2 h-3.5 w-3.5 ${updateFillRate.isPending ? "animate-spin" : ""}`} />
+            {updateFillRate.isPending ? "Updating…" : "Update fill rate"}
+          </Button>
+        </div>
+      </div>
+    </Panel>
   );
 }
 

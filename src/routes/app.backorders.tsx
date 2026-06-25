@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
+  formatOpsSyncToast,
   useBackorders,
   useBackordersByAccount,
   useBackordersSummary,
@@ -33,14 +34,17 @@ function BackordersPage() {
   const { data, isLoading, refetch } = useBackorders({ q: q || undefined, page, per_page: perPage });
   const sync = useSyncBackorders();
 
-  function handleSync() {
+  function handleUpdate() {
     sync.mutate(undefined, {
       onSuccess: (res) => {
-        toast.success(
-          `Backorder sync ${res.sync_run.status}: ${res.sync_run.success_count} lines saved from ${res.sync_run.record_count} open orders` +
-            (res.sync_run.failed_count > 0 ? ` (${res.sync_run.failed_count} order errors)` : ""),
-        );
+        if (res.sync_run.status === "completed") {
+          toast.success(formatOpsSyncToast("Backorders", res.sync_run));
+        } else {
+          toast.error(formatOpsSyncToast("Backorders", res.sync_run));
+        }
         refetch();
+        summary.refetch();
+        accounts.refetch();
       },
       onError: (e: Error) => toast.error(e.message),
     });
@@ -52,12 +56,12 @@ function BackordersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Backorders</h1>
           <p className="text-sm text-muted-foreground">
-            Open backorder lines from Acumatica — revenue at risk by account and item
+            Open backorder lines from Acumatica — use Update to refresh existing lines and add new ones
           </p>
         </div>
-        <Button onClick={handleSync} disabled={sync.isPending}>
+        <Button onClick={handleUpdate} disabled={sync.isPending}>
           <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
-          Sync backorders
+          {sync.isPending ? "Updating…" : "Update backorders"}
         </Button>
       </div>
 

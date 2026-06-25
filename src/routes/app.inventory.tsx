@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import {
   fillRateStatusColor,
+  formatOpsSyncToast,
   predictionStatusLabel,
   useInventory,
   useInventorySummary,
@@ -41,11 +42,16 @@ function InventoryPage() {
   });
   const sync = useSyncInventory();
 
-  function handleSync() {
+  function handleUpdate() {
     sync.mutate(undefined, {
       onSuccess: (res) => {
-        toast.success(`Inventory sync ${res.sync_run.status}: ${res.sync_run.success_count} updated`);
+        if (res.sync_run.status === "completed") {
+          toast.success(formatOpsSyncToast("Inventory", res.sync_run));
+        } else {
+          toast.error(formatOpsSyncToast("Inventory", res.sync_run));
+        }
         refetch();
+        summary.refetch();
       },
       onError: (e: Error) => toast.error(e.message),
     });
@@ -57,12 +63,12 @@ function InventoryPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
           <p className="text-sm text-muted-foreground">
-            Stock levels synced from Acumatica with run-rate depletion predictions
+            Stock levels from Acumatica — use Update to refresh existing items and add new ones
           </p>
         </div>
-        <Button onClick={handleSync} disabled={sync.isPending}>
+        <Button onClick={handleUpdate} disabled={sync.isPending}>
           <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
-          Sync from Acumatica
+          {sync.isPending ? "Updating…" : "Update inventory"}
         </Button>
       </div>
 

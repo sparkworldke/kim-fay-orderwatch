@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import {
   fillRateStatusColor,
+  formatOpsSyncToast,
   useFillRate,
   useFillRateSummary,
   useSyncFillRate,
@@ -46,13 +47,26 @@ function FillRatePage() {
   });
   const sync = useSyncFillRate();
 
-  function handleSync() {
+  function handleUpdate() {
+    if (!dateFrom || !dateTo) {
+      toast.error("Set a date range first");
+      return;
+    }
+    if (dateFrom > dateTo) {
+      toast.error("Start date must be before end date");
+      return;
+    }
     sync.mutate(
       { date_from: dateFrom, date_to: dateTo },
       {
         onSuccess: (res) => {
-          toast.success(`Fill rate sync ${res.sync_run.status}: ${res.sync_run.success_count} orders computed`);
+          if (res.sync_run.status === "completed") {
+            toast.success(formatOpsSyncToast("Fill rate", res.sync_run));
+          } else {
+            toast.error(formatOpsSyncToast("Fill rate", res.sync_run));
+          }
           refetch();
+          summary.refetch();
         },
         onError: (e: Error) => toast.error(e.message),
       },
@@ -67,12 +81,12 @@ function FillRatePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Fill Rate</h1>
           <p className="text-sm text-muted-foreground">
-            Unique-item rollup: sum OrderedQty per SKU, then ShippedQty ÷ OrderedQty — SO only, excludes On Hold / Pending Approval
+            Unique-item rollup for the date range — use Update to refresh existing snapshots and add new orders
           </p>
         </div>
-        <Button onClick={handleSync} disabled={sync.isPending}>
+        <Button onClick={handleUpdate} disabled={sync.isPending}>
           <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
-          Sync &amp; compute
+          {sync.isPending ? "Updating…" : "Update fill rate"}
         </Button>
       </div>
 

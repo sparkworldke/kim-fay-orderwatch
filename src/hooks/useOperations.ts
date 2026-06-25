@@ -170,15 +170,44 @@ export function useFillRate(params: { q?: string; status?: string; page?: number
   });
 }
 
+export type OpsSyncRun = {
+  id: number;
+  status: string;
+  record_count: number;
+  success_count: number;
+  failed_count: number;
+  error_message?: string | null;
+};
+
+export function formatOpsSyncToast(label: string, run: OpsSyncRun): string {
+  const base =
+    run.status === "completed"
+      ? `${label} updated: ${run.success_count} saved`
+      : `${label} failed: ${run.error_message ?? "Unknown error"}`;
+
+  const parts = [base];
+  if (run.record_count > 0 && run.record_count !== run.success_count) {
+    parts.push(`${run.record_count} processed from Acumatica`);
+  }
+  if (run.failed_count > 0) {
+    parts.push(`${run.failed_count} errors`);
+  }
+
+  return parts.join(" · ");
+}
+
 function useOpsSync(endpoint: string, keys: string[]) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body?: Record<string, string>) =>
-      apiFetch<{ sync_run: { id: number; status: string; success_count: number; failed_count: number } }>(
+      apiFetch<{ sync_run: OpsSyncRun }>(
         `admin/acumatica/sync/${endpoint}`,
         { method: "POST", body: body ?? undefined },
       ),
-    onSuccess: () => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+    onSuccess: () => {
+      keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      qc.invalidateQueries({ queryKey: ["admin-settings", "sync-logs"] });
+    },
   });
 }
 
