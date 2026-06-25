@@ -130,7 +130,7 @@ function FillRatePage() {
             <Input
               id="fr-search"
               className="pl-8"
-              placeholder="Order # or customer ID…"
+              placeholder="Order, customer, or product…"
               value={q}
               onChange={(e) => { setQ(e.target.value); setPage(1); }}
             />
@@ -157,6 +157,7 @@ function FillRatePage() {
             <tr className="border-b bg-muted/40 text-left">
               <th className="px-4 py-3 font-medium">Order</th>
               <th className="px-4 py-3 font-medium">Customer</th>
+              <th className="px-4 py-3 font-medium">Products</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium text-right">Ordered</th>
               <th className="px-4 py-3 font-medium text-right">Shipped</th>
@@ -166,15 +167,32 @@ function FillRatePage() {
           </thead>
           <tbody>
             {isLoading && Array.from({ length: 6 }).map((_, i) => (
-              <tr key={i}><td colSpan={7} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>
+              <tr key={i}><td colSpan={8} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>
             ))}
             {!isLoading && (data?.data ?? []).map((row) => (
               <tr key={row.id} className="border-b hover:bg-muted/20">
                 <td className="px-4 py-3 font-medium">{row.order_nbr}</td>
                 <td className="px-4 py-3">
-                  <div>{row.order?.customer_name ?? row.customer_acumatica_id ?? "—"}</div>
+                  <div>{row.customer_name ?? row.order?.customer_name ?? row.customer_acumatica_id ?? "—"}</div>
                   {row.order?.order_date && (
                     <div className="text-xs text-muted-foreground">{row.order.order_date.slice(0, 10)}</div>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {(row.products ?? []).length === 0 ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {(row.products ?? []).slice(0, 3).map((p) => (
+                        <li key={p.inventory_id}>
+                          <div className="truncate max-w-[200px]">{p.product_name ?? p.inventory_id}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{p.inventory_id}</div>
+                        </li>
+                      ))}
+                      {(row.products ?? []).length > 3 && (
+                        <li className="text-xs text-muted-foreground">+{(row.products ?? []).length - 3} more</li>
+                      )}
+                    </ul>
                   )}
                 </td>
                 <td className="px-4 py-3 text-xs">{row.status ?? "—"}</td>
@@ -195,7 +213,7 @@ function FillRatePage() {
               </tr>
             ))}
             {!isLoading && (data?.data ?? []).length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No fill rate data — sync for the selected date range</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No fill rate data — sync for the selected date range</td></tr>
             )}
           </tbody>
         </table>

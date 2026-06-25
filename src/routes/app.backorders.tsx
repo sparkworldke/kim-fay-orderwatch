@@ -155,9 +155,12 @@ function BackordersPage() {
             {!isLoading && (data?.data ?? []).map((row) => (
               <tr key={row.id} className="border-b hover:bg-muted/20">
                 <td className="px-4 py-3 font-medium">{row.order_nbr}</td>
-                <td className="px-4 py-3 font-mono">{row.inventory_id}</td>
                 <td className="px-4 py-3">
-                  <div>{row.customer_name ?? "—"}</div>
+                  <div className="font-medium">{row.product_name ?? row.inventory_id}</div>
+                  <div className="text-xs text-muted-foreground font-mono">{row.inventory_id}</div>
+                </td>
+                <td className="px-4 py-3">
+                  <div>{row.customer_name ?? row.customer_acumatica_id ?? "—"}</div>
                   <div className="text-xs text-muted-foreground">{row.customer_acumatica_id}</div>
                 </td>
                 <td className="px-4 py-3 text-xs">{row.fulfillment_status ?? "—"}</td>

@@ -35,6 +35,7 @@ export type BackorderLine = {
   id: number;
   order_nbr: string;
   inventory_id: string;
+  product_name: string | null;
   customer_acumatica_id: string | null;
   customer_name: string | null;
   order_qty: string;
@@ -51,10 +52,18 @@ export type BackorderLine = {
   synced_at: string | null;
 };
 
+export type FillRateProduct = {
+  inventory_id: string;
+  product_name: string | null;
+  order_qty: string;
+  shipped_qty: string;
+};
+
 export type FillRateSnapshot = {
   id: number;
   order_nbr: string;
   customer_acumatica_id: string | null;
+  customer_name: string | null;
   status: string | null;
   total_ordered_qty: string;
   total_shipped_qty: string;
@@ -63,6 +72,7 @@ export type FillRateSnapshot = {
   revenue_not_shipped: string;
   currency_id: string | null;
   computed_at: string | null;
+  products?: FillRateProduct[];
   order?: { id: number; acumatica_order_nbr: string; customer_name: string | null; order_date: string | null };
 };
 

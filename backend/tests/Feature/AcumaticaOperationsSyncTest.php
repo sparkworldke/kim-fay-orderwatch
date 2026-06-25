@@ -2,8 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcumaticaBackorderLine;
+use App\Models\AcumaticaCustomer;
+use App\Models\AcumaticaFillRateSnapshot;
 use App\Models\AcumaticaInventoryItem;
 use App\Models\AcumaticaInventoryRunRateLog;
+use App\Models\AcumaticaSalesOrder;
+use App\Models\AcumaticaSalesOrderLine;
 use App\Models\User;
 use App\Services\Admin\AcumaticaBackorderSyncService;
 use App\Services\Admin\AcumaticaClient;
@@ -172,5 +177,97 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->getJson('/api/operations/inventory')
             ->assertOk()
             ->assertJsonPath('data.0.inventory_id', 'ITEM-XYZ');
+    }
+
+    public function test_backorders_list_enriches_product_and_customer_names(): void
+    {
+        $user = User::factory()->create();
+
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'ITEM-BO',
+            'description'  => 'Backorder Widget',
+            'qty_on_hand'  => 5,
+            'synced_at'    => now(),
+        ]);
+
+        AcumaticaCustomer::create([
+            'acumatica_id' => 'CUST-BO',
+            'name'         => 'Backorder Buyer Ltd',
+            'synced_at'    => now(),
+        ]);
+
+        AcumaticaBackorderLine::create([
+            'order_nbr'             => 'SO-BO-1',
+            'inventory_id'          => 'ITEM-BO',
+            'customer_acumatica_id' => 'CUST-BO',
+            'customer_name'         => null,
+            'order_qty'             => 10,
+            'shipped_qty'           => 2,
+            'open_qty'              => 8,
+            'revenue_at_risk'       => 800,
+            'synced_at'             => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders')
+            ->assertOk()
+            ->assertJsonPath('data.0.product_name', 'Backorder Widget')
+            ->assertJsonPath('data.0.customer_name', 'Backorder Buyer Ltd');
+    }
+
+    public function test_fill_rate_list_enriches_customer_and_product_names(): void
+    {
+        $user = User::factory()->create();
+
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'ITEM-FR',
+            'description'  => 'Fill Rate Gadget',
+            'qty_on_hand'  => 20,
+            'synced_at'    => now(),
+        ]);
+
+        AcumaticaCustomer::create([
+            'acumatica_id' => 'CUST-FR',
+            'name'         => 'Fill Rate Customer',
+            'synced_at'    => now(),
+        ]);
+
+        $order = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr'   => 'SO-FR-1',
+            'order_type'            => 'SO',
+            'customer_acumatica_id' => 'CUST-FR',
+            'customer_name'         => null,
+            'status'                => 'Open',
+            'order_date'            => now(),
+        ]);
+
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $order->id,
+            'line_nbr'       => 1,
+            'inventory_id'   => 'ITEM-FR',
+            'description'    => 'Line fallback name',
+            'order_qty'      => 10,
+            'shipped_qty'    => 7,
+            'open_qty'       => 3,
+        ]);
+
+        AcumaticaFillRateSnapshot::create([
+            'sales_order_id'        => $order->id,
+            'order_nbr'             => 'SO-FR-1',
+            'customer_acumatica_id' => 'CUST-FR',
+            'status'                => 'Open',
+            'total_ordered_qty'     => 10,
+            'total_shipped_qty'     => 7,
+            'fill_rate_pct'         => 70,
+            'fill_rate_status'      => 'critical',
+            'computed_at'           => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/fill-rate')
+            ->assertOk()
+            ->assertJsonPath('data.0.customer_name', 'Fill Rate Customer')
+            ->assertJsonPath('data.0.products.0.inventory_id', 'ITEM-FR')
+            ->assertJsonPath('data.0.products.0.product_name', 'Fill Rate Gadget');
     }
 }

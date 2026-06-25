@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcumaticaBackorderLine;
+use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaFillRateSnapshot;
 use App\Models\AcumaticaInventoryItem;
 use App\Models\AcumaticaInventoryRunRateLog;
 use App\Services\Admin\FillRateCalculator;
 use App\Services\Admin\InventoryRunRatePredictor;
+use App\Services\Operations\OperationsCatalogResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +20,7 @@ class OperationsController extends Controller
     public function __construct(
         private readonly FillRateCalculator $fillRateCalculator,
         private readonly InventoryRunRatePredictor $predictor,
+        private readonly OperationsCatalogResolver $catalogResolver,
     ) {
     }
 
@@ -125,11 +128,25 @@ class OperationsController extends Controller
         $query = AcumaticaBackorderLine::query()->orderByDesc('revenue_at_risk');
 
         if ($search = $request->input('q')) {
-            $query->where(function ($q) use ($search) {
+            $inventoryIds = AcumaticaInventoryItem::query()
+                ->where('description', 'like', "%{$search}%")
+                ->pluck('inventory_id');
+            $customerIds = AcumaticaCustomer::query()
+                ->where('name', 'like', "%{$search}%")
+                ->pluck('acumatica_id');
+
+            $query->where(function ($q) use ($search, $inventoryIds, $customerIds) {
                 $q->where('order_nbr', 'like', "%{$search}%")
                     ->orWhere('inventory_id', 'like', "%{$search}%")
                     ->orWhere('customer_name', 'like', "%{$search}%")
                     ->orWhere('customer_acumatica_id', 'like', "%{$search}%");
+
+                if ($inventoryIds->isNotEmpty()) {
+                    $q->orWhereIn('inventory_id', $inventoryIds);
+                }
+                if ($customerIds->isNotEmpty()) {
+                    $q->orWhereIn('customer_acumatica_id', $customerIds);
+                }
             });
         }
 
@@ -137,7 +154,32 @@ class OperationsController extends Controller
             $query->where('customer_acumatica_id', $customerId);
         }
 
-        return response()->json($query->paginate($request->integer('per_page', 50)));
+        $paginated = $query->paginate($request->integer('per_page', 50));
+        $items = $paginated->getCollection();
+
+        $inventoryDescriptions = $this->catalogResolver->descriptionsForInventoryIds(
+            $items->pluck('inventory_id')->all(),
+        );
+        $customerNames = $this->catalogResolver->namesForCustomerIds(
+            $items->pluck('customer_acumatica_id')->all(),
+        );
+
+        $paginated->getCollection()->transform(function ($line) use ($inventoryDescriptions, $customerNames) {
+            $line->product_name = $this->catalogResolver->resolveProductName(
+                $line->inventory_id,
+                null,
+                $inventoryDescriptions,
+            );
+            $line->customer_name = $this->catalogResolver->resolveCustomerName(
+                $line->customer_name,
+                $line->customer_acumatica_id,
+                $customerNames,
+            );
+
+            return $line;
+        });
+
+        return response()->json($paginated);
     }
 
     public function backordersByAccount(Request $request): JsonResponse
@@ -157,6 +199,20 @@ class OperationsController extends Controller
             ->orderByDesc('revenue_at_risk')
             ->limit($topN)
             ->get();
+
+        $customerNames = $this->catalogResolver->namesForCustomerIds(
+            $rows->pluck('customer_acumatica_id')->all(),
+        );
+
+        $rows->transform(function ($row) use ($customerNames) {
+            $row->customer_name = $this->catalogResolver->resolveCustomerName(
+                $row->customer_name,
+                $row->customer_acumatica_id,
+                $customerNames,
+            );
+
+            return $row;
+        });
 
         return response()->json(['accounts' => $rows]);
     }
@@ -196,7 +252,10 @@ class OperationsController extends Controller
     public function fillRate(Request $request): JsonResponse
     {
         $query = AcumaticaFillRateSnapshot::query()
-            ->with('order:id,acumatica_order_nbr,customer_name,order_date')
+            ->with([
+                'order:id,acumatica_order_nbr,customer_acumatica_id,customer_name,order_date',
+                'order.lines:id,sales_order_id,inventory_id,description,order_qty,shipped_qty',
+            ])
             ->orderByDesc('computed_at');
 
         if ($status = $request->input('status')) {
@@ -204,12 +263,80 @@ class OperationsController extends Controller
         }
 
         if ($search = $request->input('q')) {
-            $query->where(function ($q) use ($search) {
+            $inventoryIds = AcumaticaInventoryItem::query()
+                ->where('description', 'like', "%{$search}%")
+                ->pluck('inventory_id');
+            $customerIds = AcumaticaCustomer::query()
+                ->where('name', 'like', "%{$search}%")
+                ->pluck('acumatica_id');
+
+            $query->where(function ($q) use ($search, $inventoryIds, $customerIds) {
                 $q->where('order_nbr', 'like', "%{$search}%")
                     ->orWhere('customer_acumatica_id', 'like', "%{$search}%");
+
+                if ($customerIds->isNotEmpty()) {
+                    $q->orWhereIn('customer_acumatica_id', $customerIds);
+                }
+
+                $q->orWhereHas('order', function ($oq) use ($search, $customerIds) {
+                    $oq->where('customer_name', 'like', "%{$search}%");
+                    if ($customerIds->isNotEmpty()) {
+                        $oq->orWhereIn('customer_acumatica_id', $customerIds);
+                    }
+                });
+
+                $q->orWhereHas('order.lines', function ($lq) use ($search, $inventoryIds) {
+                    $lq->where('inventory_id', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%");
+                    if ($inventoryIds->isNotEmpty()) {
+                        $lq->orWhereIn('inventory_id', $inventoryIds);
+                    }
+                });
             });
         }
 
-        return response()->json($query->paginate($request->integer('per_page', 50)));
+        $paginated = $query->paginate($request->integer('per_page', 50));
+        $items = $paginated->getCollection();
+
+        $inventoryIds = $items
+            ->flatMap(fn ($snapshot) => $snapshot->order?->lines?->pluck('inventory_id') ?? collect())
+            ->all();
+        $inventoryDescriptions = $this->catalogResolver->descriptionsForInventoryIds($inventoryIds);
+
+        $customerIds = $items
+            ->map(fn ($snapshot) => $snapshot->customer_acumatica_id ?? $snapshot->order?->customer_acumatica_id)
+            ->all();
+        $customerNames = $this->catalogResolver->namesForCustomerIds($customerIds);
+
+        $paginated->getCollection()->transform(function ($snapshot) use ($inventoryDescriptions, $customerNames) {
+            $order = $snapshot->order;
+            $storedCustomerName = $order?->customer_name;
+
+            $snapshot->customer_name = $this->catalogResolver->resolveCustomerName(
+                $storedCustomerName,
+                $snapshot->customer_acumatica_id ?? $order?->customer_acumatica_id,
+                $customerNames,
+            );
+
+            $snapshot->products = collect($order?->lines ?? [])
+                ->map(function ($line) use ($inventoryDescriptions) {
+                    return [
+                        'inventory_id' => $line->inventory_id,
+                        'product_name' => $this->catalogResolver->resolveProductName(
+                            $line->inventory_id,
+                            $line->description,
+                            $inventoryDescriptions,
+                        ),
+                        'order_qty'    => $line->order_qty,
+                        'shipped_qty'  => $line->shipped_qty,
+                    ];
+                })
+                ->values()
+                ->all();
+
+            return $snapshot;
+        });
+
+        return response()->json($paginated);
     }
 }
