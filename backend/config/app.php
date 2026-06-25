@@ -56,6 +56,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | Public URL of the OrderWatch web app (emails, OAuth redirects). Keep
+    | APP_URL pointed at the Laravel API host; use FRONTEND_URL for dashboard
+    | links in mail templates and browser redirects after OAuth.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', env('MICROSOFT_FRONTEND_URL', 'http://localhost:5173')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

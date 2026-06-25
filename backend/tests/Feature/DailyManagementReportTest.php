@@ -130,6 +130,43 @@ class DailyManagementReportTest extends TestCase
         Mail::assertSent(DailyManagementReportMail::class);
     }
 
+    public function test_daily_report_email_uses_frontend_url_for_dashboard_link(): void
+    {
+        config([
+            'app.url' => 'https://api.orderwatch.test',
+            'app.frontend_url' => 'https://orderwatch.test',
+        ]);
+
+        $mail = new DailyManagementReportMail(
+            'OrderWatch Daily Brief',
+            [
+                'report_date_label' => '24 Jun 2026',
+                'report_date_display' => '24/06/2026',
+                'comparison_date_display' => '23/06/2026',
+                'mtd_period_label' => 'June 2026',
+                'generated_at_display' => '25 Jun 2026 08:00',
+                'timezone' => 'Africa/Nairobi',
+                'yesterday' => [],
+                'mtd' => [],
+                'comparison' => [],
+                'risk' => [],
+                'customer_highlights' => [],
+                'formulas' => [],
+            ],
+            [
+                'executive_summary' => 'Summary',
+                'performance_commentary' => 'Commentary',
+                'improvements' => [],
+            ],
+            DailyReportConfig::singleton(),
+        );
+
+        $html = $mail->render();
+
+        $this->assertStringContainsString('https://orderwatch.test/app', $html);
+        $this->assertStringNotContainsString('api.orderwatch.test', $html);
+    }
+
     public function test_resend_last_reuses_saved_payload(): void
     {
         Mail::fake();

@@ -40,7 +40,7 @@ return [
         'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
         'tenant_id'     => env('MICROSOFT_TENANT_ID', 'common'),
         'redirect_uri'  => env('MICROSOFT_REDIRECT_URI'),
-        'frontend_url'  => env('MICROSOFT_FRONTEND_URL', 'http://localhost:5173'),
+        'frontend_url'  => env('FRONTEND_URL', env('MICROSOFT_FRONTEND_URL', 'http://localhost:5173')),
     ],
 
 ];

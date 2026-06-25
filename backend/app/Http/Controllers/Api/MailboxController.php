@@ -41,7 +41,7 @@ class MailboxController extends Controller
 
     public function handleCallback(Request $request): RedirectResponse
     {
-        $frontendBase = rtrim(config('services.microsoft.frontend_url', 'http://localhost:5173'), '/');
+        $frontendBase = rtrim((string) config('app.frontend_url', 'http://localhost:5173'), '/');
 
         $error = $request->query('error');
         if ($error) {

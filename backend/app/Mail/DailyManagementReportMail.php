@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\DailyReportConfig;
+use App\Support\FrontendUrl;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -53,7 +54,7 @@ class DailyManagementReportMail extends Mailable
         $risk = $this->payload['risk'] ?? [];
         $highlights = $this->payload['customer_highlights'] ?? [];
         $formulas = $this->payload['formulas'] ?? [];
-        $dashboardUrl = rtrim((string) config('app.url'), '/');
+        $dashboardUrl = FrontendUrl::path('/app');
 
         $executive = e($this->insights['executive_summary'] ?? '');
         $commentary = e($this->insights['performance_commentary'] ?? '');

@@ -3,6 +3,7 @@
 namespace App\Services\OrderMatch;
 
 use App\Models\Email;
+use App\Support\FrontendUrl;
 use App\Models\NotificationDispatchLog;
 use App\Models\NotificationRule;
 use App\Models\User;
@@ -57,7 +58,8 @@ class OrderMatchNotificationService
 
         $period = $this->periodLabel();
         $subject = "[Order Match] Review queue: {$count} emails awaiting match — {$period}";
-        $body = "The Order Match review queue has {$count} pending emails for period {$period}.\n\nRecommended action: Review backorder queue and clear high-confidence auto-match entries.";
+        $mailboxUrl = FrontendUrl::path('/app/mailbox');
+        $body = "The Order Match review queue has {$count} pending emails for period {$period}.\n\nRecommended action: Review backorder queue and clear high-confidence auto-match entries.\n\nOpen mailbox: {$mailboxUrl}";
 
         $this->dispatch($rule, $subject, $body, $this->adminRecipients());
 
@@ -91,7 +93,8 @@ class OrderMatchNotificationService
             $period = $this->periodLabel();
             $n = $group->count();
             $subject = "[Order Match] Duplicate PO detected: {$po} — {$n} emails — {$period}";
-            $body = "Duplicate PO {$po} appears on {$n} emails in period {$period}.\n\nRecommended action: Review backorder queue and nominate canonical email before accepting matches.";
+            $mailboxUrl = FrontendUrl::path('/app/mailbox');
+            $body = "Duplicate PO {$po} appears on {$n} emails in period {$period}.\n\nRecommended action: Review backorder queue and nominate canonical email before accepting matches.\n\nOpen mailbox: {$mailboxUrl}";
 
             $this->dispatch($rule, $subject, $body, $this->opsRecipients());
             $triggered[] = ['po' => $po, 'count' => $n];
