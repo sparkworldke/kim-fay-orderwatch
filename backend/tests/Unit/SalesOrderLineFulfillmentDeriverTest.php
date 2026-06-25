@@ -62,4 +62,24 @@ class SalesOrderLineFulfillmentDeriverTest extends TestCase
             SalesOrderLineFulfillmentDeriver::isBackorderLine('Fully Fulfilled', 0)
         );
     }
+
+    public function test_derives_open_qty_when_acumatica_omits_open_qty_field(): void
+    {
+        $mapped = SalesOrderLineFulfillmentDeriver::mapFromRaw([
+            'InventoryID' => ['value' => 'SKU-3'],
+            'OrderQty'    => ['value' => 10],
+            'ShippedQty'  => ['value' => 4],
+            'UnitPrice'   => ['value' => 50],
+        ]);
+
+        $this->assertSame(6.0, $mapped['open_qty']);
+        $this->assertSame('Backorders Imported', $mapped['fulfillment_status']);
+        $this->assertTrue(
+            SalesOrderLineFulfillmentDeriver::isBackorderLine(
+                $mapped['fulfillment_status'],
+                $mapped['open_qty'],
+                $mapped['backorder_qty'],
+            )
+        );
+    }
 }

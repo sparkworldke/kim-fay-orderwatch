@@ -5,6 +5,7 @@ namespace App\Services\Admin;
 use App\Models\AcumaticaBackorderLine;
 use App\Models\AcumaticaDeadLetter;
 use App\Models\AcumaticaSyncLog;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class AcumaticaBackorderSyncService
@@ -44,15 +45,17 @@ class AcumaticaBackorderSyncService
 
     private function processOrders(array $orders, AcumaticaSyncLog $run): AcumaticaSyncLog
     {
-        $seenKeys = [];
-        $success  = 0;
-        $failed   = 0;
+        $seenKeys    = [];
+        $success     = 0;
+        $failed      = 0;
+        $linesSynced = 0;
 
         foreach ($orders as $raw) {
             try {
                 $keys = $this->upsertBackorderLines($raw, $run->id);
                 if ($keys !== []) {
                     $seenKeys = array_merge($seenKeys, $keys);
+                    $linesSynced += count($keys);
                     $success++;
                 }
             } catch (Throwable $e) {
@@ -89,10 +92,13 @@ class AcumaticaBackorderSyncService
 
         $run->update([
             'ended_at'      => now(),
-            'status'        => $failed > 0 && $success === 0 ? 'failed' : 'completed',
+            'status'        => $failed > 0 && $linesSynced === 0 ? 'failed' : 'completed',
             'record_count'  => count($orders),
-            'success_count' => $success,
+            'success_count' => $linesSynced > 0 ? $linesSynced : $success,
             'failed_count'  => $failed,
+            'error_message' => $linesSynced === 0 && $failed === 0 && count($orders) > 0
+                ? 'Fetched '.count($orders).' open orders but no lines matched backorder criteria (check OpenQty in Acumatica Details).'
+                : null,
         ]);
 
         return $run;
@@ -130,35 +136,29 @@ class AcumaticaBackorderSyncService
                 continue;
             }
 
-            if (! SalesOrderLineFulfillmentDeriver::isBackorderLine($mapped['fulfillment_status'], $mapped['open_qty'])) {
+            if (! SalesOrderLineFulfillmentDeriver::isBackorderLine(
+                $mapped['fulfillment_status'],
+                $mapped['open_qty'],
+                $mapped['backorder_qty'],
+            )) {
                 continue;
             }
 
-            $openQty = $mapped['open_qty'];
+            $openQty = $mapped['open_qty'] > 0 ? $mapped['open_qty'] : $mapped['backorder_qty'];
             $unitPrice = $mapped['unit_price'];
             $revenueAtRisk = $unitPrice > 0 ? round($openQty * $unitPrice, 2) : 0;
 
             AcumaticaBackorderLine::updateOrCreate(
                 ['order_nbr' => $orderNbr, 'inventory_id' => $inventoryId],
-                [
-                    'customer_acumatica_id'     => $customerId,
-                    'customer_name'             => $customerName,
-                    'order_qty'                 => $mapped['order_qty'],
-                    'shipped_qty'               => $mapped['shipped_qty'],
-                    'open_qty'                  => $openQty,
-                    'cancelled_qty'             => $mapped['cancelled_qty'],
-                    'backorder_qty'             => $mapped['backorder_qty'],
-                    'fulfillment_status'        => $mapped['fulfillment_status'],
-                    'qty_at_approval'           => $mapped['qty_at_approval'],
-                    'unit_price'                => $unitPrice,
-                    'revenue_at_risk'           => $revenueAtRisk,
-                    'warehouse_id'              => $mapped['warehouse_id'],
-                    'currency_id'               => $currencyId,
-                    'scheduled_shipment_date'   => $scheduled,
-                    'requested_on'              => $requestedOn,
-                    'sync_run_id'               => $runId,
-                    'synced_at'                 => now(),
-                ],
+                $this->backorderLineAttributes($mapped, $openQty, $unitPrice, $revenueAtRisk, [
+                    'customer_acumatica_id'   => $customerId,
+                    'customer_name'           => $customerName,
+                    'currency_id'             => $currencyId,
+                    'scheduled_shipment_date' => $scheduled,
+                    'requested_on'            => $requestedOn,
+                    'sync_run_id'             => $runId,
+                    'synced_at'               => now(),
+                ]),
             );
 
             $keys[] = "{$orderNbr}|{$inventoryId}";
@@ -180,6 +180,43 @@ class AcumaticaBackorderSyncService
                 }
             }
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $mapped
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function backorderLineAttributes(
+        array $mapped,
+        float $openQty,
+        float $unitPrice,
+        float $revenueAtRisk,
+        array $extra,
+    ): array {
+        $attrs = array_merge($extra, [
+            'order_qty'       => $mapped['order_qty'],
+            'shipped_qty'     => $mapped['shipped_qty'],
+            'open_qty'        => $openQty,
+            'unit_price'      => $unitPrice,
+            'revenue_at_risk' => $revenueAtRisk,
+            'warehouse_id'    => $mapped['warehouse_id'],
+        ]);
+
+        if (Schema::hasColumn('acumatica_backorder_lines', 'cancelled_qty')) {
+            $attrs['cancelled_qty'] = $mapped['cancelled_qty'];
+        }
+        if (Schema::hasColumn('acumatica_backorder_lines', 'backorder_qty')) {
+            $attrs['backorder_qty'] = $mapped['backorder_qty'];
+        }
+        if (Schema::hasColumn('acumatica_backorder_lines', 'fulfillment_status')) {
+            $attrs['fulfillment_status'] = $mapped['fulfillment_status'];
+        }
+        if (Schema::hasColumn('acumatica_backorder_lines', 'qty_at_approval')) {
+            $attrs['qty_at_approval'] = $mapped['qty_at_approval'];
+        }
+
+        return $attrs;
     }
 
     private function str(mixed $field): ?string

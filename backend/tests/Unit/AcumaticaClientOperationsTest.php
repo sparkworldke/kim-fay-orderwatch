@@ -36,16 +36,17 @@ class AcumaticaClientOperationsTest extends TestCase
         ]);
     }
 
-    public function test_fetch_backorders_uses_details_without_select(): void
+    public function test_fetch_backorders_uses_open_orders_with_details_without_select(): void
     {
         Http::fake(['*' => Http::response([])]);
 
-        app(AcumaticaClient::class)->fetchBackorders();
+        app(AcumaticaClient::class)->fetchOpenSalesOrdersForBackorders();
 
         $url = $this->salesOrderRequestUrl();
+        $decoded = urldecode($url);
 
-        $this->assertStringContainsString("OrderType eq 'SO'", urldecode($url));
-        $this->assertStringContainsString("Status eq 'Backorder'", urldecode($url));
+        $this->assertStringContainsString("OrderType eq 'SO'", $decoded);
+        $this->assertStringContainsString("Status ne 'Completed'", $decoded);
         $this->assertStringContainsString('$expand=Details', $url);
         $this->assertStringNotContainsString('$select=', $url);
         $this->assertStringNotContainsString('$expand=DocumentDetails', $url);

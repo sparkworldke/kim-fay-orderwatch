@@ -62,6 +62,10 @@ class AcumaticaInventorySyncService
         do {
             $page = $this->client->fetchActiveInventoryItems($skip);
             foreach ($page as $raw) {
+                if (! $this->isActiveInventoryItem($raw)) {
+                    continue;
+                }
+
                 $total++;
                 try {
                     $this->upsertItem($raw, $run->id);
@@ -122,10 +126,6 @@ class AcumaticaInventorySyncService
             throw new \InvalidArgumentException('Stock item missing InventoryID');
         }
 
-        if (! $this->isActiveInventoryItem($raw)) {
-            throw new \InvalidArgumentException("Inventory item {$inventoryId} is not Active");
-        }
-
         $qtyOnHand    = $this->extractQtyOnHand($raw);
         $qtyAvailable = $this->extractQtyAvailable($raw);
 
@@ -167,24 +167,42 @@ class AcumaticaInventorySyncService
 
     private function extractQtyOnHand(array $raw): float
     {
-        foreach (['QtyOnHand', 'TotalQtyOnHand', 'QtyOnHandTotal'] as $field) {
+        foreach (['QtyOnHand', 'TotalQtyOnHand', 'QtyOnHandTotal', 'QtyOnHandSummary'] as $field) {
             $v = $this->str($raw[$field] ?? null);
             if ($v !== null) {
                 return (float) $v;
             }
         }
 
-        $warehouseDetails = $raw['WarehouseDetails'] ?? $raw['ItemWarehouseDetails'] ?? [];
-        if (! is_array($warehouseDetails)) {
-            return 0;
+        foreach (['WarehouseDetails', 'ItemWarehouseDetails', 'InventoryItemWarehouseDetails'] as $detailKey) {
+            $sum = $this->sumWarehouseQty($raw[$detailKey] ?? null);
+            if ($sum > 0) {
+                return $sum;
+            }
         }
 
+        return 0;
+    }
+
+    private function sumWarehouseQty(mixed $warehouseDetails): float
+    {
+        if (! is_array($warehouseDetails)) {
+            return 0.0;
+        }
+
+        $rows = array_is_list($warehouseDetails) ? $warehouseDetails : [$warehouseDetails];
         $sum = 0.0;
-        foreach ($warehouseDetails as $row) {
+
+        foreach ($rows as $row) {
             if (! is_array($row)) {
                 continue;
             }
-            $sum += (float) ($this->str($row['QtyOnHand'] ?? $row['QtyAvailable'] ?? null) ?? 0);
+            $sum += (float) ($this->str(
+                $row['QtyOnHand']
+                    ?? $row['QtyAvailable']
+                    ?? $row['QtyOnHandSummary']
+                    ?? null
+            ) ?? 0);
         }
 
         return $sum;

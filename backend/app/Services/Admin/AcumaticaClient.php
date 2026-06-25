@@ -114,8 +114,15 @@ class AcumaticaClient
             }
         }
 
-        if (in_array($entity, ['StockItem', 'CustomerClass'], true)) {
+        if (in_array($entity, ['StockItem', 'CustomerClass', 'InventoryItem'], true)) {
             unset($query['$select']);
+        }
+
+        if ($entity === 'InventoryItem') {
+            $expand = (string) ($query['$expand'] ?? '');
+            if (in_array($expand, ['ItemWarehouseDetails', 'InventoryItemWarehouseDetails'], true)) {
+                $query['$expand'] = 'WarehouseDetails';
+            }
         }
 
         return $query;
@@ -419,9 +426,27 @@ class AcumaticaClient
     public function fetchActiveInventoryItems(int $skip = 0, int $top = self::PAGE_SIZE): array
     {
         $top = min($top, self::MAX_CHUNK_SIZE);
+        $base = [
+            '$top'    => $top,
+            '$skip'   => $skip,
+            '$filter' => "ItemStatus eq 'Active'",
+        ];
+
+        foreach (['WarehouseDetails', null] as $expand) {
+            try {
+                $query = $base;
+                if ($expand !== null) {
+                    $query['$expand'] = $expand;
+                }
+
+                return $this->get('InventoryItem', $query);
+            } catch (RuntimeException) {
+                continue;
+            }
+        }
 
         try {
-            return $this->get('InventoryItem', [
+            return $this->get('StockItem', [
                 '$top'    => $top,
                 '$skip'   => $skip,
                 '$filter' => "ItemStatus eq 'Active'",

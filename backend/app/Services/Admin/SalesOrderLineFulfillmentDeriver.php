@@ -49,8 +49,8 @@ class SalesOrderLineFulfillmentDeriver
     {
         $orderQty = self::floatVal($lineRaw['OrderQty'] ?? $lineRaw['OrderedQty'] ?? null);
         $shippedQty = self::floatVal($lineRaw['ShippedQty'] ?? null);
-        $openQty = self::floatVal($lineRaw['OpenQty'] ?? null);
         $cancelledQty = self::floatVal($lineRaw['CancelledQty'] ?? null);
+        $openQty = self::resolveOpenQty($lineRaw, $orderQty, $shippedQty, $cancelledQty);
         $qtyAtApproval = self::floatVal($lineRaw['UsrQtyAtApproval'] ?? null);
         if ($qtyAtApproval <= 0) {
             $qtyAtApproval = $orderQty;
@@ -129,9 +129,41 @@ class SalesOrderLineFulfillmentDeriver
         return round($rate, 2);
     }
 
-    public static function isBackorderLine(string $fulfillmentStatus, float $openQty): bool
+    public static function isBackorderLine(string $fulfillmentStatus, float $openQty, float $backorderQty = 0): bool
     {
-        return $openQty > 0 && in_array($fulfillmentStatus, self::BACKORDER_STATUSES, true);
+        $effectiveOpen = $openQty > 0 ? $openQty : $backorderQty;
+        if ($effectiveOpen <= 0) {
+            return false;
+        }
+
+        if (in_array($fulfillmentStatus, [self::STATUS_FULLY_FULFILLED, self::STATUS_CANCELLED], true)) {
+            return false;
+        }
+
+        return in_array($fulfillmentStatus, self::BACKORDER_STATUSES, true)
+            || $backorderQty > 0
+            || ($openQty > 0 && $fulfillmentStatus === self::STATUS_PENDING_SHIPMENT);
+    }
+
+    /**
+     * IpayV2 Details often omit OpenQty — derive from order/shipped/cancelled quantities.
+     */
+    public static function resolveOpenQty(
+        array $lineRaw,
+        float $orderQty,
+        float $shippedQty,
+        float $cancelledQty,
+    ): float {
+        $openQty = self::floatVal($lineRaw['OpenQty'] ?? $lineRaw['OpenLineQty'] ?? null);
+        if ($openQty > 0) {
+            return $openQty;
+        }
+
+        if ($orderQty <= 0) {
+            return 0.0;
+        }
+
+        return max($orderQty - $shippedQty - $cancelledQty, 0);
     }
 
     private static function strVal(mixed $field): ?string

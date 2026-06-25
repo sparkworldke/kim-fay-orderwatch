@@ -36,7 +36,10 @@ function BackordersPage() {
   function handleSync() {
     sync.mutate(undefined, {
       onSuccess: (res) => {
-        toast.success(`Backorder sync ${res.sync_run.status}: ${res.sync_run.success_count} orders processed`);
+        toast.success(
+          `Backorder sync ${res.sync_run.status}: ${res.sync_run.success_count} lines saved from ${res.sync_run.record_count} open orders` +
+            (res.sync_run.failed_count > 0 ? ` (${res.sync_run.failed_count} order errors)` : ""),
+        );
         refetch();
       },
       onError: (e: Error) => toast.error(e.message),

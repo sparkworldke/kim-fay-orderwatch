@@ -52,6 +52,35 @@ class AcumaticaOperationsSyncTest extends TestCase
         $this->assertSame('10.0000', $logs[1]->qty_delta);
     }
 
+    public function test_inventory_sync_skips_inactive_items_without_counting_as_failed(): void
+    {
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0)->andReturn([
+            [
+                'InventoryID' => ['value' => 'ITEM-ACTIVE'],
+                'Description' => ['value' => 'Active widget'],
+                'QtyOnHand'   => ['value' => 25],
+                'ItemStatus'  => ['value' => 'Active'],
+            ],
+            [
+                'InventoryID' => ['value' => 'ITEM-INACTIVE'],
+                'Description' => ['value' => 'Old widget'],
+                'QtyOnHand'   => ['value' => 5],
+                'ItemStatus'  => ['value' => 'Inactive'],
+            ],
+        ]);
+
+        $service = new AcumaticaInventorySyncService($client, new InventoryRunRatePredictor);
+        $run = $service->run();
+
+        $this->assertSame('completed', $run->status);
+        $this->assertSame(1, $run->record_count);
+        $this->assertSame(1, $run->success_count);
+        $this->assertSame(0, $run->failed_count);
+        $this->assertDatabaseHas('acumatica_inventory_items', ['inventory_id' => 'ITEM-ACTIVE']);
+        $this->assertDatabaseMissing('acumatica_inventory_items', ['inventory_id' => 'ITEM-INACTIVE']);
+    }
+
     public function test_backorder_sync_upserts_by_order_and_inventory(): void
     {
         $client = Mockery::mock(AcumaticaClient::class);
@@ -78,6 +107,7 @@ class AcumaticaOperationsSyncTest extends TestCase
         $run = $service->run();
 
         $this->assertSame('completed', $run->status);
+        $this->assertSame(1, $run->success_count);
         $this->assertDatabaseHas('acumatica_backorder_lines', [
             'order_nbr'           => 'SO100',
             'inventory_id'        => 'ITEM-001',
