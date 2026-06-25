@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Gauge, RefreshCw, Search } from "lucide-react";
+import { Gauge, List, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   fillRateStatusColor,
   formatOpsSyncToast,
+  type FillRateSnapshot,
   useFillRate,
   useFillRateSummary,
   useSyncFillRate,
@@ -30,6 +34,15 @@ function startOfMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
+function formatKes(n: number | string) {
+  return `KES ${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function qtyWithUom(qty: string | number, uom: string | null | undefined) {
+  const n = Number(qty).toLocaleString();
+  return uom ? `${n} ${uom}` : n;
+}
+
 function FillRatePage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
@@ -37,6 +50,7 @@ function FillRatePage() {
   const [dateTo, setDateTo] = useState(today());
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
+  const [selectedOrder, setSelectedOrder] = useState<FillRateSnapshot | null>(null);
 
   const summary = useFillRateSummary(dateFrom, dateTo);
   const { data, isLoading, refetch } = useFillRate({
@@ -182,17 +196,15 @@ function FillRatePage() {
                   {(row.products ?? []).length === 0 ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
-                    <ul className="space-y-0.5">
-                      {(row.products ?? []).slice(0, 3).map((p) => (
-                        <li key={p.inventory_id}>
-                          <div className="truncate max-w-[200px]">{p.product_name ?? p.inventory_id}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{p.inventory_id}</div>
-                        </li>
-                      ))}
-                      {(row.products ?? []).length > 3 && (
-                        <li className="text-xs text-muted-foreground">+{(row.products ?? []).length - 3} more</li>
-                      )}
-                    </ul>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => setSelectedOrder(row)}
+                    >
+                      <List className="mr-1.5 h-3.5 w-3.5" />
+                      View products ({row.products!.length})
+                    </Button>
                   )}
                 </td>
                 <td className="px-4 py-3 text-xs">{row.status ?? "—"}</td>
@@ -229,7 +241,96 @@ function FillRatePage() {
           onPerPageChange={(n) => { setPerPage(n); setPage(1); }}
         />
       )}
+
+      <Sheet open={!!selectedOrder} onOpenChange={(o) => !o && setSelectedOrder(null)}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          {selectedOrder && (
+            <FillRateProductsSheet order={selectedOrder} />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
+  );
+}
+
+function FillRateProductsSheet({ order }: { order: FillRateSnapshot }) {
+  const products = order.products ?? [];
+  const lineTotal = products.reduce((sum, p) => sum + Number(p.not_shipped_value), 0);
+
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle>{order.order_nbr}</SheetTitle>
+        <SheetDescription>
+          {order.customer_name ?? order.customer_acumatica_id ?? "Unknown customer"}
+          {order.order?.order_date && ` · ${order.order.order_date.slice(0, 10)}`}
+        </SheetDescription>
+      </SheetHeader>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {order.fill_rate_pct != null && (
+          <Badge variant={fillRateStatusColor(order.fill_rate_status)}>
+            {Number(order.fill_rate_pct).toFixed(1)}% fill rate
+          </Badge>
+        )}
+        <Badge variant="outline">{products.length} line{products.length !== 1 ? "s" : ""}</Badge>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {products.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No line items — re-sync fill rate for this order.</p>
+        ) : (
+          products.map((p) => (
+            <div key={p.inventory_id} className="rounded-lg border p-3">
+              <div className="font-medium">{p.product_name ?? p.inventory_id}</div>
+              <div className="text-xs text-muted-foreground font-mono">{p.inventory_id}</div>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                <div>
+                  <dt className="text-muted-foreground">Ordered</dt>
+                  <dd className="font-mono">{qtyWithUom(p.order_qty, p.uom)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Shipped</dt>
+                  <dd className="font-mono">{qtyWithUom(p.shipped_qty, p.uom)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Open</dt>
+                  <dd className="font-mono">{qtyWithUom(p.open_qty, p.uom)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Unit price</dt>
+                  <dd className="font-mono">{formatKes(p.unit_price)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Line fill rate</dt>
+                  <dd>
+                    {p.line_fill_rate_pct != null
+                      ? `${Number(p.line_fill_rate_pct).toFixed(1)}%`
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Not shipped</dt>
+                  <dd className="font-mono font-medium">{formatKes(p.not_shipped_value)}</dd>
+                </div>
+              </dl>
+            </div>
+          ))
+        )}
+      </div>
+
+      {products.length > 0 && (
+        <div className="mt-4 flex justify-between border-t pt-4 text-sm">
+          <span className="text-muted-foreground">Sum of line not-shipped values</span>
+          <span className="font-mono font-medium">{formatKes(lineTotal)}</span>
+        </div>
+      )}
+      {products.length > 0 && Math.abs(lineTotal - Number(order.revenue_not_shipped)) > 1 && (
+        <p className="mt-2 text-xs text-amber-600">
+          Order-level not shipped ({formatKes(order.revenue_not_shipped)}) may differ due to discounts or rounding.
+        </p>
+      )}
+    </>
   );
 }
 

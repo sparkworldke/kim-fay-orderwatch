@@ -59,6 +59,7 @@ import {
   useSyncBackorders,
   useSyncFillRate,
   useSyncInventory,
+  useSyncInventoryStocks,
 } from "@/hooks/useOperations";
 import type { AcumaticaCustomerSummary } from "@/types/admin";
 
@@ -503,6 +504,7 @@ function opsDateToday() {
 
 function OperationsUpdatePanel() {
   const updateInventory = useSyncInventory();
+  const updateInventoryStocks = useSyncInventoryStocks();
   const updateBackorders = useSyncBackorders();
   const updateFillRate = useSyncFillRate();
   const [fillDateFrom, setFillDateFrom] = useState(opsDateStartOfMonth);
@@ -551,16 +553,39 @@ function OperationsUpdatePanel() {
             Inventory
           </div>
           <p className="mb-3 text-xs text-muted-foreground">
-            Active stock items — updates qty on hand and run-rate history.
+            Full catalog sync adds new items. Stocks-only refreshes qty and UOM for items already in the catalog.
           </p>
-          <Button
-            size="sm"
-            onClick={() => runUpdate("Inventory", updateInventory)}
-            disabled={updateInventory.isPending}
-          >
-            <RefreshCw className={`mr-2 h-3.5 w-3.5 ${updateInventory.isPending ? "animate-spin" : ""}`} />
-            {updateInventory.isPending ? "Updating…" : "Update inventory"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                updateInventoryStocks.mutate(undefined, {
+                  onSuccess: (res) => {
+                    const msg = formatOpsSyncToast("Stocks", res.sync_run);
+                    if (res.sync_run.status === "completed") {
+                      res.sync_run.filters?.warning ? toast.warning(msg) : toast.success(msg);
+                    } else {
+                      toast.error(msg);
+                    }
+                  },
+                  onError: (e: Error) => toast.error(e.message),
+                });
+              }}
+              disabled={updateInventoryStocks.isPending || updateInventory.isPending}
+            >
+              <RefreshCw className={`mr-2 h-3.5 w-3.5 ${updateInventoryStocks.isPending ? "animate-spin" : ""}`} />
+              {updateInventoryStocks.isPending ? "Syncing…" : "Sync stocks only"}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => runUpdate("Inventory", updateInventory)}
+              disabled={updateInventory.isPending || updateInventoryStocks.isPending}
+            >
+              <RefreshCw className={`mr-2 h-3.5 w-3.5 ${updateInventory.isPending ? "animate-spin" : ""}`} />
+              {updateInventory.isPending ? "Updating…" : "Update inventory"}
+            </Button>
+          </div>
         </div>
 
         <div className="rounded-lg border bg-muted/20 p-4">

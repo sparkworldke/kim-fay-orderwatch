@@ -212,7 +212,47 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->getJson('/api/operations/backorders')
             ->assertOk()
             ->assertJsonPath('data.0.product_name', 'Backorder Widget')
-            ->assertJsonPath('data.0.customer_name', 'Backorder Buyer Ltd');
+            ->assertJsonPath('data.0.customer_name', 'Backorder Buyer Ltd')
+            ->assertJsonPath('data.0.qty_on_hand', '5.0000')
+            ->assertJsonPath('data.0.stock_shortfall', true);
+    }
+
+    public function test_inventory_stocks_only_updates_existing_items(): void
+    {
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0)->andReturn([
+            [
+                'InventoryID' => ['value' => 'ITEM-STK'],
+                'DefaultUOM'  => ['value' => 'EA'],
+                'QtyOnHand'   => ['value' => 99],
+            ],
+            [
+                'InventoryID' => ['value' => 'ITEM-NEW'],
+                'QtyOnHand'   => ['value' => 50],
+            ],
+        ]);
+
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'ITEM-STK',
+            'description'  => 'Existing item',
+            'qty_on_hand'  => 0,
+            'default_uom'  => null,
+            'synced_at'    => now()->subDay(),
+        ]);
+
+        $service = new AcumaticaInventorySyncService($client, new InventoryRunRatePredictor);
+        $run = $service->runStocksOnly();
+
+        $this->assertSame('completed', $run->status);
+        $this->assertSame('inventory_stocks', $run->sync_type);
+        $this->assertSame(1, $run->success_count);
+        $this->assertSame(1, $run->filters['skipped_unknown']);
+        $this->assertDatabaseHas('acumatica_inventory_items', [
+            'inventory_id' => 'ITEM-STK',
+            'qty_on_hand'  => 99,
+            'default_uom'  => 'EA',
+        ]);
+        $this->assertDatabaseMissing('acumatica_inventory_items', ['inventory_id' => 'ITEM-NEW']);
     }
 
     public function test_fill_rate_list_enriches_customer_and_product_names(): void
@@ -249,6 +289,9 @@ class AcumaticaOperationsSyncTest extends TestCase
             'order_qty'      => 10,
             'shipped_qty'    => 7,
             'open_qty'       => 3,
+            'unit_price'     => 20,
+            'uom'            => 'CS',
+            'fill_rate_pct'  => 70,
         ]);
 
         AcumaticaFillRateSnapshot::create([
@@ -268,6 +311,9 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.customer_name', 'Fill Rate Customer')
             ->assertJsonPath('data.0.products.0.inventory_id', 'ITEM-FR')
-            ->assertJsonPath('data.0.products.0.product_name', 'Fill Rate Gadget');
+            ->assertJsonPath('data.0.products.0.product_name', 'Fill Rate Gadget')
+            ->assertJsonPath('data.0.products.0.unit_price', '20.0000')
+            ->assertJsonPath('data.0.products.0.uom', 'CS')
+            ->assertJsonPath('data.0.products.0.not_shipped_value', '60.00');
     }
 }

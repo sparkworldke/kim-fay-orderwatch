@@ -18,6 +18,7 @@ import {
   useInventory,
   useInventorySummary,
   useSyncInventory,
+  useSyncInventoryStocks,
 } from "@/hooks/useOperations";
 
 export const Route = createFileRoute("/app/inventory")({
@@ -41,6 +42,7 @@ function InventoryPage() {
     per_page: perPage,
   });
   const sync = useSyncInventory();
+  const syncStocks = useSyncInventoryStocks();
 
   function handleUpdate() {
     sync.mutate(undefined, {
@@ -57,6 +59,28 @@ function InventoryPage() {
     });
   }
 
+  function handleSyncStocks() {
+    syncStocks.mutate(undefined, {
+      onSuccess: (res) => {
+        const msg = formatOpsSyncToast("Stocks", res.sync_run);
+        if (res.sync_run.status === "completed") {
+          if (res.sync_run.filters?.warning) {
+            toast.warning(msg);
+          } else {
+            toast.success(msg);
+          }
+        } else {
+          toast.error(msg);
+        }
+        refetch();
+        summary.refetch();
+      },
+      onError: (e: Error) => toast.error(e.message),
+    });
+  }
+
+  const anySyncPending = sync.isPending || syncStocks.isPending;
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -66,10 +90,16 @@ function InventoryPage() {
             Stock levels from Acumatica — use Update to refresh existing items and add new ones
           </p>
         </div>
-        <Button onClick={handleUpdate} disabled={sync.isPending}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
-          {sync.isPending ? "Updating…" : "Update inventory"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={handleSyncStocks} disabled={anySyncPending}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${syncStocks.isPending ? "animate-spin" : ""}`} />
+            {syncStocks.isPending ? "Syncing stocks…" : "Sync stocks only"}
+          </Button>
+          <Button onClick={handleUpdate} disabled={anySyncPending}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
+            {sync.isPending ? "Updating…" : "Update inventory"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -122,6 +152,7 @@ function InventoryPage() {
             <tr className="border-b bg-muted/40 text-left">
               <th className="px-4 py-3 font-medium">Item</th>
               <th className="px-4 py-3 font-medium">Warehouse</th>
+              <th className="px-4 py-3 font-medium">UOM</th>
               <th className="px-4 py-3 font-medium text-right">On hand</th>
               <th className="px-4 py-3 font-medium text-right">Run rate / day</th>
               <th className="px-4 py-3 font-medium text-right">Days left</th>
@@ -131,7 +162,7 @@ function InventoryPage() {
           </thead>
           <tbody>
             {isLoading && Array.from({ length: 8 }).map((_, i) => (
-              <tr key={i} className="border-b"><td colSpan={7} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>
+              <tr key={i} className="border-b"><td colSpan={8} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>
             ))}
             {!isLoading && (data?.data ?? []).map((item) => (
               <tr key={item.id} className="border-b hover:bg-muted/20">
@@ -140,6 +171,7 @@ function InventoryPage() {
                   <div className="text-xs text-muted-foreground truncate max-w-[240px]">{item.description ?? "—"}</div>
                 </td>
                 <td className="px-4 py-3">{item.default_warehouse_id ?? "—"}</td>
+                <td className="px-4 py-3 text-xs">{item.default_uom ?? "—"}</td>
                 <td className="px-4 py-3 text-right font-mono">{Number(item.qty_on_hand).toLocaleString()}</td>
                 <td className="px-4 py-3 text-right font-mono">
                   {item.prediction?.daily_run_rate != null ? Number(item.prediction.daily_run_rate).toFixed(2) : "—"}
@@ -160,7 +192,7 @@ function InventoryPage() {
               </tr>
             ))}
             {!isLoading && (data?.data ?? []).length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No inventory items — run a sync to pull from Acumatica</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No inventory items — run a sync to pull from Acumatica</td></tr>
             )}
           </tbody>
         </table>

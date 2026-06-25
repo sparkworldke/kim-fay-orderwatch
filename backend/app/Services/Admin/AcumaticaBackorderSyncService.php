@@ -203,6 +203,10 @@ class AcumaticaBackorderSyncService
             'warehouse_id'    => $mapped['warehouse_id'],
         ]);
 
+        if (Schema::hasColumn('acumatica_backorder_lines', 'uom')) {
+            $attrs['uom'] = $mapped['uom'];
+        }
+
         if (Schema::hasColumn('acumatica_backorder_lines', 'cancelled_qty')) {
             $attrs['cancelled_qty'] = $mapped['cancelled_qty'];
         }

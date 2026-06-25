@@ -157,14 +157,14 @@ class OperationsController extends Controller
         $paginated = $query->paginate($request->integer('per_page', 50));
         $items = $paginated->getCollection();
 
-        $inventoryDescriptions = $this->catalogResolver->descriptionsForInventoryIds(
-            $items->pluck('inventory_id')->all(),
-        );
+        $inventoryIds = $items->pluck('inventory_id')->all();
+        $inventoryDescriptions = $this->catalogResolver->descriptionsForInventoryIds($inventoryIds);
+        $inventoryStock = $this->catalogResolver->stockForInventoryIds($inventoryIds);
         $customerNames = $this->catalogResolver->namesForCustomerIds(
             $items->pluck('customer_acumatica_id')->all(),
         );
 
-        $paginated->getCollection()->transform(function ($line) use ($inventoryDescriptions, $customerNames) {
+        $paginated->getCollection()->transform(function ($line) use ($inventoryDescriptions, $inventoryStock, $customerNames) {
             $line->product_name = $this->catalogResolver->resolveProductName(
                 $line->inventory_id,
                 null,
@@ -175,6 +175,17 @@ class OperationsController extends Controller
                 $line->customer_acumatica_id,
                 $customerNames,
             );
+            $line->uom = $this->catalogResolver->resolveUom(
+                $line->uom,
+                $line->inventory_id,
+                $inventoryStock,
+            );
+
+            $stock = $inventoryStock->get($line->inventory_id);
+            $line->qty_on_hand = $stock['qty_on_hand'] ?? null;
+            $line->qty_available = $stock['qty_available'] ?? null;
+            $line->stock_shortfall = $stock !== null
+                && (float) ($stock['qty_on_hand'] ?? 0) < (float) $line->open_qty;
 
             return $line;
         });
@@ -254,7 +265,7 @@ class OperationsController extends Controller
         $query = AcumaticaFillRateSnapshot::query()
             ->with([
                 'order:id,acumatica_order_nbr,customer_acumatica_id,customer_name,order_date',
-                'order.lines:id,sales_order_id,inventory_id,description,order_qty,shipped_qty',
+                'order.lines:id,sales_order_id,inventory_id,description,order_qty,shipped_qty,open_qty,unit_price,uom,fill_rate_pct,qty_at_approval',
             ])
             ->orderByDesc('computed_at');
 
@@ -302,13 +313,14 @@ class OperationsController extends Controller
             ->flatMap(fn ($snapshot) => $snapshot->order?->lines?->pluck('inventory_id') ?? collect())
             ->all();
         $inventoryDescriptions = $this->catalogResolver->descriptionsForInventoryIds($inventoryIds);
+        $inventoryStock = $this->catalogResolver->stockForInventoryIds($inventoryIds);
 
         $customerIds = $items
             ->map(fn ($snapshot) => $snapshot->customer_acumatica_id ?? $snapshot->order?->customer_acumatica_id)
             ->all();
         $customerNames = $this->catalogResolver->namesForCustomerIds($customerIds);
 
-        $paginated->getCollection()->transform(function ($snapshot) use ($inventoryDescriptions, $customerNames) {
+        $paginated->getCollection()->transform(function ($snapshot) use ($inventoryDescriptions, $inventoryStock, $customerNames) {
             $order = $snapshot->order;
             $storedCustomerName = $order?->customer_name;
 
@@ -319,16 +331,33 @@ class OperationsController extends Controller
             );
 
             $snapshot->products = collect($order?->lines ?? [])
-                ->map(function ($line) use ($inventoryDescriptions) {
+                ->map(function ($line) use ($inventoryDescriptions, $inventoryStock) {
+                    $openQty = (float) $line->open_qty;
+                    if ($openQty <= 0) {
+                        $openQty = max((float) $line->order_qty - (float) $line->shipped_qty, 0);
+                    }
+                    $unitPrice = (float) $line->unit_price;
+
                     return [
-                        'inventory_id' => $line->inventory_id,
-                        'product_name' => $this->catalogResolver->resolveProductName(
+                        'inventory_id'       => $line->inventory_id,
+                        'product_name'       => $this->catalogResolver->resolveProductName(
                             $line->inventory_id,
                             $line->description,
                             $inventoryDescriptions,
                         ),
-                        'order_qty'    => $line->order_qty,
-                        'shipped_qty'  => $line->shipped_qty,
+                        'order_qty'          => $line->order_qty,
+                        'shipped_qty'        => $line->shipped_qty,
+                        'open_qty'           => number_format($openQty, 4, '.', ''),
+                        'uom'                => $this->catalogResolver->resolveUom(
+                            $line->uom,
+                            $line->inventory_id,
+                            $inventoryStock,
+                        ),
+                        'unit_price'         => $line->unit_price,
+                        'line_fill_rate_pct' => $line->fill_rate_pct,
+                        'not_shipped_value'  => $unitPrice > 0
+                            ? number_format(round($openQty * $unitPrice, 2), 2, '.', '')
+                            : '0.00',
                     ];
                 })
                 ->values()

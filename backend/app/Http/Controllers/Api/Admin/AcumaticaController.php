@@ -129,6 +129,13 @@ class AcumaticaController extends Controller
         return response()->json(['sync_run' => $run]);
     }
 
+    public function syncInventoryStocks(Request $request): JsonResponse
+    {
+        $run = $this->inventorySync->runStocksOnly($request->user()?->id);
+
+        return response()->json(['sync_run' => $run]);
+    }
+
     public function syncBackorders(Request $request): JsonResponse
     {
         $run = $this->backorderSync->run($request->user()?->id);

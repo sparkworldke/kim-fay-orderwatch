@@ -6,6 +6,15 @@ use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaInventoryItem;
 use Illuminate\Support\Collection;
 
+/**
+ * @phpstan-type InventoryStockRow array{
+ *   qty_on_hand: string,
+ *   qty_available: string|null,
+ *   default_uom: string|null,
+ *   synced_at: string|null,
+ * }
+ */
+
 class OperationsCatalogResolver
 {
     /**
@@ -54,6 +63,44 @@ class OperationsCatalogResolver
 
         if ($lineDescription !== null && trim($lineDescription) !== '') {
             return trim($lineDescription);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<string|null>  $inventoryIds
+     * @return Collection<string, InventoryStockRow>
+     */
+    public function stockForInventoryIds(array $inventoryIds): Collection
+    {
+        $ids = array_values(array_unique(array_filter($inventoryIds)));
+        if ($ids === []) {
+            return collect();
+        }
+
+        return AcumaticaInventoryItem::query()
+            ->whereIn('inventory_id', $ids)
+            ->get(['inventory_id', 'qty_on_hand', 'qty_available', 'default_uom', 'synced_at'])
+            ->keyBy('inventory_id')
+            ->map(fn (AcumaticaInventoryItem $item) => [
+                'qty_on_hand'   => (string) $item->qty_on_hand,
+                'qty_available' => $item->qty_available !== null ? (string) $item->qty_available : null,
+                'default_uom'   => $item->default_uom,
+                'synced_at'     => $item->synced_at?->toIso8601String(),
+            ]);
+    }
+
+    public function resolveUom(?string $lineUom, ?string $inventoryId, Collection $inventoryStock): ?string
+    {
+        if ($lineUom !== null && trim($lineUom) !== '') {
+            return trim($lineUom);
+        }
+
+        if ($inventoryId !== null && $inventoryStock->has($inventoryId)) {
+            $uom = $inventoryStock->get($inventoryId)['default_uom'] ?? null;
+
+            return is_string($uom) && trim($uom) !== '' ? trim($uom) : null;
         }
 
         return null;

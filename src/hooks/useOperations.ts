@@ -36,6 +36,10 @@ export type BackorderLine = {
   order_nbr: string;
   inventory_id: string;
   product_name: string | null;
+  uom: string | null;
+  qty_on_hand: string | null;
+  qty_available: string | null;
+  stock_shortfall: boolean;
   customer_acumatica_id: string | null;
   customer_name: string | null;
   order_qty: string;
@@ -57,6 +61,11 @@ export type FillRateProduct = {
   product_name: string | null;
   order_qty: string;
   shipped_qty: string;
+  open_qty: string;
+  uom: string | null;
+  unit_price: string;
+  line_fill_rate_pct: string | null;
+  not_shipped_value: string;
 };
 
 export type FillRateSnapshot = {
@@ -187,6 +196,12 @@ export type OpsSyncRun = {
   success_count: number;
   failed_count: number;
   error_message?: string | null;
+  filters?: {
+    mode?: string;
+    skipped_unknown?: number;
+    zero_qty_count?: number;
+    warning?: string;
+  } | null;
 };
 
 export function formatOpsSyncToast(label: string, run: OpsSyncRun): string {
@@ -201,6 +216,16 @@ export function formatOpsSyncToast(label: string, run: OpsSyncRun): string {
   }
   if (run.failed_count > 0) {
     parts.push(`${run.failed_count} errors`);
+  }
+  const f = run.filters;
+  if (f?.skipped_unknown && f.skipped_unknown > 0) {
+    parts.push(`${f.skipped_unknown} skipped (not in catalog — run full inventory first)`);
+  }
+  if (f?.zero_qty_count && f.zero_qty_count > 0) {
+    parts.push(`${f.zero_qty_count} still at zero qty`);
+  }
+  if (f?.warning) {
+    parts.push(f.warning);
   }
 
   return parts.join(" · ");
@@ -223,6 +248,14 @@ function useOpsSync(endpoint: string, keys: string[]) {
 
 export function useSyncInventory() {
   return useOpsSync("inventory", ["operations-inventory", "operations-inventory-summary"]);
+}
+
+export function useSyncInventoryStocks() {
+  return useOpsSync("inventory-stocks", [
+    "operations-inventory",
+    "operations-inventory-summary",
+    "operations-backorders",
+  ]);
 }
 
 export function useSyncBackorders() {

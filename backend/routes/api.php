@@ -137,7 +137,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('acumatica/sync/customers',       [AcumaticaController::class, 'syncCustomers']);
         Route::post('acumatica/sync/orders',          [AcumaticaController::class, 'syncOrders']);
         Route::post('acumatica/sync/customer-orders', [AcumaticaController::class, 'syncCustomerOrders']);
-        Route::post('acumatica/sync/inventory',       [AcumaticaController::class, 'syncInventory']);
+        Route::post('acumatica/sync/inventory',        [AcumaticaController::class, 'syncInventory']);
+        Route::post('acumatica/sync/inventory-stocks', [AcumaticaController::class, 'syncInventoryStocks']);
         Route::post('acumatica/sync/backorders',      [AcumaticaController::class, 'syncBackorders']);
         Route::post('acumatica/sync/fill-rate',       [AcumaticaController::class, 'syncFillRate']);
         Route::post('acumatica/sync/credit-notes-more', [AcumaticaController::class, 'syncCreditNotesAndMore']);

@@ -21,6 +21,7 @@ class AcumaticaBackorderLine extends Model
         'unit_price',
         'revenue_at_risk',
         'warehouse_id',
+        'uom',
         'currency_id',
         'scheduled_shipment_date',
         'requested_on',
