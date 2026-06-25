@@ -43,8 +43,8 @@ class TeamMemberAccountMail extends Mailable
         $email = e($this->email);
         $role = e($this->role);
         $invitedBy = e($this->invitedByName);
-        $loginUrl = e(FrontendUrl::path('/login'));
-        $dashboardUrl = e(FrontendUrl::path('/app'));
+        $appUrl = e(FrontendUrl::path('/app'));
+        $authUrl = e(FrontendUrl::path('/auth'));
 
         return <<<HTML
         <!DOCTYPE html>
@@ -87,15 +87,17 @@ class TeamMemberAccountMail extends Mailable
                                     </p>
                                     <table width="100%" cellpadding="0" cellspacing="0">
                                         <tr>
-                                            <td align="center" style="padding:8px 0 20px;">
-                                                <a href="{$loginUrl}" style="display:inline-block;background:#4f6ef7;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:8px;">
-                                                    Sign in to OrderWatch
+                                            <td align="center" style="padding:8px 0 12px;">
+                                                <a href="{$appUrl}" style="display:inline-block;background:#4f6ef7;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:8px;">
+                                                    Open OrderWatch
                                                 </a>
                                             </td>
                                         </tr>
                                     </table>
                                     <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;text-align:center;">
-                                        Or open the dashboard directly: <a href="{$dashboardUrl}" style="color:#4f6ef7;text-decoration:none;">{$dashboardUrl}</a>
+                                        <a href="{$appUrl}" style="color:#4f6ef7;text-decoration:none;">{$appUrl}</a>
+                                        <span style="color:#d1d5db;"> &bull; </span>
+                                        <a href="{$authUrl}" style="color:#4f6ef7;text-decoration:none;">Sign-in page</a>
                                     </p>
                                 </td>
                             </tr>

@@ -44,7 +44,9 @@ class TeamMemberAccountTest extends TestCase
             $html = $mail->render();
 
             return $mail->hasTo('agent@kimfay.test')
-                && str_contains($html, 'https://orderwatch.test/login')
+                && str_contains($html, 'https://orderwatch.test/app')
+                && str_contains($html, 'https://orderwatch.test/auth')
+                && ! str_contains($html, 'https://orderwatch.test/login')
                 && str_contains($html, 'Customer Service Agent')
                 && ! str_contains($html, 'api.orderwatch.test');
         });

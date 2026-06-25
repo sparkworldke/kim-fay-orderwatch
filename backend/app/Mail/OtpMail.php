@@ -42,7 +42,8 @@ class OtpMail extends Mailable
     {
         $name = e($this->userName);
         $code = e($this->otp);
-        $loginUrl = e(FrontendUrl::path('/login'));
+        $appUrl = e(FrontendUrl::path('/app'));
+        $authUrl = e(FrontendUrl::path('/auth'));
 
         return <<<HTML
         <!DOCTYPE html>
@@ -108,7 +109,9 @@ class OtpMail extends Mailable
                                         If you did not request this, please ignore this email.
                                     </p>
                                     <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">
-                                        <a href="{$loginUrl}" style="color:#4f6ef7;text-decoration:none;">Sign in to OrderWatch</a>
+                                        <a href="{$appUrl}" style="color:#4f6ef7;text-decoration:none;">Open OrderWatch</a>
+                                        <span style="color:#d1d5db;"> &bull; </span>
+                                        <a href="{$authUrl}" style="color:#4f6ef7;text-decoration:none;">Sign-in page</a>
                                     </p>
                                 </td>
                             </tr>
