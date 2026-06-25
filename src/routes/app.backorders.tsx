@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AlertTriangle, Boxes, PackageX, RefreshCw, Search, Users } from "lucide-react";
 import { toast } from "sonner";
+import { OperationsSyncStatus } from "@/components/operations-sync-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +100,8 @@ function BackordersPage() {
           </Button>
         </div>
       </div>
+
+      <OperationsSyncStatus />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label="Open lines" value={summary.data?.open_lines} loading={summary.isLoading} icon={PackageX} />

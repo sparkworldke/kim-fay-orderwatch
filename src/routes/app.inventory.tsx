@@ -11,6 +11,7 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { OperationsSyncStatus } from "@/components/operations-sync-status";
 import {
   fillRateStatusColor,
   formatOpsSyncToast,
@@ -101,6 +102,8 @@ function InventoryPage() {
           </Button>
         </div>
       </div>
+
+      <OperationsSyncStatus />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total items" value={summary.data?.total_items} loading={summary.isLoading} icon={Boxes} />

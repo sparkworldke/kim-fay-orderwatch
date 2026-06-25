@@ -157,6 +157,117 @@ export function useBackordersByAccount(top = 10) {
   });
 }
 
+export type OperationsStatus = {
+  last_inventory_sync_at: string | null;
+  last_inventory_sync_type: string | null;
+  last_backorder_sync_at: string | null;
+  last_fill_rate_sync_at: string | null;
+  last_fill_rate_computed_at: string | null;
+  inventory_stale: boolean;
+  backorders_stale: boolean;
+  fill_rate_stale: boolean;
+};
+
+export type ExecutiveAlert = {
+  severity: "critical" | "warning" | "info";
+  category: string;
+  message: string;
+};
+
+export type BusinessOptimizationData = {
+  date_from: string;
+  date_to: string;
+  ops_status: OperationsStatus;
+  customer_focus: {
+    top_by_revenue: Array<{
+      customer_acumatica_id: string;
+      customer_name: string | null;
+      open_lines: number;
+      open_orders: number;
+      total_open_qty: number;
+      revenue_at_risk: number;
+    }>;
+    top_by_fill_rate_risk: Array<{
+      customer_acumatica_id: string;
+      customer_name: string | null;
+      order_count: number;
+      critical_orders: number;
+      at_risk_orders: number;
+      revenue_not_shipped: number;
+      avg_fill_rate_pct: number;
+    }>;
+    total_customers_at_risk: number;
+    top_customer_concentration_pct: number | null;
+  };
+  product_focus: {
+    top_by_revenue: Array<{
+      inventory_id: string;
+      product_name: string | null;
+      open_lines: number;
+      total_open_qty: number;
+      revenue_at_risk: number;
+      qty_on_hand: number | null;
+      stock_shortfall: boolean;
+    }>;
+    stock_shortfall_skus: Array<{
+      inventory_id: string;
+      product_name: string | null;
+      open_lines: number;
+      total_open_qty: number;
+      revenue_at_risk: number;
+      qty_on_hand: number | null;
+      stock_shortfall: boolean;
+    }>;
+    shortfall_count: number;
+  };
+  production_forecast: {
+    at_risk_items: Array<{
+      inventory_id: string;
+      product_name: string | null;
+      qty_on_hand: number;
+      daily_run_rate: number | null;
+      days_until_stockout: number | null;
+      prediction_status: string;
+    }>;
+    critical_count: number;
+    at_risk_count: number;
+    zero_stock_skus: number;
+  };
+  revenue_bleeding: {
+    backorder_revenue_at_risk: number;
+    fill_rate_not_shipped: number;
+    fill_rate_critical_not_shipped: number;
+    combined_exposure: number;
+    open_backorder_lines: number;
+    orders_below_80_pct: number;
+  };
+  executive_alerts: ExecutiveAlert[];
+  charts: {
+    backorders_by_customer: BusinessOptimizationData["customer_focus"]["top_by_revenue"];
+    fill_rate_by_status: Array<{ status: string; count: number }>;
+    stockout_risk_products: BusinessOptimizationData["production_forecast"]["at_risk_items"];
+    revenue_bleeding_split: Array<{ label: string; value: number }>;
+  };
+};
+
+export function useOperationsStatus() {
+  return useQuery({
+    queryKey: ["operations-status"],
+    queryFn: () => apiFetch<OperationsStatus>("operations/status"),
+    staleTime: 60_000,
+  });
+}
+
+export function useBusinessOptimization(dateFrom: string, dateTo: string) {
+  return useQuery({
+    queryKey: ["operations-business-optimization", dateFrom, dateTo],
+    queryFn: () =>
+      apiFetch<BusinessOptimizationData>(
+        `operations/business-optimization?date_from=${dateFrom}&date_to=${dateTo}`,
+      ),
+  });
+}
+
 export function useFillRateSummary(dateFrom: string, dateTo: string) {
   return useQuery({
     queryKey: ["operations-fill-rate-summary", dateFrom, dateTo],
@@ -241,6 +352,8 @@ function useOpsSync(endpoint: string, keys: string[]) {
       ),
     onSuccess: () => {
       keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      qc.invalidateQueries({ queryKey: ["operations-status"] });
+      qc.invalidateQueries({ queryKey: ["operations-business-optimization"] });
       qc.invalidateQueries({ queryKey: ["admin-settings", "sync-logs"] });
     },
   });

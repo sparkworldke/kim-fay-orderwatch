@@ -14,6 +14,7 @@ import {
   GitMerge,
   FileText,
   Radio,
+  Target,
 } from "lucide-react";
 import {
   Sidebar,
@@ -37,6 +38,7 @@ const NAV = [
     { title: "Inventory", url: "/app/inventory", icon: Boxes },
     { title: "Backorders", url: "/app/backorders", icon: PackageX },
     { title: "Fill Rate", url: "/app/fill-rate", icon: Gauge },
+    { title: "Business Optimization", url: "/app/business-optimization", icon: Target },
     { title: "Customers", url: "/app/customers", icon: Users },
     { title: "Customer Feed", url: "/app/customer-feed", icon: Radio },
   ]},

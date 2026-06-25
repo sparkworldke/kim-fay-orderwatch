@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AcumaticaBackorderLine;
 use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaFillRateSnapshot;
+use App\Models\AcumaticaSyncLog;
 use App\Models\AcumaticaInventoryItem;
 use App\Models\AcumaticaInventoryRunRateLog;
 use App\Models\AcumaticaSalesOrder;
@@ -161,6 +162,99 @@ class AcumaticaOperationsSyncTest extends TestCase
         $this->getJson('/api/operations/inventory')->assertUnauthorized();
         $this->getJson('/api/operations/backorders')->assertUnauthorized();
         $this->getJson('/api/operations/fill-rate')->assertUnauthorized();
+        $this->getJson('/api/operations/status')->assertUnauthorized();
+        $this->getJson('/api/operations/business-optimization')->assertUnauthorized();
+    }
+
+    public function test_operations_status_returns_last_sync_timestamps(): void
+    {
+        $user = User::factory()->create();
+
+        AcumaticaSyncLog::create([
+            'sync_type'     => 'inventory_stocks',
+            'started_at'    => now()->subMinutes(10),
+            'ended_at'      => now()->subMinutes(5),
+            'status'        => 'completed',
+            'record_count'  => 10,
+            'success_count' => 10,
+            'failed_count'  => 0,
+        ]);
+
+        AcumaticaSyncLog::create([
+            'sync_type'     => 'backorders',
+            'started_at'    => now()->subHour(),
+            'ended_at'      => now()->subMinutes(50),
+            'status'        => 'completed',
+            'record_count'  => 5,
+            'success_count' => 5,
+            'failed_count'  => 0,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/status')
+            ->assertOk()
+            ->assertJsonStructure([
+                'last_inventory_sync_at',
+                'last_backorder_sync_at',
+                'last_fill_rate_sync_at',
+                'inventory_stale',
+                'backorders_stale',
+                'fill_rate_stale',
+            ])
+            ->assertJsonPath('last_inventory_sync_type', 'inventory_stocks');
+    }
+
+    public function test_business_optimization_returns_insight_sections(): void
+    {
+        $user = User::factory()->create();
+
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'ITEM-OPT',
+            'description'  => 'Optimization Widget',
+            'qty_on_hand'  => 2,
+            'synced_at'    => now(),
+        ]);
+
+        AcumaticaBackorderLine::create([
+            'order_nbr'             => 'SO-OPT',
+            'inventory_id'          => 'ITEM-OPT',
+            'customer_acumatica_id' => 'CUST-OPT',
+            'customer_name'         => 'Opt Customer',
+            'order_qty'             => 20,
+            'shipped_qty'           => 5,
+            'open_qty'              => 15,
+            'revenue_at_risk'       => 1500,
+            'synced_at'             => now(),
+        ]);
+
+        AcumaticaFillRateSnapshot::create([
+            'order_nbr'             => 'SO-OPT',
+            'customer_acumatica_id' => 'CUST-OPT',
+            'status'                => 'Open',
+            'total_ordered_qty'     => 20,
+            'total_shipped_qty'     => 10,
+            'fill_rate_pct'         => 50,
+            'fill_rate_status'      => 'critical',
+            'revenue_not_shipped'   => 500,
+            'computed_at'           => now(),
+        ]);
+
+        $from = now()->startOfMonth()->toDateString();
+        $to   = now()->toDateString();
+
+        $this->actingAs($user)
+            ->getJson("/api/operations/business-optimization?date_from={$from}&date_to={$to}")
+            ->assertOk()
+            ->assertJsonStructure([
+                'customer_focus',
+                'product_focus',
+                'production_forecast',
+                'revenue_bleeding',
+                'executive_alerts',
+                'charts',
+            ])
+            ->assertJsonPath('product_focus.shortfall_count', 1)
+            ->assertJsonPath('revenue_bleeding.backorder_revenue_at_risk', 1500);
     }
 
     public function test_operations_inventory_list_returns_synced_items(): void

@@ -80,6 +80,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('backorders/by-account',           [OperationsController::class, 'backordersByAccount']);
         Route::get('fill-rate/summary',               [OperationsController::class, 'fillRateSummary']);
         Route::get('fill-rate',                       [OperationsController::class, 'fillRate']);
+        Route::get('status',                          [OperationsController::class, 'opsStatus']);
+        Route::get('business-optimization',           [OperationsController::class, 'businessOptimization']);
     });
 
     // Orders

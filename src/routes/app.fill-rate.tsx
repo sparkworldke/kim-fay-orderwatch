@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Gauge, List, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
+import { OperationsSyncStatus } from "@/components/operations-sync-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,6 +104,8 @@ function FillRatePage() {
           {sync.isPending ? "Updating…" : "Update fill rate"}
         </Button>
       </div>
+
+      <OperationsSyncStatus />
 
       <div className="flex flex-wrap items-end gap-3">
         <div>

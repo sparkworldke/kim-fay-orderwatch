@@ -10,6 +10,7 @@ use App\Models\AcumaticaInventoryItem;
 use App\Models\AcumaticaInventoryRunRateLog;
 use App\Services\Admin\FillRateCalculator;
 use App\Services\Admin\InventoryRunRatePredictor;
+use App\Services\Operations\BusinessOptimizationService;
 use App\Services\Operations\OperationsCatalogResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,21 @@ class OperationsController extends Controller
         private readonly FillRateCalculator $fillRateCalculator,
         private readonly InventoryRunRatePredictor $predictor,
         private readonly OperationsCatalogResolver $catalogResolver,
+        private readonly BusinessOptimizationService $optimization,
     ) {
+    }
+
+    public function opsStatus(): JsonResponse
+    {
+        return response()->json($this->optimization->opsStatus());
+    }
+
+    public function businessOptimization(Request $request): JsonResponse
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
+        $dateTo   = $request->input('date_to', now()->toDateString());
+
+        return response()->json($this->optimization->dashboard($dateFrom, $dateTo));
     }
 
     public function inventorySummary(): JsonResponse
