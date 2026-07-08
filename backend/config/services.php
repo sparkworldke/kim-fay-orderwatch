@@ -41,6 +41,10 @@ return [
         'tenant_id'     => env('MICROSOFT_TENANT_ID', 'common'),
         'redirect_uri'  => env('MICROSOFT_REDIRECT_URI'),
         'frontend_url'  => env('FRONTEND_URL', env('MICROSOFT_FRONTEND_URL', 'http://localhost:5173')),
+        'graph_user_agent' => env(
+            'MICROSOFT_GRAPH_USER_AGENT',
+            'OrderWatch/1.0 (Kim-Fay OrderWatch; +https://orderwatch.fayshop.co.ke)',
+        ),
     ],
 
 ];

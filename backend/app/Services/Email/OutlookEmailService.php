@@ -16,6 +16,8 @@ use App\Services\Email\AttachmentTextExtractorService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -80,7 +82,7 @@ class OutlookEmailService implements EmailProviderInterface
             throw new RuntimeException('OAuth code exchange succeeded without an access token.');
         }
 
-        $profileResponse = Http::withToken($accessToken)
+        $profileResponse = $this->graphHttp($accessToken)
             ->timeout(10)
             ->get('https://graph.microsoft.com/v1.0/me', [
                 '$select' => 'displayName,mail,userPrincipalName,otherMails',
@@ -117,6 +119,8 @@ class OutlookEmailService implements EmailProviderInterface
         MailboxAccount $account,
         ?int $emailFilterId = null,
         ?MailboxSyncLog $syncLog = null,
+        ?string $syncFrom = null,
+        ?string $syncTo = null,
     ): int {
         $accessToken = $this->getValidAccessToken($account);
         if (! $account->folders()->exists()) $this->discoverFolders($account, $accessToken);
@@ -126,19 +130,41 @@ class OutlookEmailService implements EmailProviderInterface
             ->orderBy('sync_priority')->orderBy('display_name')->get();
         $count = 0;
         $successes = 0;
-        foreach ($folders as $folder) {
-            try {
-                $count += $this->syncFolder($account, $folder, $accessToken, $senderConfigs, $activeRules, $syncLog);
-                $successes++;
-            } catch (Throwable $exception) {
-                $folder->update(['last_sync_error' => mb_substr($exception->getMessage(), 0, 2000)]);
-                $this->recordDatabaseOutcome($syncLog, null, 'failed', 'folder_sync_failed', 1, 0, $exception->getMessage(), $folder);
-                Log::channel('mailbox_sync')->error('folder_sync_failed', [
-                    'sync_run_id' => $syncLog?->id, 'mailbox_id' => $account->id,
-                    'folder_id' => $folder->id, 'exception_class' => $exception::class,
-                ]);
+
+        if ($syncFrom && $syncTo) {
+            $from = \Carbon\Carbon::parse($syncFrom)->startOfDay();
+            $to = \Carbon\Carbon::parse($syncTo)->endOfDay();
+
+            foreach ($folders as $folder) {
+                try {
+                    $result = $this->syncFolderDateRange($account, $folder, $from, $to, $syncLog);
+                    $count += $result['fetched'];
+                    $successes++;
+                } catch (Throwable $exception) {
+                    $folder->update(['last_sync_error' => mb_substr($exception->getMessage(), 0, 2000)]);
+                    $this->recordDatabaseOutcome($syncLog, null, 'failed', 'folder_sync_failed', 1, 0, $exception->getMessage(), $folder);
+                    Log::channel('mailbox_sync')->error('folder_sync_failed', [
+                        'sync_run_id' => $syncLog?->id, 'mailbox_id' => $account->id,
+                        'folder_id' => $folder->id, 'exception_class' => $exception::class,
+                    ]);
+                }
+            }
+        } else {
+            foreach ($folders as $folder) {
+                try {
+                    $count += $this->syncFolder($account, $folder, $accessToken, $senderConfigs, $activeRules, $syncLog);
+                    $successes++;
+                } catch (Throwable $exception) {
+                    $folder->update(['last_sync_error' => mb_substr($exception->getMessage(), 0, 2000)]);
+                    $this->recordDatabaseOutcome($syncLog, null, 'failed', 'folder_sync_failed', 1, 0, $exception->getMessage(), $folder);
+                    Log::channel('mailbox_sync')->error('folder_sync_failed', [
+                        'sync_run_id' => $syncLog?->id, 'mailbox_id' => $account->id,
+                        'folder_id' => $folder->id, 'exception_class' => $exception::class,
+                    ]);
+                }
             }
         }
+
         if ($folders->isNotEmpty() && $successes === 0) throw new RuntimeException('Every enabled mailbox folder failed to sync.');
         $account->update(['last_synced_at' => now(), 'status' => 'connected']);
         return $count;
@@ -166,6 +192,7 @@ class OutlookEmailService implements EmailProviderInterface
         MailboxFolder $folder,
         Carbon $from,
         Carbon $to,
+        ?MailboxSyncLog $syncLog = null,
     ): array {
         $senderConfigs = EmailImportConfig::where('is_active', true)->get();
         $fromIso = $from->copy()->utc()->format('Y-m-d\TH:i:s\Z');
@@ -195,14 +222,9 @@ class OutlookEmailService implements EmailProviderInterface
 
         do {
             $accessToken = $this->getValidAccessToken($account);
-            $request = Http::withToken($accessToken)
-                ->withHeaders([
-                    'ConsistencyLevel' => 'eventual',
-                    'Prefer' => 'IdType="ImmutableId", odata.maxpagesize=100',
-                ])
-                ->retry(3, 5000)
-                ->connectTimeout(10)
-                ->timeout(120);
+            $request = $this->graphHttp($accessToken, $params, [
+                'Prefer' => 'IdType="ImmutableId", odata.maxpagesize=100',
+            ])->timeout(120);
 
             $response = $page === 0
                 ? $request->get($url, $params)
@@ -214,7 +236,7 @@ class OutlookEmailService implements EmailProviderInterface
             }
 
             if (! $response->successful()) {
-                throw new RuntimeException('Microsoft Graph folder sync failed with HTTP '.$response->status());
+                throw new RuntimeException($this->graphErrorMessage($response, $folder->display_name));
             }
 
             $data = $response->json();
@@ -252,7 +274,7 @@ class OutlookEmailService implements EmailProviderInterface
                     $message,
                     $senderConfigs,
                     collect(),
-                    null,
+                    $syncLog,
                     $accessToken,
                     $folder,
                     forcePersist: true,
@@ -340,7 +362,7 @@ class OutlookEmailService implements EmailProviderInterface
     public function discoverFolders(MailboxAccount $account, ?string $accessToken = null): array
     {
         $token = $accessToken ?: $this->getValidAccessToken($account);
-        $inboxResponse = Http::withToken($token)->withHeaders(['Prefer' => 'IdType="ImmutableId"'])
+        $inboxResponse = $this->graphHttp($token)
             ->timeout(30)->get('https://graph.microsoft.com/v1.0/me/mailFolders/inbox', [
                 '$select' => 'id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount',
             ]);
@@ -348,9 +370,11 @@ class OutlookEmailService implements EmailProviderInterface
         $seen = [];
         $walk = function (string $url, ?string $parentName = null) use (&$walk, &$seen, $account, $token, $inboxId): void {
             do {
-                $response = Http::withToken($token)->withHeaders(['Prefer' => 'IdType="ImmutableId"'])
+                $response = $this->graphHttp($token)
                     ->timeout(30)->get($url, ['$top' => 100, '$select' => 'id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount']);
-                if (! $response->successful()) throw new RuntimeException('Folder discovery failed with HTTP '.$response->status());
+                if (! $response->successful()) {
+                    throw new RuntimeException($this->graphErrorMessage($response, 'folder discovery'));
+                }
                 $data = $response->json();
                 foreach ($data['value'] ?? [] as $item) {
                     if (! isset($item['id'])) continue;
@@ -396,7 +420,8 @@ class OutlookEmailService implements EmailProviderInterface
 
     private function syncFolder(MailboxAccount $account, MailboxFolder $folder, string $accessToken, $senderConfigs, $activeRules, ?MailboxSyncLog $syncLog): int
     {
-        $url = $folder->delta_token ?: 'https://graph.microsoft.com/v1.0/me/mailFolders/'.rawurlencode($folder->external_folder_id).'/messages/delta';
+        $deltaBase = 'https://graph.microsoft.com/v1.0/me/mailFolders/'.rawurlencode($folder->external_folder_id).'/messages/delta';
+        $url = $folder->delta_token ?: $deltaBase;
         // 'body' is intentionally excluded — requesting it via Graph API automatically
         // marks the message as read in Outlook. bodyPreview (255 chars) is sufficient
         // for PO extraction; full body can be fetched separately if ever needed.
@@ -405,6 +430,7 @@ class OutlookEmailService implements EmailProviderInterface
             '$filter' => 'receivedDateTime ge '.($account->sync_from_date?->format('Y-m-d') ?? now()->subDay()->format('Y-m-d')).'T00:00:00Z',
         ];
         $count = 0;
+        $resetDelta = false;
         do {
             // Check for a stop signal between page fetches
             if ($syncLog && Cache::pull("mailbox_sync_cancel:{$syncLog->id}")) {
@@ -416,9 +442,35 @@ class OutlookEmailService implements EmailProviderInterface
                 break;
             }
 
-            $response = Http::withToken($accessToken)->withHeaders(['Prefer' => 'IdType="ImmutableId"'])
-                ->retry(3, 5000)->connectTimeout(10)->timeout(60)->get($url, $params);
-            if (! $response->successful()) throw new RuntimeException('Microsoft Graph folder sync failed with HTTP '.$response->status());
+            $accessToken = $this->getValidAccessToken($account);
+            $response = $this->graphHttp($accessToken, $params)
+                ->timeout(60)
+                ->get($url, $params);
+
+            if ($response->status() === 410 && $folder->delta_token) {
+                $folder->update(['delta_token' => null]);
+                $url = $deltaBase;
+                $params = [
+                    '$select' => 'id,conversationId,internetMessageId,subject,from,toRecipients,bodyPreview,isRead,receivedDateTime,hasAttachments',
+                    '$filter' => 'receivedDateTime ge '.($account->sync_from_date?->format('Y-m-d') ?? now()->subDay()->format('Y-m-d')).'T00:00:00Z',
+                ];
+                $resetDelta = true;
+                continue;
+            }
+
+            if (! $response->successful()) {
+                throw new RuntimeException($this->graphErrorMessage($response, $folder->display_name));
+            }
+
+            if ($resetDelta) {
+                Log::channel('mailbox_sync')->info('folder_delta_token_reset', [
+                    'mailbox_id' => $account->id,
+                    'folder_id' => $folder->id,
+                    'folder' => $folder->display_name,
+                ]);
+                $resetDelta = false;
+            }
+
             $data = $response->json();
             foreach ($data['value'] ?? [] as $message) {
                 $count++;
@@ -474,14 +526,12 @@ class OutlookEmailService implements EmailProviderInterface
             // Retry up to 3 times with 5-second back-off for transient cURL/network
             // errors (e.g. cURL 28 timeout). Each attempt has a 60-second deadline
             // — generous enough for Graph's paginated delta responses.
-            $response = Http::withToken($accessToken)
-                ->retry(3, 5000)
-                ->connectTimeout(10)
+            $response = $this->graphHttp($accessToken, $params)
                 ->timeout(60)
                 ->get($url, $params);
 
             if (! $response->successful()) {
-                throw new RuntimeException('Microsoft Graph error: '.$response->body());
+                throw new RuntimeException($this->graphErrorMessage($response, 'Inbox'));
             }
 
             $data = $response->json();
@@ -700,11 +750,23 @@ class OutlookEmailService implements EmailProviderInterface
             'has_attachments' => $message['hasAttachments'] ?? false,
         ];
 
+        $importDecision = $this->resolveSenderImportConfig($fromEmail, $senderConfigs);
+        $attributes['email_import_config_id'] = $importDecision['config']?->id;
+        $attributes['matched_customer_id'] = $importDecision['customer_id'];
+        $attributes['matched_branch_tag'] = $importDecision['branch_tag'];
+        $attributes['import_match_strategy'] = $importDecision['strategy'];
+        $attributes['import_guardrail_status'] = $importDecision['status'];
+        $attributes['import_guardrail_reason'] = $importDecision['reason'];
+
         $email = Email::firstOrNew(['mailbox_account_id' => $account->id, 'message_id' => $messageId]);
         $email->fill($attributes);
 
         if (! $email->exists) {
             $email->save();
+
+            if ($importDecision['config']) {
+                $this->touchImportConfigUsage($importDecision['config'], $importDecision['status']);
+            }
 
             return ['outcome' => 'created', 'reason' => null, 'email_id' => $email->id];
         }
@@ -715,6 +777,10 @@ class OutlookEmailService implements EmailProviderInterface
                 $email->touch();
             }
             $email->save();
+
+            if ($importDecision['config']) {
+                $this->touchImportConfigUsage($importDecision['config'], $importDecision['status']);
+            }
 
             return [
                 'outcome' => $hadFieldChanges ? 'updated' : 'synced',
@@ -729,7 +795,127 @@ class OutlookEmailService implements EmailProviderInterface
 
         $email->save();
 
+        if ($importDecision['config']) {
+            $this->touchImportConfigUsage($importDecision['config'], $importDecision['status']);
+        }
+
         return ['outcome' => 'updated', 'reason' => 'fields_changed', 'email_id' => $email->id];
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, EmailImportConfig> $senderConfigs
+     * @return array{config:?EmailImportConfig,customer_id:?int,branch_tag:?string,strategy:?string,status:string,reason:?string}
+     */
+    private function resolveSenderImportConfig(string $fromEmail, $senderConfigs): array
+    {
+        $senderEmail = strtolower(trim($fromEmail));
+        if ($senderEmail === '') {
+            return [
+                'config' => null,
+                'customer_id' => null,
+                'branch_tag' => null,
+                'strategy' => null,
+                'status' => 'unrecognized',
+                'reason' => 'sender_email_missing',
+            ];
+        }
+
+        EmailImportConfig::autoDeactivateDormantExactConfigs();
+
+        /** @var ?EmailImportConfig $config */
+        $config = $senderConfigs
+            ->filter(fn (EmailImportConfig $candidate) => $candidate->is_active)
+            ->sortBy(fn (EmailImportConfig $candidate) => match ($candidate->match_mode) {
+                EmailImportConfig::MATCH_MODE_EXACT => 0,
+                EmailImportConfig::MATCH_MODE_WILDCARD => 1,
+                EmailImportConfig::MATCH_MODE_REGEX => 2,
+                default => 3,
+            })
+            ->first(fn (EmailImportConfig $candidate) => $candidate->matchesSender($senderEmail));
+
+        if (! $config) {
+            return [
+                'config' => null,
+                'customer_id' => null,
+                'branch_tag' => null,
+                'strategy' => null,
+                'status' => 'unrecognized',
+                'reason' => 'sender_not_preapproved',
+            ];
+        }
+
+        if (! $config->isApproved()) {
+            return [
+                'config' => $config,
+                'customer_id' => null,
+                'branch_tag' => null,
+                'strategy' => $config->match_mode,
+                'status' => 'pending_approval',
+                'reason' => 'sender_config_pending_dual_admin_approval',
+            ];
+        }
+
+        if ($config->auto_deactivated_at !== null && ! $config->is_active) {
+            return [
+                'config' => $config,
+                'customer_id' => null,
+                'branch_tag' => null,
+                'strategy' => $config->match_mode,
+                'status' => 'expired',
+                'reason' => 'sender_config_auto_deactivated_after_90_days',
+            ];
+        }
+
+        if ($config->match_mode !== EmailImportConfig::MATCH_MODE_EXACT && ! $this->canImportWildcardSender()) {
+            return [
+                'config' => $config,
+                'customer_id' => $config->customer_id,
+                'branch_tag' => $config->extractBranchTag($senderEmail),
+                'strategy' => $config->match_mode,
+                'status' => 'rate_limited',
+                'reason' => 'wildcard_import_hourly_limit_reached',
+            ];
+        }
+
+        return [
+            'config' => $config,
+            'customer_id' => $config->customer_id,
+            'branch_tag' => $config->extractBranchTag($senderEmail),
+            'strategy' => $config->match_mode,
+            'status' => 'matched',
+            'reason' => null,
+        ];
+    }
+
+    private function touchImportConfigUsage(EmailImportConfig $config, string $status): void
+    {
+        $config->forceFill(['last_matched_at' => now()]);
+
+        if ($status === 'matched') {
+            $config->forceFill(['last_imported_at' => now()]);
+            if ($config->match_mode !== EmailImportConfig::MATCH_MODE_EXACT) {
+                $this->incrementWildcardImportCounter();
+            }
+        }
+
+        $config->save();
+    }
+
+    private function canImportWildcardSender(): bool
+    {
+        return (int) Cache::get($this->wildcardImportCacheKey(), 0) < 500;
+    }
+
+    private function incrementWildcardImportCounter(): void
+    {
+        $key = $this->wildcardImportCacheKey();
+        Cache::add($key, 0, now()->endOfHour());
+        Cache::increment($key);
+    }
+
+    private function wildcardImportCacheKey(): string
+    {
+        return 'email_import:wildcard:' . now()->format('YmdH');
     }
 
     private function plainTextBody(mixed $content, mixed $contentType): ?string
@@ -745,7 +931,7 @@ class OutlookEmailService implements EmailProviderInterface
     private function syncAttachments(string $accessToken, int $emailId, string $messageId): void
     {
         try {
-            $list = Http::withToken($accessToken)->timeout(30)->get(
+            $list = $this->graphHttp($accessToken)->timeout(30)->get(
                 'https://graph.microsoft.com/v1.0/me/messages/'.rawurlencode($messageId).'/attachments',
                 ['$select' => 'id,name,contentType,size,isInline'],
             );
@@ -777,7 +963,7 @@ class OutlookEmailService implements EmailProviderInterface
                 }
 
                 // Download raw bytes from Graph API
-                $content = Http::withToken($accessToken)->timeout(60)->get(
+                $content = $this->graphHttp($accessToken)->timeout(60)->get(
                     'https://graph.microsoft.com/v1.0/me/messages/'.rawurlencode($messageId).'/attachments/'.rawurlencode($item['id'])
                 );
 
@@ -956,6 +1142,44 @@ class OutlookEmailService implements EmailProviderInterface
         }
 
         return $token;
+    }
+
+    /** @param  array<string, string>  $extraHeaders */
+    private function graphHttp(string $accessToken, array $params = [], array $extraHeaders = []): PendingRequest
+    {
+        return Http::withToken($accessToken)
+            ->withHeaders(array_merge($this->graphHeaders($params), $extraHeaders))
+            ->withUserAgent($this->graphUserAgent())
+            ->retry(3, 5000)
+            ->connectTimeout(10);
+    }
+
+    private function graphUserAgent(): string
+    {
+        return (string) config(
+            'services.microsoft.graph_user_agent',
+            'OrderWatch/1.0 (Kim-Fay OrderWatch; +https://orderwatch.fayshop.co.ke)',
+        );
+    }
+
+    /** @param  array<string, mixed>  $params */
+    private function graphHeaders(array $params = []): array
+    {
+        $headers = ['Prefer' => 'IdType="ImmutableId"'];
+
+        if (isset($params['$filter'])) {
+            $headers['ConsistencyLevel'] = 'eventual';
+        }
+
+        return $headers;
+    }
+
+    private function graphErrorMessage(Response $response, string $folderLabel): string
+    {
+        $detail = $response->json('error.message') ?? trim($response->body());
+        $detail = is_string($detail) ? mb_substr($detail, 0, 500) : '';
+
+        return trim("Microsoft Graph folder sync failed for {$folderLabel} with HTTP {$response->status()}. {$detail}");
     }
 
     /** Resolve the mailbox identity from Graph first, then from standard JWT claims. */

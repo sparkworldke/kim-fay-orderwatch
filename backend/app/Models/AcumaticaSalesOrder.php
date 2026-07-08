@@ -26,6 +26,20 @@ class AcumaticaSalesOrder extends Model
         self::TYPE_PICK_LIST,
     ];
 
+    public const REJECTION_REASON_CODES = [
+        'out_of_stock',
+        'customer_request',
+        'invalid_payment',
+        'address_error',
+        'pricing_dispute',
+        'credit_limit',
+        'duplicate_order',
+        'fraud_screen',
+    ];
+
+    /** @var list<string> */
+    protected $appends = ['description'];
+
     protected $fillable = [
         'acumatica_order_nbr',
         'order_type',
@@ -40,6 +54,9 @@ class AcumaticaSalesOrder extends Model
         'requested_on',
         'order_total',
         'currency_id',
+        'sales_consultant_rep_code',
+        'sales_consultant_name',
+        'import_source',
         'sync_run_id',
         'raw_payload',
         'synced_at',
@@ -50,6 +67,7 @@ class AcumaticaSalesOrder extends Model
         'match_status',
         'flag_source',
         'rejection_reason',
+        'rejection_reason_code',
         'on_hold_reason',
         'email_subject',
         'email_received_at',
@@ -70,6 +88,30 @@ class AcumaticaSalesOrder extends Model
             'order_total'      => 'decimal:2',
             'raw_payload'      => 'array',
         ];
+    }
+
+    /**
+     * Expose the Acumatica order-level Description from the raw payload.
+     * Payload shape: {"Description": {"value": "MTITO ANDEI KPC"}}
+     */
+    public function getDescriptionAttribute(): ?string
+    {
+        $payload = $this->raw_payload;
+        if (! is_array($payload)) {
+            return null;
+        }
+
+        $raw = $payload['Description'] ?? null;
+        if (is_array($raw) && isset($raw['value'])) {
+            $val = trim((string) $raw['value']);
+            return $val !== '' ? $val : null;
+        }
+        if (is_string($raw)) {
+            $val = trim($raw);
+            return $val !== '' ? $val : null;
+        }
+
+        return null;
     }
 
     public function lines(): HasMany

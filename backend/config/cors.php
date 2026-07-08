@@ -30,6 +30,7 @@ return [
         'https://kim-fay-orderwatch.tools',
         'https://orderwatchkimfay.nairobidental.workers.dev',
         'https://dating.sparkworld.co.ke',
+        'https://orderwatchkimfay.sharedsys.workers.dev',
     ],
 
     'allowed_origins_patterns' => [],

@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch, ApiError } from "@/lib/api";
+import { setSession, setToken } from "@/lib/auth";
+import type { Role } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -48,6 +51,12 @@ interface ProfileErrors {
   phone_number?: string[];
 }
 
+interface PasswordUpdateResponse {
+  message: string;
+  token: string;
+  user: { id: number; name: string; email: string; role: string; rep_code?: string | null };
+}
+
 // ── Helper ───────────────────────────────────────────────────────────────────
 
 function formatLoginMode(mode: string): string {
@@ -87,6 +96,14 @@ function ProfilePage() {
   const [name, setName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [fieldErrors, setFieldErrors] = useState<ProfileErrors>({});
+  const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
+  const [passwordOtp, setPasswordOtp] = useState("");
+  const [passwordOtpVerified, setPasswordOtpVerified] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showNewPasswordConfirmation, setShowNewPasswordConfirmation] = useState(false);
+  const [passwordOtpSecondsLeft, setPasswordOtpSecondsLeft] = useState(0);
 
   // Sync query data into form state
   useEffect(() => {
@@ -95,6 +112,16 @@ function ProfilePage() {
       setPhoneNumber(profile.phone_number ?? "");
     }
   }, [profile]);
+
+  useEffect(() => {
+    if (!passwordPanelOpen || passwordOtpSecondsLeft <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setPasswordOtpSecondsLeft((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [passwordPanelOpen, passwordOtpSecondsLeft]);
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -122,6 +149,75 @@ function ProfilePage() {
     },
   });
 
+  const requestPasswordOtpMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<{ message: string }>("profile/password/otp", {
+        method: "POST",
+      }),
+    onSuccess: (data) => {
+      setPasswordPanelOpen(true);
+      setPasswordOtp("");
+      setPasswordOtpVerified(false);
+      setNewPassword("");
+      setNewPasswordConfirmation("");
+      setPasswordOtpSecondsLeft(900);
+      toast.success(data.message || "Verification code sent to your email");
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Failed to send verification code");
+    },
+  });
+
+  const verifyPasswordOtpMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<{ message: string }>("profile/password/otp/verify", {
+        method: "POST",
+        body: { otp: passwordOtp },
+      }),
+    onSuccess: (data) => {
+      setPasswordOtpVerified(true);
+      toast.success(data.message || "Verification code confirmed");
+    },
+    onError: (err: unknown) => {
+      setPasswordOtpVerified(false);
+      toast.error(err instanceof Error ? err.message : "Verification failed");
+    },
+  });
+
+  const updatePasswordMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<PasswordUpdateResponse>("profile/password", {
+        method: "PATCH",
+        body: {
+          otp: passwordOtp,
+          new_password: newPassword,
+          new_password_confirmation: newPasswordConfirmation,
+        },
+      }),
+    onSuccess: (data) => {
+      setToken(data.token);
+      setSession({
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role as Role,
+        rep_code: data.user.rep_code ?? null,
+        loggedInAt: new Date().toISOString(),
+        token: data.token,
+      });
+      setPasswordPanelOpen(false);
+      setPasswordOtp("");
+      setPasswordOtpVerified(false);
+      setNewPassword("");
+      setNewPasswordConfirmation("");
+      setPasswordOtpSecondsLeft(0);
+      toast.success(data.message || "Password updated successfully");
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Password update failed");
+    },
+  });
+
   // ── Sign-in logs query ──────────────────────────────────────────────────
   const [page, setPage] = useState(1);
 
@@ -129,6 +225,15 @@ function ProfilePage() {
     queryKey: ["sign-in-logs", page],
     queryFn: () => apiFetch<SignInLogsResponse>(`profile/sign-in-logs?page=${page}`),
   });
+
+  const passwordMatches =
+    newPassword.length > 0 && newPassword === newPasswordConfirmation;
+  const canSetPassword =
+    passwordOtpVerified &&
+    passwordOtp.length === 6 &&
+    newPassword.length >= 8 &&
+    passwordMatches &&
+    !updatePasswordMutation.isPending;
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -206,6 +311,178 @@ function ProfilePage() {
                 )}
                 Save changes
               </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Password Update ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" />
+            Update Password
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Start a password update by verifying a code sent to your registered email.
+          </p>
+
+          {!passwordPanelOpen ? (
+            <Button
+              variant="outline"
+              onClick={() => requestPasswordOtpMutation.mutate()}
+              disabled={requestPasswordOtpMutation.isPending}
+            >
+              {requestPasswordOtpMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Send verification code
+            </Button>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Verification code</Label>
+                <InputOTP
+                  maxLength={6}
+                  value={passwordOtp}
+                  onChange={(value) => {
+                    setPasswordOtp(value);
+                    setPasswordOtpVerified(false);
+                  }}
+                  containerClassName="w-full"
+                >
+                  <InputOTPGroup className="w-full">
+                    {[0, 1, 2, 3, 4, 5].map((index) => (
+                      <InputOTPSlot
+                        key={index}
+                        index={index}
+                        className="h-12 flex-1 rounded-none border-y border-r bg-muted/40 text-lg first:rounded-l-md first:border-l last:rounded-r-md"
+                      />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+                <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    {passwordOtpSecondsLeft > 0
+                      ? `Code expires in ${passwordOtpSecondsLeft}s`
+                      : "Request a new code if this one expired."}
+                  </span>
+                  <button
+                    type="button"
+                    className="self-start font-medium text-primary hover:underline disabled:opacity-50 sm:self-auto"
+                    onClick={() => requestPasswordOtpMutation.mutate()}
+                    disabled={requestPasswordOtpMutation.isPending}
+                  >
+                    {requestPasswordOtpMutation.isPending ? "Sending..." : "Resend OTP"}
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant={passwordOtpVerified ? "secondary" : "default"}
+                onClick={() => verifyPasswordOtpMutation.mutate()}
+                disabled={
+                  passwordOtp.length !== 6 ||
+                  verifyPasswordOtpMutation.isPending ||
+                  passwordOtpVerified
+                }
+              >
+                {verifyPasswordOtpMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {passwordOtpVerified ? "OTP verified" : "Verify OTP"}
+              </Button>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-password">New password</Label>
+                  <div className="relative">
+                    <Input
+                      id="new-password"
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      disabled={!passwordOtpVerified}
+                      placeholder="At least 8 characters"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((value) => !value)}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      disabled={!passwordOtpVerified}
+                      aria-label={showNewPassword ? "Hide password" : "Show password"}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {newPassword.length > 0 && newPassword.length < 8 && (
+                    <p className="text-xs text-destructive">
+                      Password must be at least 8 characters.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-password-confirmation">Confirm new password</Label>
+                  <div className="relative">
+                    <Input
+                      id="new-password-confirmation"
+                      type={showNewPasswordConfirmation ? "text" : "password"}
+                      value={newPasswordConfirmation}
+                      onChange={(event) => setNewPasswordConfirmation(event.target.value)}
+                      disabled={!passwordOtpVerified}
+                      placeholder="Re-enter new password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPasswordConfirmation((value) => !value)}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      disabled={!passwordOtpVerified}
+                      aria-label={showNewPasswordConfirmation ? "Hide password" : "Show password"}
+                    >
+                      {showNewPasswordConfirmation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {newPasswordConfirmation.length > 0 && !passwordMatches && (
+                    <p className="text-xs text-destructive">Passwords do not match.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  onClick={() => updatePasswordMutation.mutate()}
+                  disabled={!canSetPassword}
+                >
+                  {updatePasswordMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Set new password
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setPasswordPanelOpen(false);
+                    setPasswordOtp("");
+                    setPasswordOtpVerified(false);
+                    setNewPassword("");
+                    setNewPasswordConfirmation("");
+                    setPasswordOtpSecondsLeft(0);
+                  }}
+                  disabled={updatePasswordMutation.isPending}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

@@ -15,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'admin.only' => \App\Http\Middleware\AdminOnly::class,
+            'admin.or.manager' => \App\Http\Middleware\AdminOrCustomerServiceManager::class,
+            'admin.or.cs' => \App\Http\Middleware\AdminOrCustomerService::class,
+            'view.only' => \App\Http\Middleware\ViewOnlyUnlessPrivileged::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

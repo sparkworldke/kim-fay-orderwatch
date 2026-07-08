@@ -1,9 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { CustomerLink } from "@/components/entity-links";
+import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown,
-  Building2, RefreshCw, Users,
+  Building2, RefreshCw, Search, Users,
 } from "lucide-react";
 import {
   flexRender,
@@ -15,7 +17,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge as SharedStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,6 +91,8 @@ function CustomersPage() {
   const [selectedClass, setSelectedClass]       = useState<string | null>(null);
   const [statFilter, setStatFilter]             = useState<StatCardFilter | null>(null);
   const [search, setSearch]                     = useState("");
+  const [globalSearch, setGlobalSearch]         = useState("");
+  const [categoryQuickFilter, setCategoryQuickFilter] = useState<"all" | "KP" | "CS">("all");
   const [selectedCustomer, setSelectedCustomer] = useState<AcumaticaCustomer | null>(null);
 
   const categories = useCategories();
@@ -98,6 +102,8 @@ function CustomersPage() {
     setSelectedClass(null);
     setStatFilter(null);
     setSearch("");
+    setGlobalSearch("");
+    setCategoryQuickFilter("all");
   }
 
   function handleStatCard(key: StatCardFilter) {
@@ -105,6 +111,8 @@ function CustomersPage() {
     setStatFilter((prev) => (prev === key ? null : key));
     setSelectedClass(null);
     setSearch("");
+    setGlobalSearch("");
+    setCategoryQuickFilter("all");
   }
 
   // Derived title/subtitle
@@ -116,6 +124,7 @@ function CustomersPage() {
   };
   const isFiltered = statFilter !== null;
   const isCategoryView = !isFiltered && selectedClass;
+  const isHomeView = !isFiltered && !selectedClass;
 
   return (
     <div className="space-y-5">
@@ -165,6 +174,17 @@ function CustomersPage() {
         onFilter={handleStatCard}
       />
 
+      {/* Global search + KP / CS quick-filter — shown on the home view */}
+      {isHomeView && (
+        <GlobalCustomerSearch
+          search={globalSearch}
+          onSearch={(v) => { setGlobalSearch(v); setCategoryQuickFilter("all"); }}
+          categoryFilter={categoryQuickFilter}
+          onCategoryFilter={(v) => { setCategoryQuickFilter(v); setGlobalSearch(""); }}
+          onSelectCustomer={setSelectedCustomer}
+        />
+      )}
+
       {/* Stat-filter table — shown when a stat card is active */}
       {isFiltered && (
         <StatFilterTable
@@ -173,8 +193,8 @@ function CustomersPage() {
         />
       )}
 
-      {/* Category card grid */}
-      {!isFiltered && !selectedClass && (
+      {/* Category card grid — only on home view when no global search / filter active */}
+      {isHomeView && globalSearch === "" && categoryQuickFilter === "all" && (
         <CategoryGrid
           data={categories.data}
           loading={categories.isLoading}
@@ -362,7 +382,14 @@ function StatFilterTable({
     {
       accessorKey: "name",
       header: "Customer Name",
-      cell: ({ row }) => <span className="font-medium text-sm">{row.original.name}</span>,
+      cell: ({ row }) => (
+        <CustomerLink
+          customerId={row.original.acumatica_id}
+          className="text-sm font-medium"
+        >
+          {row.original.name}
+        </CustomerLink>
+      ),
     },
     {
       accessorKey: "acumatica_id",
@@ -718,9 +745,25 @@ function CategoryDetailView({
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className={`font-medium text-sm ${row.original.parent_name ? "text-foreground/80" : ""}`}>
-                {row.original.name}
-              </span>
+              {row.original.parent_name && row.original.parent_acumatica_id ? (
+                <Link
+                  to="/app/customer-orders/$customerId/branch/$branchId"
+                  params={{ customerId: row.original.parent_acumatica_id, branchId: row.original.acumatica_id }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-sm font-medium text-foreground/80 underline-offset-4 hover:underline"
+                >
+                  {row.original.name}
+                </Link>
+              ) : (
+                <Link
+                  to="/app/customer-orders/$customerId"
+                  params={{ customerId: row.original.acumatica_id }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-sm font-medium underline-offset-4 hover:underline"
+                >
+                  {row.original.name}
+                </Link>
+              )}
               {row.original.is_main_account && (
                 <Badge variant="outline" className="text-[9px] border-primary/30 bg-primary/5 text-primary shrink-0">
                   Main
@@ -986,6 +1029,21 @@ function CustomerDetailSheet({ customer }: { customer: CustomerWithBranches }) {
         <SheetDescription className="font-mono text-xs">{customer.acumatica_id}</SheetDescription>
       </SheetHeader>
 
+      <Button asChild size="sm" variant="outline" className="mt-4">
+        {customer.parent_acumatica_id ? (
+          <Link
+            to="/app/customer-orders/$customerId/branch/$branchId"
+            params={{ customerId: customer.parent_acumatica_id, branchId: customer.acumatica_id }}
+          >
+            View order history →
+          </Link>
+        ) : (
+          <Link to="/app/customer-orders/$customerId" params={{ customerId: customer.acumatica_id }}>
+            View order history →
+          </Link>
+        )}
+      </Button>
+
       <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
         {[
           ["Category",      customer.customer_class ?? "—"],
@@ -1061,23 +1119,173 @@ function CustomerDetailSheet({ customer }: { customer: CustomerWithBranches }) {
 }
 
 // -------------------------------------------------------------------------
+// Global customer search with KP / CS quick-filter chips
+// Shown on the home view (no stat card active, no category selected)
+// -------------------------------------------------------------------------
+
+type CategoryQuickFilter = "all" | "KP" | "CS";
+
+function GlobalCustomerSearch({
+  search,
+  onSearch,
+  categoryFilter,
+  onCategoryFilter,
+  onSelectCustomer,
+}: {
+  search: string;
+  onSearch: (v: string) => void;
+  categoryFilter: CategoryQuickFilter;
+  onCategoryFilter: (v: CategoryQuickFilter) => void;
+  onSelectCustomer: (c: AcumaticaCustomer) => void;
+}) {
+  const [page, setPage]       = useState(1);
+  const [perPage, setPerPage] = useState(50);
+
+  // Derive the class prefix to pass to the API
+  const classPrefix: string | undefined =
+    categoryFilter === "KP" ? "KP" :
+    categoryFilter === "CS" ? "CS" :
+    undefined;
+
+  const { data, isLoading, isError, refetch } = useCustomers({
+    q:            search || undefined,
+    class_prefix: classPrefix,
+    page,
+    per_page: perPage,
+  });
+
+  // Only show results when a search term is typed or a category filter is active
+  const showResults = search.trim() !== "" || categoryFilter !== "all";
+
+  const QUICK_FILTERS: { key: CategoryQuickFilter; label: string; description: string }[] = [
+    { key: "KP",  label: "KP",             description: "Key Partner accounts" },
+    { key: "CS",  label: "Consumer Sales",  description: "Consumer Sales accounts" },
+  ];
+
+  return (
+    <div className="space-y-3">
+      {/* Search bar + quick-filter chips */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by customer name or ID…"
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            className="pl-8 h-9 text-sm"
+          />
+        </div>
+
+        {/* Quick-filter chips */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Category:</span>
+          {QUICK_FILTERS.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              title={chip.description}
+              onClick={() => onCategoryFilter(categoryFilter === chip.key ? "all" : chip.key)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                categoryFilter === chip.key
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-muted bg-muted/40 text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
+          {categoryFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => onCategoryFilter("all")}
+              className="text-[10px] text-muted-foreground hover:text-foreground underline"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        {showResults && data && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {data.total} customer{data.total !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {/* Results table — only shown when actively searching or filtering */}
+      {showResults && (
+        <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
+          {isLoading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+            </div>
+          ) : isError ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              Failed to load customers.{" "}
+              <button className="underline" onClick={() => refetch()}>Retry</button>
+            </div>
+          ) : (data?.data ?? []).length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              No customers match your search.
+            </div>
+          ) : (
+            <>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Customer</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Category</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</th>
+                    <th className="px-4 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {(data?.data ?? []).map((c) => (
+                    <tr
+                      key={c.acumatica_id}
+                      className="cursor-pointer hover:bg-muted/20 transition-colors"
+                      onClick={() => onSelectCustomer(c)}
+                    >
+                      <td className="px-4 py-2.5">
+                        <CustomerLink customerId={c.acumatica_id} className="text-sm font-medium">
+                          {c.name}
+                        </CustomerLink>
+                        <div className="font-mono text-[11px] text-muted-foreground">{c.acumatica_id}</div>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{c.customer_class ?? "—"}</td>
+                      <td className="px-4 py-2.5"><StatusBadge status={c.status} /></td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{c.email ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{c.phone ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right text-[10px] text-muted-foreground/50">Details →</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="border-t bg-muted/20 px-4 py-2">
+                <PaginationControls
+                  currentPage={data?.current_page ?? 1}
+                  lastPage={data?.last_page ?? 1}
+                  total={data?.total ?? 0}
+                  perPage={perPage}
+                  onPageChange={setPage}
+                  onPerPageChange={(s) => { setPerPage(s); setPage(1); }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------
 // Shared
 // -------------------------------------------------------------------------
 
 function StatusBadge({ status }: { status: string | null }) {
-  const s = (status ?? "").toLowerCase();
-  const tone =
-    s === "active"
-      ? "border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300"
-    : s === "inactive"
-      ? "border-muted bg-muted/30 text-muted-foreground"
-    : s === "on hold" || s === "onhold"
-      ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-    : "border-muted bg-muted/30 text-muted-foreground";
-
-  return (
-    <span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium ${tone}`}>
-      {status ?? "—"}
-    </span>
-  );
+  if (!status) return <span className="text-muted-foreground text-[10px]">—</span>;
+  return <SharedStatusBadge status={status} />;
 }

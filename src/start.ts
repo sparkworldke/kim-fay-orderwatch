@@ -1,6 +1,7 @@
 import { createStart, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { getServerApiBaseUrl, serverFetch } from "./lib/server-api";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -28,13 +29,10 @@ const authMiddleware = createMiddleware().server(async ({ request, next }) => {
     return Response.redirect(new URL("/auth", url), 302);
   }
 
-  const apiBase = (
-    (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-    "https://kim-fay-orderwatch.tools/backend/public/api"
-  ).replace(/\/+$/, "");
+  const apiBase = getServerApiBaseUrl();
 
   try {
-    const response = await fetch(`${apiBase}/auth/me`, {
+    const response = await serverFetch(`${apiBase}/auth/me`, {
       headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(8_000),
     });

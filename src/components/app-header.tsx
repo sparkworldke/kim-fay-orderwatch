@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth";
+import { canSyncMailboxes } from "@/lib/nav-permissions";
 import { useSyncAllMailboxes } from "@/hooks/mailbox/useMailbox";
 
 export function AppHeader() {
@@ -37,18 +38,20 @@ export function AppHeader() {
       </div>
 
       <div className="ml-auto flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={syncAll.isPending}
-          onClick={() => syncAll.mutate()}
-          aria-label="Sync mailboxes"
-          title="Sync all mailboxes now"
-        >
-          {syncAll.isPending
-            ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <RefreshCw className="h-4 w-4" />}
-        </Button>
+        {canSyncMailboxes(session?.role) && (
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={syncAll.isPending}
+            onClick={() => syncAll.mutate({})}
+            aria-label="Sync mailboxes"
+            title="Sync all mailboxes now"
+          >
+            {syncAll.isPending
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <RefreshCw className="h-4 w-4" />}
+          </Button>
+        )}
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -69,7 +72,9 @@ export function AppHeader() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate({ to: "/app/profile" })}>Profile</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate({ to: "/app/administration" })}>Administration</DropdownMenuItem>
+            {canSyncMailboxes(session?.role) && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/app/administration" })}>Administration</DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => {

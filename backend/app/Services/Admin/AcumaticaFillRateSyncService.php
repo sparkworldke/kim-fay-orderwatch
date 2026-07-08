@@ -2,15 +2,29 @@
 
 namespace App\Services\Admin;
 
+use App\Exceptions\AcumaticaSyncStoppedException;
 use App\Models\AcumaticaDeadLetter;
 use App\Models\AcumaticaFillRateSnapshot;
 use App\Models\AcumaticaSalesOrder;
 use App\Models\AcumaticaSalesOrderLine;
 use App\Models\AcumaticaSyncLog;
+use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
 use Throwable;
 
 class AcumaticaFillRateSyncService
 {
+    use InteractsWithAcumaticaSyncRun;
+
+    /** @var array<string, int|list<string>> */
+    private array $guardrailSummary = [
+        'orders_computed'              => 0,
+        'orders_computed_na'           => 0,
+        'lines_out_of_stock'           => 0,
+        'lines_partial_shortage'       => 0,
+        'lines_shipped_qty_fallback'   => 0,
+        'lines_with_acumatica_reason'  => 0,
+    ];
+
     public function __construct(
         private readonly AcumaticaClient $client,
         private readonly FillRateCalculator $calculator,
@@ -19,7 +33,12 @@ class AcumaticaFillRateSyncService
 
     public function syncDateRange(string $dateFrom, string $dateTo, ?int $triggeredByUserId = null, string $triggerType = 'manual', ?int $cronRunLogId = null): AcumaticaSyncLog
     {
-        $run = AcumaticaSyncLog::create([
+        $this->assertNoActiveSync(
+            ['fill_rate'],
+            'A fill-rate sync is already running. Wait for it to finish or stop it first.',
+        );
+
+        $run = $this->createSyncRun([
             'sync_type'            => 'fill_rate',
             'cron_run_log_id'      => $cronRunLogId,
             'started_at'           => now(),
@@ -33,11 +52,14 @@ class AcumaticaFillRateSyncService
         ]);
 
         try {
-            $orders = $this->client->fetchOrdersForFillRate($dateFrom, $dateTo);
+            $orders = $this->client->fetchOrdersForFillRate($dateFrom, $dateTo, fn () => $this->touchSyncRun($run));
             $run    = $this->processOrders($orders, $run);
+        } catch (AcumaticaSyncStoppedException $e) {
+            $run = $this->stopSyncRun($run, $e->getMessage());
         } catch (Throwable $e) {
             $run->update([
                 'ended_at'      => now(),
+                'heartbeat_at'  => now(),
                 'status'        => 'failed',
                 'error_message' => $e->getMessage(),
             ]);
@@ -48,11 +70,22 @@ class AcumaticaFillRateSyncService
 
     private function processOrders(array $orders, AcumaticaSyncLog $run): AcumaticaSyncLog
     {
+        $this->guardrailSummary = [
+            'orders_computed'              => 0,
+            'orders_computed_na'           => 0,
+            'lines_out_of_stock'           => 0,
+            'lines_partial_shortage'       => 0,
+            'lines_shipped_qty_fallback'   => 0,
+            'lines_with_acumatica_reason'  => 0,
+        ];
+
         $total   = count($orders);
         $success = 0;
         $failed  = 0;
 
         foreach ($orders as $raw) {
+            $this->touchSyncRun($run);
+
             try {
                 $this->upsertFillRate($raw, $run->id);
                 $success++;
@@ -74,10 +107,12 @@ class AcumaticaFillRateSyncService
 
         $run->update([
             'ended_at'      => now(),
+            'heartbeat_at'  => now(),
             'status'        => $failed === $total && $total > 0 ? 'failed' : 'completed',
             'record_count'  => $total,
             'success_count' => $success,
             'failed_count'  => $failed,
+            'filters'       => array_merge($run->filters ?? [], $this->guardrailSummary),
         ]);
 
         return $run;
@@ -106,16 +141,22 @@ class AcumaticaFillRateSyncService
             }
 
             $mapped = SalesOrderLineFulfillmentDeriver::mapFromRaw($lineRaw);
+            $this->recordLineGuardrails($mapped);
             $linePayloads[] = [
-                'inventory_id'    => $mapped['inventory_id'],
-                'order_qty'       => $mapped['order_qty'],
-                'qty_at_approval' => $mapped['qty_at_approval'],
-                'shipped_qty'     => $mapped['shipped_qty'],
-                'unit_price'      => $mapped['unit_price'],
+                'inventory_id'      => $mapped['inventory_id'],
+                'order_qty'         => $mapped['order_qty'],
+                'qty_at_approval'   => $mapped['qty_at_approval'],
+                'qty_on_shipments'  => $mapped['qty_on_shipments'],
+                'unit_price'        => $mapped['unit_price'],
             ];
         }
 
         $computed = $this->calculator->compute($status, $linePayloads);
+        if ($computed['fill_rate_status'] === 'na') {
+            $this->guardrailSummary['orders_computed_na']++;
+        } else {
+            $this->guardrailSummary['orders_computed']++;
+        }
 
         $localOrder = AcumaticaSalesOrder::where('acumatica_order_nbr', $orderNbr)->first();
 
@@ -133,8 +174,9 @@ class AcumaticaFillRateSyncService
                 'total_shipped_qty'   => $computed['total_shipped_qty'],
                 'fill_rate_pct'       => $computed['fill_rate_pct'],
                 'fill_rate_status'    => $computed['fill_rate_status'],
-                'revenue_not_shipped' => $computed['revenue_not_shipped'],
-                'currency_id'         => $currencyId,
+                'revenue_not_shipped'     => $computed['revenue_not_shipped'],
+                'out_of_stock_line_count' => $computed['out_of_stock_line_count'],
+                'currency_id'             => $currencyId,
                 'sync_run_id'         => $runId,
                 'computed_at'         => now(),
             ],
@@ -163,12 +205,14 @@ class AcumaticaFillRateSyncService
                     'line_nbr'           => $mapped['line_nbr'],
                     'description'        => $mapped['description'],
                     'order_qty'          => $mapped['order_qty'],
-                    'shipped_qty'        => $mapped['shipped_qty'],
-                    'open_qty'           => $mapped['open_qty'],
-                    'cancelled_qty'      => $mapped['cancelled_qty'],
-                    'qty_at_approval'    => $mapped['qty_at_approval'],
-                    'backorder_qty'      => $mapped['backorder_qty'],
-                    'fill_rate_pct'      => $mapped['fill_rate_pct'],
+                    'shipped_qty'          => $mapped['shipped_qty'],
+                    'qty_on_shipments'     => $mapped['qty_on_shipments'],
+                    'open_qty'             => $mapped['open_qty'],
+                    'cancelled_qty'        => $mapped['cancelled_qty'],
+                    'qty_at_approval'      => $mapped['qty_at_approval'],
+                    'backorder_qty'        => $mapped['backorder_qty'],
+                    'fill_rate_pct'        => $mapped['fill_rate_pct'],
+                    'unfilled_reason_code' => $mapped['unfilled_reason_code'],
                     'line_type'          => $mapped['line_type'],
                     'completed'          => $mapped['completed'],
                     'fulfillment_status' => $mapped['fulfillment_status'],
@@ -177,6 +221,26 @@ class AcumaticaFillRateSyncService
                     'uom'                => $mapped['uom'],
                 ],
             );
+        }
+    }
+
+    /** @param array<string, mixed> $mapped */
+    private function recordLineGuardrails(array $mapped): void
+    {
+        if (($mapped['qty_on_shipments_source'] ?? '') === 'shipped_qty_fallback') {
+            $this->guardrailSummary['lines_shipped_qty_fallback']++;
+        }
+
+        if (($mapped['reason_code'] ?? null) !== null && trim((string) $mapped['reason_code']) !== '') {
+            $this->guardrailSummary['lines_with_acumatica_reason']++;
+        }
+
+        $reason = $mapped['unfilled_reason_code'] ?? null;
+        if ($reason === SalesOrderLineFulfillmentDeriver::UNFILLED_REASON_OUT_OF_STOCK
+            && ($mapped['qty_on_shipments'] ?? 0) <= 0) {
+            $this->guardrailSummary['lines_out_of_stock']++;
+        } elseif ($reason === SalesOrderLineFulfillmentDeriver::UNFILLED_REASON_PARTIAL_SHORTAGE) {
+            $this->guardrailSummary['lines_partial_shortage']++;
         }
     }
 

@@ -2,9 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Mail\OtpMail;
+use App\Models\AuditLog;
+use App\Models\Otp;
+use App\Models\PasswordChangeLog;
 use App\Models\SignInLog;
 use App\Models\User;
+use App\Services\OtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
@@ -15,6 +22,23 @@ use Tests\TestCase;
 class ProfileTest extends TestCase
 {
     use RefreshDatabase;
+
+    private const KNOWN_OTP = '123456';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $knownOtp = self::KNOWN_OTP;
+        $this->app->instance(OtpService::class, new class ($knownOtp) extends OtpService {
+            public function __construct(private readonly string $knownOtp) {}
+
+            public function generate(): string
+            {
+                return $this->knownOtp;
+            }
+        });
+    }
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -148,6 +172,125 @@ class ProfileTest extends TestCase
 
         $data = $response->json('data');
         $this->assertCount(2, $data);
+    }
+
+    /** @test */
+    public function test_password_update_otp_resend_limit_is_enforced(): void
+    {
+        Mail::fake();
+        $user = $this->makeUser(['email' => 'secure@example.com']);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/profile/password/otp')
+            ->assertOk();
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->actingAs($user, 'sanctum')
+                ->postJson('/api/profile/password/otp')
+                ->assertOk();
+        }
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/profile/password/otp')
+            ->assertStatus(429)
+            ->assertJsonFragment(['code' => 'too_many_resends']);
+
+        $otpRecord = Otp::where('email', $user->email)
+            ->where('purpose', 'password-update')
+            ->first();
+
+        $this->assertNotNull($otpRecord);
+        $this->assertSame(3, $otpRecord->resend_attempts);
+        Mail::assertSent(OtpMail::class, 4);
+    }
+
+    /** @test */
+    public function test_password_update_requires_valid_otp_but_not_current_password(): void
+    {
+        Mail::fake();
+        $user = $this->makeUser([
+            'email' => 'password-user@example.com',
+            'password' => bcrypt('old-password'),
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/profile/password/otp')
+            ->assertOk();
+
+        $otpRecord = Otp::where('email', $user->email)
+            ->where('purpose', 'password-update')
+            ->first();
+
+        $this->assertNotNull($otpRecord);
+        $this->assertTrue(Hash::check(self::KNOWN_OTP, $otpRecord->otp_hash));
+        $this->assertDatabaseMissing('otps', ['otp_hash' => self::KNOWN_OTP]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/profile/password/otp/verify', ['otp' => self::KNOWN_OTP])
+            ->assertOk()
+            ->assertJsonFragment(['message' => 'OTP verified successfully.']);
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->patchJson('/api/profile/password', [
+                'otp' => self::KNOWN_OTP,
+                'new_password' => 'new-secure-password',
+                'new_password_confirmation' => 'new-secure-password',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonStructure(['message', 'token', 'user' => ['id', 'name', 'email', 'role']]);
+
+        $user->refresh();
+        $this->assertTrue(Hash::check('new-secure-password', $user->password));
+        $this->assertDatabaseMissing('otps', [
+            'email' => $user->email,
+            'purpose' => 'password-update',
+        ]);
+        $this->assertDatabaseHas('password_change_logs', ['user_id' => $user->id]);
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_user_id' => $user->id,
+            'action_type' => 'password_updated',
+            'resource_type' => 'user',
+            'resource_id' => (string) $user->id,
+        ]);
+        $this->assertSame(1, PasswordChangeLog::where('user_id', $user->id)->count());
+        $this->assertGreaterThanOrEqual(1, AuditLog::where('actor_user_id', $user->id)->count());
+    }
+
+    /** @test */
+    public function test_password_update_rejects_invalid_and_expired_otps(): void
+    {
+        Mail::fake();
+        $user = $this->makeUser(['email' => 'expired@example.com']);
+
+        $this->actingAs($user, 'sanctum')
+            ->patchJson('/api/profile/password', [
+                'otp' => '000000',
+                'new_password' => 'new-secure-password',
+                'new_password_confirmation' => 'new-secure-password',
+            ])
+            ->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Invalid or expired verification code.']);
+
+        Otp::create([
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'purpose' => 'password-update',
+            'otp_hash' => bcrypt(self::KNOWN_OTP),
+            'expires_at' => now()->subMinute(),
+            'attempts' => 0,
+            'resend_attempts' => 0,
+            'resend_window_start' => now()->subMinutes(16),
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->patchJson('/api/profile/password', [
+                'otp' => self::KNOWN_OTP,
+                'new_password' => 'new-secure-password',
+                'new_password_confirmation' => 'new-secure-password',
+            ])
+            ->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Verification code has expired. Please request a new one.']);
     }
 
     // -------------------------------------------------------------------------

@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcumaticaSalesOrder;
+use App\Models\User;
 use App\Services\Admin\SalesOrderLineFulfillmentDeriver;
+use App\Services\Operations\OperationsCatalogResolver;
+use App\Support\SalesConsultantScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -12,18 +15,91 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        private readonly OperationsCatalogResolver $catalogResolver,
+    ) {
+    }
     /** Return status-broken-down KPI counts for the given date range. */
     public function kpis(Request $request): JsonResponse
     {
         $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
         $dateTo   = $request->input('date_to',   now()->toDateString());
 
-        $counts = $this->statusCounts($dateFrom, $dateTo);
+        $counts = $this->statusCounts($dateFrom, $dateTo, $request->user());
 
         return response()->json(array_merge($counts, [
             'date_from' => $dateFrom,
             'date_to'   => $dateTo,
         ]));
+    }
+
+    /** Orders for a dashboard status bucket (used by expandable status accordions). */
+    public function ordersByStatus(Request $request): JsonResponse
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
+        $dateTo   = $request->input('date_to', now()->toDateString());
+        $statusKey = strtolower(trim((string) $request->input('status', '')));
+
+        $statuses = match ($statusKey) {
+            'open'             => ['Open'],
+            'completed'        => ['Completed'],
+            'shipping'         => ['Shipping'],
+            'pending_approval' => ['Pending Approval'],
+            'rejected'         => ['Rejected'],
+            'on_hold'          => ['On Hold', 'Credit Hold'],
+            default            => null,
+        };
+
+        if ($statuses === null) {
+            return response()->json(['message' => 'Invalid status key.'], 422);
+        }
+
+        $orders = SalesConsultantScope::applyOrderScope(
+            AcumaticaSalesOrder::query()->salesOrdersOnly(),
+            $request->user(),
+        )
+            ->whereDate('order_date', '>=', $dateFrom)
+            ->whereDate('order_date', '<=', $dateTo)
+            ->whereIn('status', $statuses)
+            ->withSum('lines as total_qty', 'order_qty')
+            ->orderByDesc('order_date')
+            ->orderByDesc('acumatica_order_nbr')
+            ->limit(200)
+            ->get([
+                'id',
+                'acumatica_order_nbr',
+                'customer_name',
+                'customer_acumatica_id',
+                'order_total',
+                'currency_id',
+                'status',
+                'order_date',
+            ]);
+
+        $customerNames = $this->catalogResolver->namesForCustomerIds(
+            $orders->pluck('customer_acumatica_id')->filter()->unique()->values()->all(),
+        );
+
+        return response()->json([
+            'status'     => $statusKey,
+            'date_from'  => $dateFrom,
+            'date_to'    => $dateTo,
+            'count'      => $orders->count(),
+            'orders'     => $orders->map(fn ($order) => [
+                'id'            => $order->id,
+                'order_nbr'     => $order->acumatica_order_nbr,
+                'customer_name' => $this->catalogResolver->resolveCustomerName(
+                    $order->customer_name,
+                    $order->customer_acumatica_id,
+                    $customerNames,
+                ),
+                'amount'        => round((float) $order->order_total, 2),
+                'currency_id'   => $order->currency_id,
+                'quantity'      => round((float) ($order->total_qty ?? 0), 4),
+                'order_date'    => $order->order_date?->toDateString(),
+                'status'        => $order->status,
+            ])->values(),
+        ]);
     }
 
     /** Daily trend data for the chart, optionally with previous-period comparison. */
@@ -33,14 +109,14 @@ class DashboardController extends Controller
         $dateTo   = $request->input('date_to',   now()->toDateString());
         $compare  = $request->boolean('compare', false);
 
-        $current = $this->dailyTrend($dateFrom, $dateTo);
+        $current = $this->dailyTrend($dateFrom, $dateTo, null, $request->user());
 
         $previous = null;
         if ($compare) {
             $days     = Carbon::parse($dateFrom)->diffInDays(Carbon::parse($dateTo)) + 1;
             $prevFrom = Carbon::parse($dateFrom)->subDays($days)->toDateString();
             $prevTo   = Carbon::parse($dateTo)->subDays($days)->toDateString();
-            $previous = $this->dailyTrend($prevFrom, $prevTo, $prevFrom);
+            $previous = $this->dailyTrend($prevFrom, $prevTo, $prevFrom, $request->user());
         }
 
         return response()->json([
@@ -53,9 +129,12 @@ class DashboardController extends Controller
     // Helpers
     // -------------------------------------------------------------------------
 
-    private function statusCounts(string $dateFrom, string $dateTo): array
+    private function statusCounts(string $dateFrom, string $dateTo, ?User $user): array
     {
-        $base = AcumaticaSalesOrder::salesOrdersOnly()
+        $base = SalesConsultantScope::applyOrderScope(
+            AcumaticaSalesOrder::salesOrdersOnly(),
+            $user,
+        )
             ->whereDate('order_date', '>=', $dateFrom)
             ->whereDate('order_date', '<=', $dateTo);
 
@@ -99,10 +178,12 @@ class DashboardController extends Controller
      * $labelOffset shifts the "label" day for comparison rows so the chart
      * can align current vs previous on the same x-axis position.
      */
-    private function dailyTrend(string $dateFrom, string $dateTo, ?string $labelOffset = null): array
+    private function dailyTrend(string $dateFrom, string $dateTo, ?string $labelOffset = null, ?User $user = null): array
     {
-        $rows = AcumaticaSalesOrder::query()
-            ->salesOrdersOnly()
+        $rows = SalesConsultantScope::applyOrderScope(
+            AcumaticaSalesOrder::query()->salesOrdersOnly(),
+            $user,
+        )
             ->selectRaw('DATE(order_date) as day, status, COUNT(*) as cnt')
             ->whereDate('order_date', '>=', $dateFrom)
             ->whereDate('order_date', '<=', $dateTo)
@@ -110,7 +191,7 @@ class DashboardController extends Controller
             ->orderByRaw('DATE(order_date)')
             ->get();
 
-        $fillRatesByDay = $this->fillRateQtyByDay($dateFrom, $dateTo);
+        $fillRatesByDay = $this->fillRateQtyByDay($dateFrom, $dateTo, $user);
 
         // Build a map keyed by day
         $byDay = [];
@@ -194,14 +275,24 @@ class DashboardController extends Controller
     /**
      * @return array<string, array{shipped: float, ordered: float}>
      */
-    private function fillRateQtyByDay(string $dateFrom, string $dateTo): array
+    private function fillRateQtyByDay(string $dateFrom, string $dateTo, ?User $user = null): array
     {
-        $rows = DB::table('acumatica_fill_rate_snapshots as f')
+        $query = DB::table('acumatica_fill_rate_snapshots as f')
             ->join('acumatica_sales_orders as o', 'f.sales_order_id', '=', 'o.id')
             ->where('o.order_type', AcumaticaSalesOrder::TYPE_SALES_ORDER)
             ->whereDate('o.order_date', '>=', $dateFrom)
             ->whereDate('o.order_date', '<=', $dateTo)
-            ->where('f.fill_rate_status', '!=', 'na')
+            ->where('f.fill_rate_status', '!=', 'na');
+
+        if (SalesConsultantScope::appliesTo($user)) {
+            $repCode = SalesConsultantScope::repCode($user);
+            if ($repCode === null) {
+                return [];
+            }
+            $query->where('o.sales_consultant_rep_code', $repCode);
+        }
+
+        $rows = $query
             ->selectRaw('DATE(o.order_date) as day')
             ->selectRaw('SUM(f.total_shipped_qty) as shipped')
             ->selectRaw('SUM(f.total_ordered_qty) as ordered')

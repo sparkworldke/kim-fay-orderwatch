@@ -20,6 +20,7 @@ class RolesPermissionsSeeder extends Seeder
             'Customer Service Manager',
             'Customer Service Agent',
             'Sales Operations',
+            'Sales Consultant',
             'Executive',
         ];
 
@@ -57,7 +58,12 @@ class RolesPermissionsSeeder extends Seeder
             'orders.resolve',
             'orders.escalate',
             'customers.manage',
+            'consultants.view',
+            'consultants.manage',
             'reports.export',
+            'email-import.manage',
+            'email-import.approve',
+            'email-import.create-wildcards',
         ];
 
         foreach ($permissions as $slug) {
@@ -81,6 +87,18 @@ class RolesPermissionsSeeder extends Seeder
         foreach (['Customer Service Manager', 'Sales Operations', 'Executive'] as $roleName) {
             Role::where('name', $roleName)->first()?->permissions()->sync($viewPermissionIds);
         }
+
+        Role::where('name', 'Customer Service Manager')->first()?->permissions()->sync(
+            Permission::whereIn('name', [
+                ...Permission::whereIn('id', $viewPermissionIds)->pluck('name')->all(),
+                'consultants.view',
+                'consultants.manage',
+            ])->pluck('id')->all()
+        );
+
+        Role::where('name', 'Sales Consultant')->first()?->permissions()->sync(
+            Permission::whereIn('name', ['orders.view'])->pluck('id')->all()
+        );
 
         Role::where('name', 'Customer Service Agent')->first()?->permissions()->sync(
             Permission::whereIn('name', ['orders.view', 'orders.resolve'])->pluck('id')->all()

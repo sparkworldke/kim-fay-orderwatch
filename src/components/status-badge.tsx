@@ -1,6 +1,29 @@
 import { cn } from "@/lib/utils";
 import type { OrderStatus, SLAStatus, Priority, ApprovalStatus } from "@/lib/demo-data";
 
+// Get consistent status styles for any status string
+export function getStatusStyle(status: string): string {
+  const s = status.toLowerCase();
+  // Green: Complete / Completed / Active / Approved
+  if (s.includes("complete") || s === "active" || s === "approved") {
+    return "bg-success/15 text-success border-success/30 dark:bg-success/20 dark:border-success/40";
+  }
+  // Red: Disabled / Deleted / Missing / Escalated / Rejected / Inactive / Breached
+  if (s.includes("disable") || s.includes("delete") || s.includes("missing") || s.includes("escalate") || s === "rejected" || s === "inactive" || s === "breached") {
+    return "bg-destructive/15 text-destructive border-destructive/30 dark:bg-destructive/20 dark:border-destructive/40";
+  }
+  // Yellow/Orange: Warning, Delayed, On Hold, In Review
+  if (s.includes("warning") || s.includes("delay") || s.includes("hold") || s.includes("review")) {
+    return "bg-warning/15 text-warning-foreground border-warning/40 dark:bg-warning/20 dark:border-warning/50";
+  }
+  // Blue: Info, Duplicate, Matched, Pending
+  if (s.includes("info") || s === "duplicate" || s === "matched" || s === "pending") {
+    return "bg-info/15 text-info border-info/30 dark:bg-info/20 dark:border-info/40";
+  }
+  // Default
+  return "bg-muted text-muted-foreground border-border dark:bg-muted/50";
+}
+
 const STATUS_STYLES: Record<OrderStatus, string> = {
   Matched: "bg-success/15 text-success border-success/30",
   Missing: "bg-destructive/15 text-destructive border-destructive/30",
@@ -22,9 +45,9 @@ const PRIORITY_STYLES: Record<Priority, string> = {
   Critical: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
-export function StatusBadge({ status }: { status: OrderStatus }) {
+export function StatusBadge({ status }: { status: OrderStatus | string }) {
   return (
-    <span className={cn("inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-medium", STATUS_STYLES[status])}>
+    <span className={cn("inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-medium", typeof status === 'string' ? getStatusStyle(status) : STATUS_STYLES[status])}>
       {status}
     </span>
   );

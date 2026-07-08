@@ -61,6 +61,42 @@ class AcumaticaSalesOrderSyncTest extends TestCase
                 ],
             ],
         ]);
+        $client->shouldReceive('fetchSalesOrdersByNumbers')->once()->andReturn([
+            [
+                'OrderNbr'      => ['value' => 'SO5001'],
+                'OrderType'     => ['value' => 'SO'],
+                'CustomerID'    => ['value' => 'CUST01'],
+                'CustomerName'  => ['value' => 'Acme Ltd'],
+                'CustomerPONbr' => ['value' => 'PO-5001'],
+                'Status'        => ['value' => 'Open'],
+                'Date'          => ['value' => '2026-06-23T10:00:00'],
+                'Details'       => [
+                    [
+                        'LineNbr'     => ['value' => 1],
+                        'InventoryID' => ['value' => 'ITEM-001'],
+                        'Description' => ['value' => 'Widget'],
+                        'OrderQty'    => ['value' => 10],
+                        'ShippedQty'  => ['value' => 4],
+                        'OpenQty'     => ['value' => 6],
+                        'UnitPrice'   => ['value' => 25],
+                    ],
+                ],
+            ],
+            [
+                'OrderNbr'   => ['value' => 'QT9001'],
+                'OrderType'  => ['value' => 'QT'],
+                'CustomerID' => ['value' => 'CUST02'],
+                'Status'     => ['value' => 'Open'],
+                'Date'       => ['value' => '2026-06-23T11:00:00'],
+                'Details'    => [
+                    [
+                        'InventoryID' => ['value' => 'ITEM-002'],
+                        'OrderQty'    => ['value' => 2],
+                        'UnitPrice'   => ['value' => 50],
+                    ],
+                ],
+            ],
+        ]);
 
         $service = new AcumaticaSalesOrderSyncService($client);
         $run = $service->syncDateRange('2026-06-23', '2026-06-23');
@@ -101,6 +137,8 @@ class AcumaticaSalesOrderSyncTest extends TestCase
                 'Status'           => ['value' => 'Rejected'],
                 'Date'             => ['value' => '2026-06-23T10:00:00'],
                 'OrderTotal'       => ['value' => 100],
+                'RejectionReasonCode' => ['value' => 'CREDIT_LIMIT'],
+                'RejectionReasonDescription' => ['value' => 'Credit limit exceeded'],
                 'RejectionReason'  => ['value' => 'Credit limit exceeded'],
                 'Details'          => [],
             ],
@@ -115,6 +153,28 @@ class AcumaticaSalesOrderSyncTest extends TestCase
                 'Details'       => [],
             ],
         ]);
+        $client->shouldReceive('fetchSalesOrdersByNumbers')->once()->andReturn([
+            [
+                'OrderNbr'         => ['value' => 'SO-REJ'],
+                'OrderType'        => ['value' => 'SO'],
+                'CustomerID'       => ['value' => 'CUST01'],
+                'Status'           => ['value' => 'Rejected'],
+                'Date'             => ['value' => '2026-06-23T10:00:00'],
+                'RejectionReasonCode' => ['value' => 'CREDIT_LIMIT'],
+                'RejectionReasonDescription' => ['value' => 'Credit limit exceeded'],
+                'RejectionReason'  => ['value' => 'Credit limit exceeded'],
+                'Details'          => [],
+            ],
+            [
+                'OrderNbr'      => ['value' => 'SO-HOLD'],
+                'OrderType'     => ['value' => 'SO'],
+                'CustomerID'    => ['value' => 'CUST01'],
+                'Status'        => ['value' => 'On Hold'],
+                'Date'          => ['value' => '2026-06-23T11:00:00'],
+                'HoldReason'    => ['value' => 'Awaiting manager approval'],
+                'Details'       => [],
+            ],
+        ]);
 
         $service = new AcumaticaSalesOrderSyncService($client);
         $service->syncDateRange('2026-06-23', '2026-06-23');
@@ -123,6 +183,90 @@ class AcumaticaSalesOrderSyncTest extends TestCase
         $onHold = AcumaticaSalesOrder::where('acumatica_order_nbr', 'SO-HOLD')->first();
 
         $this->assertSame('Credit limit exceeded', $rejected->rejection_reason);
+        $this->assertSame('CREDIT_LIMIT', $rejected->rejection_reason_code);
         $this->assertSame('Awaiting manager approval', $onHold->on_hold_reason);
+    }
+
+    public function test_sales_order_sync_tracks_missing_rejection_reason_codes_in_validation_summary(): void
+    {
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchAllSalesOrdersByDateRange')->once()->andReturn([
+            [
+                'OrderNbr'         => ['value' => 'SO-REJ-MISSING'],
+                'OrderType'        => ['value' => 'SO'],
+                'CustomerID'       => ['value' => 'CUST01'],
+                'Status'           => ['value' => 'Rejected'],
+                'Date'             => ['value' => '2026-06-23T10:00:00'],
+                'RejectionReason'  => ['value' => 'Rejected without ERP code'],
+                'Details'          => [],
+            ],
+        ]);
+        $client->shouldReceive('fetchSalesOrdersByNumbers')->once()->andReturn([
+            [
+                'OrderNbr'         => ['value' => 'SO-REJ-MISSING'],
+                'OrderType'        => ['value' => 'SO'],
+                'CustomerID'       => ['value' => 'CUST01'],
+                'Status'           => ['value' => 'Rejected'],
+                'Date'             => ['value' => '2026-06-23T10:00:00'],
+                'RejectionReason'  => ['value' => 'Rejected without ERP code'],
+                'Details'          => [],
+            ],
+        ]);
+
+        $service = new AcumaticaSalesOrderSyncService($client);
+        $run = $service->syncDateRange('2026-06-23', '2026-06-23');
+
+        $this->assertSame(1, $run->filters['missing_rejection_reason_codes']);
+        $this->assertSame(['SO-REJ-MISSING'], $run->filters['sample_missing_rejection_orders']);
+        $this->assertDatabaseHas('acumatica_sales_orders', [
+            'acumatica_order_nbr' => 'SO-REJ-MISSING',
+            'rejection_reason' => 'Rejected without ERP code',
+            'rejection_reason_code' => null,
+        ]);
+    }
+
+    public function test_sales_order_sync_reconciles_mismatched_local_statuses(): void
+    {
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-STATUS-1',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST01',
+            'status' => 'Open',
+            'order_date' => '2026-06-23 10:00:00',
+            'synced_at' => now()->subDay(),
+        ]);
+
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchAllSalesOrdersByDateRange')->once()->andReturn([
+            [
+                'OrderNbr'      => ['value' => 'SO-STATUS-1'],
+                'OrderType'     => ['value' => 'SO'],
+                'CustomerID'    => ['value' => 'CUST01'],
+                'Status'        => ['value' => 'Open'],
+                'Date'          => ['value' => '2026-06-23T10:00:00'],
+                'Details'       => [],
+            ],
+        ]);
+        $client->shouldReceive('fetchSalesOrdersByNumbers')->once()->andReturn([
+            [
+                'OrderNbr'      => ['value' => 'SO-STATUS-1'],
+                'OrderType'     => ['value' => 'SO'],
+                'CustomerID'    => ['value' => 'CUST01'],
+                'Status'        => ['value' => 'Completed'],
+                'Date'          => ['value' => '2026-06-23T10:00:00'],
+                'CompletedDate' => ['value' => '2026-06-24T09:15:00'],
+                'Details'       => [],
+            ],
+        ]);
+
+        $service = new AcumaticaSalesOrderSyncService($client);
+        $run = $service->syncDateRange('2026-06-23', '2026-06-23');
+
+        $this->assertSame('completed', $run->status);
+        $this->assertSame(1, $run->filters['status_updates']);
+        $this->assertDatabaseHas('acumatica_sales_orders', [
+            'acumatica_order_nbr' => 'SO-STATUS-1',
+            'status' => 'Completed',
+        ]);
     }
 }

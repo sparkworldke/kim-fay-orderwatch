@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   CheckCircle2, Clock, Package, RefreshCw,
   ShoppingCart, TrendingUp, XCircle, ChevronDown, ChevronRight, BarChart2,
@@ -9,13 +9,21 @@ import {
   Area, AreaChart, CartesianGrid, Legend,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { Badge } from "@/components/ui/badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { apiFetch } from "@/lib/api";
+import { formatKES } from "@/lib/format";
+import { useRefreshOrderStatuses } from "@/hooks/useOrders";
+import { DateLink } from "@/components/entity-links";
 
 export const Route = createFileRoute("/app/")({
   head: () => ({ meta: [{ title: "Dashboard — Kim-Fay OrderWatch" }] }),
@@ -64,6 +72,23 @@ interface TrendData {
   previous: TrendDay[] | null;
 }
 
+interface DashboardStatusOrder {
+  id: number;
+  order_nbr: string;
+  customer_name: string | null;
+  amount: number;
+  currency_id: string | null;
+  quantity: number;
+  order_date: string | null;
+  status: string | null;
+}
+
+interface DashboardStatusOrdersResponse {
+  status: string;
+  count: number;
+  orders: DashboardStatusOrder[];
+}
+
 // -------------------------------------------------------------------------
 // Hooks
 // -------------------------------------------------------------------------
@@ -73,6 +98,17 @@ function useKpis(dateFrom: string, dateTo: string) {
     queryKey: ["dashboard-kpis", dateFrom, dateTo],
     queryFn: () =>
       apiFetch<KpiData>(`dashboard/kpis?date_from=${dateFrom}&date_to=${dateTo}`),
+  });
+}
+
+function useStatusOrders(statusKey: string, day: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["dashboard-orders-by-status", statusKey, day],
+    queryFn: () =>
+      apiFetch<DashboardStatusOrdersResponse>(
+        `dashboard/orders-by-status?status=${statusKey}&date_from=${day}&date_to=${day}`,
+      ),
+    enabled,
   });
 }
 
@@ -217,6 +253,13 @@ const STATUS_COLS = [
 
 type StatusCol = (typeof STATUS_COLS)[number]["key"];
 
+/** Statuses shown when expanding a day row in the daily table. */
+const DAY_EXPAND_STATUSES: StatusCol[] = ["pending_approval", "shipping"];
+
+const DAY_EXPAND_LABELS: Record<StatusCol, string> = Object.fromEntries(
+  STATUS_COLS.map((c) => [c.key, c.label]),
+) as Record<StatusCol, string>;
+
 function fmtFullDate(iso: string) {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" });
@@ -339,10 +382,110 @@ function aggregateFillRate(rows: FillRateRow[]): number | null {
   return Math.min(100, (shipped / ordered) * 100);
 }
 
+function StatusOrderList({
+  statusKey,
+  day,
+  enabled,
+}: {
+  statusKey: StatusCol;
+  day: string;
+  enabled: boolean;
+}) {
+  const { data, isLoading, isError } = useStatusOrders(statusKey, day, enabled);
+
+  if (!enabled) return null;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 py-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <Skeleton key={i} className="h-8 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return <p className="py-2 text-xs text-destructive">Could not load orders.</p>;
+  }
+
+  const orders = data?.orders ?? [];
+  if (orders.length === 0) {
+    return <p className="py-2 text-xs text-muted-foreground">No orders.</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-md border bg-background">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b bg-muted/40 text-left">
+            <th className="px-3 py-1.5 font-semibold text-muted-foreground">SO Number</th>
+            <th className="px-3 py-1.5 font-semibold text-muted-foreground">Customer</th>
+            <th className="px-3 py-1.5 text-right font-semibold text-muted-foreground">Amount</th>
+            <th className="px-3 py-1.5 text-right font-semibold text-muted-foreground">Quantity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((order) => (
+            <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/20">
+              <td className="px-3 py-1.5 font-mono font-medium">{order.order_nbr}</td>
+              <td className="px-3 py-1.5">{order.customer_name ?? "—"}</td>
+              <td className="px-3 py-1.5 text-right font-mono tabular-nums">{formatKES(order.amount)}</td>
+              <td className="px-3 py-1.5 text-right font-mono tabular-nums">
+                {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DayRowOrdersPanel({ day, row }: { day: string; row: TrendDay }) {
+  const [openStatus, setOpenStatus] = useState<string | undefined>();
+  const visible = DAY_EXPAND_STATUSES.filter((key) => ((row as Record<string, number>)[key] ?? 0) > 0);
+
+  if (visible.length === 0) return null;
+
+  return (
+    <div className="py-2">
+      <Accordion
+        type="single"
+        collapsible
+        value={openStatus}
+        onValueChange={setOpenStatus}
+        className="rounded-md border bg-background"
+      >
+        {visible.map((statusKey) => {
+          const count = (row as Record<string, number>)[statusKey] ?? 0;
+          const isOpen = openStatus === statusKey;
+
+          return (
+            <AccordionItem key={statusKey} value={statusKey} className="border-b px-3 last:border-b-0">
+              <AccordionTrigger className="py-2 text-xs hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <StatusBadge statusKey={statusKey} value={count} />
+                  <span className="font-medium">{DAY_EXPAND_LABELS[statusKey]}</span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="pb-2">
+                <StatusOrderList statusKey={statusKey} day={day} enabled={isOpen} />
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
+    </div>
+  );
+}
+
 function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const rows = [...trendData].sort((a, b) => b.day.localeCompare(a.day));
+  const colSpan = STATUS_COLS.length + 4;
 
   return (
     <div className="rounded-lg border bg-card shadow-[var(--shadow-panel)]">
@@ -354,7 +497,9 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
       >
         <div>
           <h3 className="text-sm font-semibold">Open Orders by Date</h3>
-          <p className="text-xs text-muted-foreground">Order status breakdown — grouped by day</p>
+          <p className="text-xs text-muted-foreground">
+            Order status breakdown by day — click a date to expand Pending Approval and Shipping orders
+          </p>
         </div>
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -400,33 +545,65 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => (
-                <tr
-                  key={row.day}
-                  className={`border-t transition-colors hover:bg-muted/30 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
-                >
-                  <td className="px-4 py-2 font-medium whitespace-nowrap">{fmtFullDate(row.day)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{row.total.toLocaleString()}</td>
-                  {STATUS_COLS.map((col) => {
-                    const val = (row as any)[col.key] as number;
-                    return (
-                      <td key={col.key} className="px-3 py-2 text-right tabular-nums">
-                        {val > 0 ? (
-                          <StatusBadge statusKey={col.key} value={val} />
-                        ) : (
-                          <span className="text-muted-foreground/50">—</span>
-                        )}
+              {rows.map((row, i) => {
+                const canExpand = DAY_EXPAND_STATUSES.some(
+                  (key) => ((row as Record<string, number>)[key] ?? 0) > 0,
+                );
+                const isExpanded = expandedDay === row.day;
+
+                return (
+                  <Fragment key={row.day}>
+                    <tr
+                      className={`border-t transition-colors ${canExpand ? "cursor-pointer hover:bg-muted/40" : "hover:bg-muted/30"} ${i % 2 === 0 ? "" : "bg-muted/10"} ${isExpanded ? "bg-muted/30" : ""}`}
+                      onClick={() => {
+                        if (!canExpand) return;
+                        setExpandedDay((current) => (current === row.day ? null : row.day));
+                      }}
+                    >
+                      <td className="px-4 py-2 font-medium whitespace-nowrap">
+                        <span className="inline-flex items-center gap-2">
+                          {canExpand ? (
+                            isExpanded ? (
+                              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            )
+                          ) : (
+                            <span className="inline-block w-3.5" />
+                          )}
+                          <DateLink value={row.day}>{fmtFullDate(row.day)}</DateLink>
+                        </span>
                       </td>
-                    );
-                  })}
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    <FillRateBadge rate={row.fill_rate_pct} row={row} />
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    <CompletionRateBadge rate={calcCompletionRate(row)} row={row} />
-                  </td>
-                </tr>
-              ))}
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{row.total.toLocaleString()}</td>
+                      {STATUS_COLS.map((col) => {
+                        const val = (row as Record<string, number>)[col.key] ?? 0;
+                        return (
+                          <td key={col.key} className="px-3 py-2 text-right tabular-nums">
+                            {val > 0 ? (
+                              <StatusBadge statusKey={col.key} value={val} />
+                            ) : (
+                              <span className="text-muted-foreground/50">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        <FillRateBadge rate={row.fill_rate_pct} row={row} />
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        <CompletionRateBadge rate={calcCompletionRate(row)} row={row} />
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="border-t bg-muted/15">
+                        <td colSpan={colSpan} className="px-4 py-2">
+                          <DayRowOrdersPanel day={row.day} row={row} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
 
               {/* Totals footer */}
               {rows.length > 0 && (() => {
@@ -699,6 +876,7 @@ function DashboardPage() {
 
   const kpis  = useKpis(dateFrom, dateTo);
   const trend = useTrend(dateFrom, dateTo, compare);
+  const orderStatusRefresh = useRefreshOrderStatuses();
 
   function goToOrders(statusFilter?: string) {
     const params: Record<string, string> = {
@@ -750,7 +928,7 @@ function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Operations Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Sales orders (SO) only — Open Orders card shows SO / QT / RC breakdown</p>
+          <p className="text-sm text-muted-foreground">Sales orders (SO) only. Quotes, credit notes, credit memos, and pick lists are on Credit Notes &amp; More.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div className="grid gap-1">
@@ -763,6 +941,17 @@ function DashboardPage() {
           </div>
           <Button variant="outline" size="sm" className="h-8" onClick={() => { kpis.refetch(); trend.refetch(); }}>
             <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => orderStatusRefresh.mutate({ date_from: dateFrom, date_to: dateTo })}
+            disabled={orderStatusRefresh.isPending}
+            title="Import today's Acumatica orders and update statuses for the selected date range through today"
+          >
+            <RefreshCw className={`mr-1 h-3.5 w-3.5 ${orderStatusRefresh.isPending ? "animate-spin" : ""}`} />
+            {orderStatusRefresh.isPending ? "Updating..." : "Update order status"}
           </Button>
           <div className="flex items-center gap-2 rounded-md border px-3 h-8">
             <Switch id="compare-toggle" checked={compare} onCheckedChange={setCompare} />
@@ -796,28 +985,7 @@ function DashboardPage() {
               <div className={`text-2xl font-bold tabular-nums ${s.color}`}>
                 {kpi ? (kpi[s.key] ?? 0).toLocaleString() : "—"}
               </div>
-              {s.key === "open" && kpi && (
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {(
-                    [
-                      { type: "SO", count: kpi.open_so },
-                      { type: "QT", count: kpi.open_qt },
-                      { type: "RC", count: kpi.open_rc },
-                      { type: "Other", count: kpi.open_other },
-                    ] as { type: string; count: number }[]
-                  )
-                    .filter((t) => t.count > 0)
-                    .map((t) => (
-                      <span
-                        key={t.type}
-                        className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold bg-sky-100/80 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
-                      >
-                        {t.type}: {t.count}
-                      </span>
-                    ))}
-                </div>
-              )}
-              <div className={`mt-1 text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ${s.key === "open" && kpi && (kpi.open_so + kpi.open_qt + kpi.open_rc + kpi.open_other) > 0 ? "mt-0.5" : "mt-1"}`}>
+              <div className="mt-1 text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
                 View orders →
               </div>
             </button>

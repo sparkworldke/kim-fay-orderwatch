@@ -12,6 +12,8 @@ class MailboxSyncLog extends Model
         'mailbox_account_id',
         'cron_run_log_id',
         'email_filter_id',
+        'sync_from',
+        'sync_to',
         'started_at',
         'ended_at',
         'emails_fetched',
@@ -29,6 +31,8 @@ class MailboxSyncLog extends Model
         return [
             'started_at' => 'datetime',
             'ended_at' => 'datetime',
+            'sync_from' => 'date',
+            'sync_to' => 'date',
         ];
     }
 

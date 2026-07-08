@@ -386,7 +386,7 @@ Open your endpoint in **Acumatica → System → Customisation → Endpoint** an
 - `DemandQty`
 - `BackorderAllowed`
 
-### Optional custom fields (DAC extensions — Phase 2)
+### Optional custom fields
 - `UsrOriginalQty` — qty when line was first saved
 - `UsrQtyAtApproval` — qty snapshotted by workflow action on approval
 - `UsrInitialLineCount` — header-level count of lines at creation

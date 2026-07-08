@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcumaticaCustomer;
 use App\Models\Email;
 use App\Models\EmailFilter;
 use App\Models\EmailImportConfig;
@@ -44,7 +45,14 @@ class OutlookEmailImportLoggingTest extends TestCase
         EmailImportConfig::create([
             'sender_pattern' => 'orders@allowed.example',
             'display_name' => 'Allowed orders',
+            'match_mode' => 'exact',
+            'approval_status' => 'approved',
             'is_active' => true,
+            'customer_id' => AcumaticaCustomer::create([
+                'acumatica_id' => 'CHANDARA-OPS',
+                'name' => 'Chandara Ops',
+                'is_main_account' => true,
+            ])->id,
         ]);
         EmailFilter::create([
             'name' => 'Only invoices',
@@ -109,7 +117,8 @@ class OutlookEmailImportLoggingTest extends TestCase
         $encryption = Mockery::mock(EncryptionService::class);
         $encryption->shouldReceive('decrypt')->once()->with('encrypted-token')->andReturn('access-token');
 
-        $service = new OutlookEmailService($encryption, new EmailFilterEngine);
+        $this->app->instance(EncryptionService::class, $encryption);
+        $service = $this->app->make(OutlookEmailService::class);
 
         $this->assertSame(6, $service->syncEmails($account, null, $run));
 
@@ -117,6 +126,10 @@ class OutlookEmailImportLoggingTest extends TestCase
         $this->assertDatabaseHas('emails', ['message_id' => 'update-me', 'is_read' => 1]);
         $this->assertDatabaseMissing('emails', ['message_id' => 'delete-me']);
         $this->assertDatabaseHas('emails', ['message_id' => 'create-after-failure']);
+        $this->assertDatabaseHas('emails', [
+            'message_id' => 'create-first',
+            'import_guardrail_status' => 'unrecognized',
+        ]);
         $this->assertDatabaseCount('emails', 4);
 
         $run->refresh();
@@ -143,6 +156,82 @@ class OutlookEmailImportLoggingTest extends TestCase
             'https://graph.microsoft.com/v1.0/delta/final-token',
             $account->folders()->where('display_name', 'Inbox')->value('delta_token'),
         );
+    }
+
+    public function test_imported_email_is_tagged_with_approved_sender_config_and_customer(): void
+    {
+        $account = MailboxAccount::create([
+            'email' => 'inbox@example.com',
+            'display_name' => 'Inbox',
+            'access_token_encrypted' => 'encrypted-token',
+            'refresh_token_encrypted' => 'encrypted-refresh-token',
+            'token_expires_at' => now()->addHour(),
+            'status' => 'connected',
+        ]);
+
+        $customer = AcumaticaCustomer::create([
+            'acumatica_id' => 'CHANDARA-BRANCH',
+            'name' => 'Chandara Branch',
+            'is_main_account' => true,
+        ]);
+
+        EmailImportConfig::create([
+            'sender_pattern' => '/^([a-z0-9-]+)@chandara-supermarket\.com$/i',
+            'match_mode' => 'regex',
+            'is_wildcard' => true,
+            'display_name' => 'Chandara wildcard',
+            'customer_id' => $customer->id,
+            'branch_tag_pattern' => '/^([a-z0-9-]+)@chandara-supermarket\.com$/i',
+            'approval_status' => 'approved',
+            'is_active' => true,
+        ]);
+
+        Http::fake([
+            'https://graph.microsoft.com/v1.0/me/mailFolders/inbox' => Http::response([
+                'id' => 'Inbox', 'displayName' => 'Inbox', 'childFolderCount' => 0,
+                'totalItemCount' => 1, 'unreadItemCount' => 1,
+            ]),
+            'https://graph.microsoft.com/v1.0/me/mailFolders?*' => Http::response([
+                'value' => [[
+                    'id' => 'Inbox', 'displayName' => 'Inbox', 'childFolderCount' => 0,
+                    'totalItemCount' => 1, 'unreadItemCount' => 1,
+                ]],
+            ]),
+            'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages/delta*' => Http::response([
+                'value' => [
+                    $this->graphMessage('config-match-1', [
+                        'from' => ['emailAddress' => ['address' => 'karen@chandara-supermarket.com', 'name' => 'Karen']],
+                    ]),
+                ],
+                '@odata.deltaLink' => 'https://graph.microsoft.com/v1.0/delta/final-token',
+            ]),
+        ]);
+
+        $fileLogger = Mockery::mock(LoggerInterface::class);
+        $fileLogger->shouldReceive('info')->andReturnNull();
+        $fileLogger->shouldReceive('error')->andReturnNull();
+        Log::shouldReceive('channel')->andReturn($fileLogger);
+
+        $encryption = Mockery::mock(EncryptionService::class);
+        $encryption->shouldReceive('decrypt')->once()->with('encrypted-token')->andReturn('access-token');
+
+        $this->app->instance(EncryptionService::class, $encryption);
+        $service = $this->app->make(OutlookEmailService::class);
+        $run = MailboxSyncLog::create([
+            'mailbox_account_id' => $account->id,
+            'started_at' => now(),
+            'status' => 'running',
+        ]);
+
+        $service->syncEmails($account, null, $run);
+
+        $this->assertDatabaseHas('emails', [
+            'message_id' => 'config-match-1',
+            'matched_customer_id' => $customer->id,
+            'matched_branch_tag' => 'karen',
+            'import_guardrail_status' => 'matched',
+            'import_match_strategy' => 'regex',
+        ]);
     }
 
     private function graphMessage(string $id, array $overrides = []): array

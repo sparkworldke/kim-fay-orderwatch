@@ -75,10 +75,10 @@ export function useGenerateAiIntelligence(dateFrom: string, dateTo: string) {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: (regenerate = false) =>
+    mutationFn: (regenerate?: boolean) =>
       apiFetch<AiIntelligenceBriefing>("ai/intelligence/generate", {
         method: "POST",
-        body: JSON.stringify({ date_from: dateFrom, date_to: dateTo, regenerate }),
+        body: JSON.stringify({ date_from: dateFrom, date_to: dateTo, regenerate: regenerate ?? false }),
       }),
     onSuccess: (data) => {
       qc.setQueryData(["ai-intelligence", dateFrom, dateTo], data);

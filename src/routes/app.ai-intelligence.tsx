@@ -282,11 +282,21 @@ function KpiCard({
   const positive = invert ? pct < 0 : pct > 0;
   const negative = invert ? pct > 0 : pct < 0;
   const Icon = positive ? TrendingUp : negative ? TrendingDown : LineChart;
+  const toneClass =
+    label === "Orders" ? "border-blue-200 bg-blue-50/70 dark:border-blue-900/50 dark:bg-blue-950/20" :
+    label === "Order value" ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20" :
+    label === "Completion rate" ? "border-cyan-200 bg-cyan-50/70 dark:border-cyan-900/50 dark:bg-cyan-950/20" :
+    "border-red-200 bg-red-50/70 dark:border-red-900/50 dark:bg-red-950/20";
+  const valueClass =
+    label === "Orders" ? "text-blue-700 dark:text-blue-300" :
+    label === "Order value" ? "text-emerald-700 dark:text-emerald-300" :
+    label === "Completion rate" ? "text-cyan-700 dark:text-cyan-300" :
+    "text-red-700 dark:text-red-300";
 
   return (
-    <div className="rounded-lg border bg-card p-4 shadow-[var(--shadow-panel)]">
+    <div className={cn("rounded-lg border p-4 shadow-[var(--shadow-panel)]", toneClass)}>
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-bold">{value}</p>
+      <p className={cn("mt-1 text-xl font-bold", valueClass)}>{value}</p>
       {change && (
         <div className={cn(
           "mt-1 flex items-center gap-1 text-xs font-medium",

@@ -17,6 +17,7 @@ class AcumaticaFillRateSnapshot extends Model
         'fill_rate_pct',
         'fill_rate_status',
         'revenue_not_shipped',
+        'out_of_stock_line_count',
         'currency_id',
         'sync_run_id',
         'computed_at',

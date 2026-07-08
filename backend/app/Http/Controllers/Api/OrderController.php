@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\AcumaticaSalesOrder;
 use App\Models\Email;
 use App\Services\OrderMatch\CustomerPoMatchResolver;
+use App\Support\SalesConsultantScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
@@ -25,12 +27,12 @@ class OrderController extends Controller
         $query = $this->scopedOrderQuery($request)
             ->leftJoin('acumatica_customers as ac', 'acumatica_sales_orders.customer_acumatica_id', '=', 'ac.acumatica_id')
             ->withCount('lines')
-            ->select($this->orderIndexColumns())
-            ->when(
-            $request->input('sort', 'latest') === 'oldest',
-            fn ($q) => $q->orderBy('acumatica_sales_orders.order_date', 'asc'),
-            fn ($q) => $q->orderByDesc('acumatica_sales_orders.order_date')
-        );
+            ->when($request->boolean('with_fulfillment'), fn ($q) => $q
+                ->withAvg('lines', 'fill_rate_pct')
+                ->withSum('lines', 'backorder_qty'))
+            ->select($this->orderIndexColumns());
+
+        $this->applySort($query, (string) $request->input('sort', 'latest'));
 
         if ($request->has('date_from')) {
             $query->whereDate('acumatica_sales_orders.order_date', '>=', $request->input('date_from'));
@@ -44,9 +46,15 @@ class OrderController extends Controller
             $query->where('acumatica_sales_orders.customer_acumatica_id', $request->input('customer_id'));
         }
 
+        if (! SalesConsultantScope::appliesTo($request->user()) && $request->filled('rep_code')) {
+            $query->where('acumatica_sales_orders.sales_consultant_rep_code', strtoupper(trim((string) $request->input('rep_code'))));
+        }
+
         if ($request->has('status')) {
             $query->where('acumatica_sales_orders.status', $request->input('status'));
         }
+
+        $this->applyDocumentTypeFilter($query, $request);
 
         if ($request->filled('match_status')) {
             $query->where('acumatica_sales_orders.match_status', $request->input('match_status'));
@@ -85,12 +93,16 @@ class OrderController extends Controller
         return response()->json($paginator);
     }
 
-    public function show(string $id): JsonResponse
+    public function show(Request $request, string $id): JsonResponse
     {
         $order = AcumaticaSalesOrder::with(['lines', 'customer'])
             ->where('acumatica_order_nbr', $id)
             ->orWhere('id', $id)
             ->firstOrFail();
+
+        if (! SalesConsultantScope::orderBelongsToUser($request->user(), $order->sales_consultant_rep_code)) {
+            return response()->json(['message' => 'Order not found.'], 404);
+        }
 
         // Resolve name inline for the detail view too
         if (! $order->customer_name && $order->customer) {
@@ -120,6 +132,11 @@ class OrderController extends Controller
         if ($request->has('customer_id')) {
             $base->where('acumatica_sales_orders.customer_acumatica_id', $request->input('customer_id'));
         }
+        if ($request->has('status')) {
+            $base->where('acumatica_sales_orders.status', $request->input('status'));
+        }
+
+        $this->applyDocumentTypeFilter($base, $request);
 
         $q = trim((string) $request->input('q', ''));
         if ($q !== '') {
@@ -144,6 +161,13 @@ class OrderController extends Controller
             ->mapWithKeys(fn ($cnt, $status) => [strtolower(trim($status ?? 'pending')) => (int) $cnt])
             ->toArray();
 
+        $typeRows = (clone $base)
+            ->select(['acumatica_sales_orders.order_type', DB::raw('COUNT(*) as cnt')])
+            ->groupBy('acumatica_sales_orders.order_type')
+            ->pluck('cnt', 'order_type')
+            ->mapWithKeys(fn ($cnt, $type) => [strtoupper(trim($type ?? 'unknown')) => (int) $cnt])
+            ->toArray();
+
         return response()->json([
             'total'            => (int) (clone $base)->count(),
             'completed'        => $rows['completed']        ?? 0,
@@ -159,6 +183,7 @@ class OrderController extends Controller
             'missing'          => $matchRows['missing'] ?? 0,
             'pending'          => $matchRows['pending'] ?? 0,
             'unmatched'        => $matchRows['unmatched'] ?? 0,
+            'by_type'          => $typeRows,
         ]);
     }
 
@@ -173,14 +198,31 @@ class OrderController extends Controller
             ->orWhere('id', $id)
             ->firstOrFail();
 
+        if (! SalesConsultantScope::orderBelongsToUser($request->user(), $order->sales_consultant_rep_code)) {
+            return response()->json(['message' => 'Order not found.'], 404);
+        }
+
         $validated = $request->validate([
+            'status'           => ['sometimes', 'string', 'in:Open,Completed,Cancelled,Back Order,Credit Hold,On Hold,Rejected,Shipping,Pending Approval'],
             'match_status'     => ['sometimes', 'string', 'in:pending,matched,matched_discrepancies,needs_review,unmatched,duplicate,escalated,missing'],
             'flag_source'      => ['sometimes', 'nullable', 'string', 'in:acumatica,email'],
+            'rejection_reason_code' => ['sometimes', 'nullable', 'string', 'in:'.implode(',', AcumaticaSalesOrder::REJECTION_REASON_CODES)],
             'rejection_reason' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'on_hold_reason'   => ['sometimes', 'nullable', 'string', 'max:2000'],
             'email_subject'    => ['sometimes', 'nullable', 'string', 'max:1000'],
             'email_received_at'=> ['sometimes', 'nullable', 'date'],
         ]);
+
+        $resolvedStatus = $validated['status'] ?? $order->status;
+        $resolvedRejectionCode = array_key_exists('rejection_reason_code', $validated)
+            ? $validated['rejection_reason_code']
+            : $order->rejection_reason_code;
+
+        if ($resolvedStatus === 'Rejected' && blank($resolvedRejectionCode)) {
+            throw ValidationException::withMessages([
+                'rejection_reason_code' => ['A rejection reason is required when an order is marked as rejected.'],
+            ]);
+        }
 
         $order->update($validated);
 
@@ -195,15 +237,43 @@ class OrderController extends Controller
     /**
      * Guardrail: dashboard/orders use SO only; Credit Notes & More page uses CREDIT_NOTES_MORE.
      */
+    private function applySort($query, string $sort): void
+    {
+        match ($sort) {
+            'oldest'      => $query->orderBy('acumatica_sales_orders.order_date', 'asc'),
+            'amount_desc' => $query->orderByDesc('acumatica_sales_orders.order_total'),
+            'amount_asc'  => $query->orderBy('acumatica_sales_orders.order_total', 'asc'),
+            default       => $query->orderByDesc('acumatica_sales_orders.order_date'),
+        };
+    }
+
     private function scopedOrderQuery(Request $request)
     {
         $type = strtoupper(trim((string) $request->input('order_type', 'SO')));
 
-        if ($type === 'CREDIT_NOTES_MORE') {
-            return AcumaticaSalesOrder::query()->creditNotesAndMore();
+        if (in_array($type, ['ALL', '*'], true)) {
+            $query = AcumaticaSalesOrder::query();
+        } elseif ($type === 'CREDIT_NOTES_MORE') {
+            $query = AcumaticaSalesOrder::query()->creditNotesAndMore();
+        } else {
+            $query = AcumaticaSalesOrder::query()->salesOrdersOnly();
         }
 
-        return AcumaticaSalesOrder::query()->salesOrdersOnly();
+        return SalesConsultantScope::applyOrderScope($query, $request->user());
+    }
+
+    private function applyDocumentTypeFilter($query, Request $request): void
+    {
+        $scope = strtoupper(trim((string) $request->input('order_type', 'SO')));
+        $documentType = strtoupper(trim((string) $request->input('document_type', '')));
+
+        if ($scope !== 'CREDIT_NOTES_MORE' || $documentType === '' || $documentType === 'ALL') {
+            return;
+        }
+
+        if (in_array($documentType, AcumaticaSalesOrder::CREDIT_NOTES_AND_MORE_TYPES, true)) {
+            $query->where('acumatica_sales_orders.order_type', $documentType);
+        }
     }
 
     private function attachMatchDiscrepancies(LengthAwarePaginator $paginator): void
@@ -301,7 +371,10 @@ class OrderController extends Controller
             'acumatica_sales_orders.completed_at',
             'acumatica_sales_orders.order_total',
             'acumatica_sales_orders.currency_id',
+            'acumatica_sales_orders.sales_consultant_rep_code',
+            'acumatica_sales_orders.sales_consultant_name',
             'acumatica_sales_orders.rejection_reason',
+            'acumatica_sales_orders.rejection_reason_code',
             'acumatica_sales_orders.on_hold_reason',
             'acumatica_sales_orders.email_subject',
             'acumatica_sales_orders.email_received_at',

@@ -161,6 +161,66 @@ export async function apiFetch<T = unknown>(
   return data as T;
 }
 
+export async function downloadApiFile(
+  path: string,
+  filename: string,
+  { token, timeoutMs = 120_000 }: { token?: string | null; timeoutMs?: number } = {},
+): Promise<void> {
+  const url = `${API_BASE_URL}/${path.replace(/^\/+/, "")}`;
+  const resolvedToken =
+    token !== undefined
+      ? token
+      : typeof window !== "undefined"
+        ? window.localStorage.getItem("kf_token")
+        : null;
+
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller && typeof window !== "undefined"
+    ? window.setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: {
+        Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ...(resolvedToken ? { Authorization: `Bearer ${resolvedToken}` } : {}),
+      },
+      signal: controller?.signal,
+    });
+  } finally {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  }
+
+  if (res.status === 401 && typeof window !== "undefined") {
+    const { clearSession } = await import("./auth");
+    clearSession();
+    throw new ApiError("Unauthorized", 401, null);
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    const data = text ? safeJson(text) : null;
+    throw new ApiError(extractErrorMessage(data, res.status, res.statusText), res.status, data);
+  }
+
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filenameFromResponse(res) ?? filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function filenameFromResponse(res: Response): string | null {
+  const disposition = res.headers.get("Content-Disposition");
+  const match = disposition?.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
+  return match ? decodeURIComponent(match[1].replace(/"$/, "")) : null;
+}
+
 function extractErrorMessage(data: unknown, status: number, statusText: string): string {
   if (data && typeof data === "object") {
     if ("message" in data && (data as { message?: unknown }).message) {

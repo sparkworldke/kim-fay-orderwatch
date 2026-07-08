@@ -17,6 +17,7 @@ export interface EmailMessage {
   from_name: string | null;
   to_recipients: { name: string; address: string }[] | null;
   body_preview: string | null;
+  has_attachments: boolean;
   is_read: boolean;
   received_at: string | null;
   folder: string;
@@ -25,6 +26,13 @@ export interface EmailMessage {
   ingestion_decision_sources: string[] | null;
   extracted_po_number?: string | null;
   canonical_po?: string | null;
+  matched_branch_tag?: string | null;
+  import_guardrail_status?: string | null;
+  import_guardrail_reason?: string | null;
+  email_import_config?: {
+    id: number;
+    display_name: string;
+  } | null;
   mailbox_folder?: {
     display_name: string;
     customer?: { id: number; acumatica_id: string; name: string } | null;
@@ -43,10 +51,15 @@ export interface InboxEmailStats {
 }
 
 export interface InboxCustomerGroup {
+  group_key: string;
+  group_type: "domain" | "customer";
+  group_label: string;
+  domain: string | null;
   customer_id: number | null;
   customer_name: string;
   acumatica_id: string | null;
   email_count: number;
+  attachment_count: number;
   with_po_count: number;
   po_processing_count: number;
   needs_review_count: number;
@@ -58,6 +71,7 @@ export interface InboxCustomerGroup {
 export interface InboxEmailGroupsResponse {
   stats: InboxEmailStats;
   groups: InboxCustomerGroup[];
+  group_by: "domain" | "customer";
   truncated: boolean;
   date_from: string | null;
   date_to: string | null;
@@ -168,6 +182,12 @@ export interface SyncLog {
     code: string;
     label: string;
     count: number;
+  }>;
+  failure_counts: Array<{
+    code: string;
+    label: string;
+    count: number;
+    error_summary: string | null;
   }>;
   decision_counts: Array<{
     classification: string;

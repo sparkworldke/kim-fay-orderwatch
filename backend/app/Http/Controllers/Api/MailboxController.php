@@ -7,6 +7,7 @@ use App\Jobs\SyncMailboxJob;
 use App\Models\MailboxAccount;
 use App\Models\MailboxSyncLog;
 use App\Models\MailboxSyncItemLog;
+use App\Support\FrontendUrl;
 use App\Services\Email\OutlookEmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -41,38 +42,41 @@ class MailboxController extends Controller
 
     public function handleCallback(Request $request): RedirectResponse
     {
-        $frontendBase = rtrim((string) config('app.frontend_url', 'http://localhost:5173'), '/');
-
         $error = $request->query('error');
         if ($error) {
-            return redirect("{$frontendBase}/app/mailbox?error=" . urlencode($request->query('error_description', $error)));
+            return redirect(FrontendUrl::path('/app/mailbox', [
+                'error' => $request->query('error_description', $error),
+            ]));
         }
 
         $state = $request->query('state', '');
         if (empty($state) || ! Cache::pull('mailbox_oauth_state_' . $state)) {
-            return redirect("{$frontendBase}/app/mailbox?error=invalid_state");
+            return redirect(FrontendUrl::path('/app/mailbox', ['error' => 'invalid_state']));
         }
 
         $code = $request->query('code', '');
         if (empty($code)) {
-            return redirect("{$frontendBase}/app/mailbox?error=missing_code");
+            return redirect(FrontendUrl::path('/app/mailbox', ['error' => 'missing_code']));
         }
 
         try {
             $account = $this->outlook->handleCallback($code);
-            // Dispatch async so the OAuth redirect is immediate; sync runs in the background.
-            SyncMailboxJob::dispatch($account->id);
+            $id = $account->id;
+            defer(fn () => SyncMailboxJob::dispatchSync($id));
 
-            return redirect("{$frontendBase}/app/mailbox?connected=1&email=" . urlencode($account->email));
+            return redirect(FrontendUrl::path('/app/mailbox', [
+                'connected' => 1,
+                'email' => $account->email,
+            ]));
         } catch (Throwable $exception) {
             Log::error('Outlook OAuth callback failed.', [
                 'exception' => $exception::class,
                 'message' => $exception->getMessage(),
             ]);
 
-            return redirect("{$frontendBase}/app/mailbox?error=" . urlencode(
-                'Outlook authentication failed. Please try again or run Check OAuth for details.'
-            ));
+            return redirect(FrontendUrl::path('/app/mailbox', [
+                'error' => 'Outlook authentication failed. Please try again or run Check OAuth for details.',
+            ]));
         }
     }
 
@@ -97,29 +101,41 @@ class MailboxController extends Controller
         return response()->json($this->present($mailbox));
     }
 
-    public function sync(MailboxAccount $mailbox): JsonResponse
+    public function sync(Request $request, MailboxAccount $mailbox): JsonResponse
     {
         if ($mailbox->status === 'error') {
             $mailbox->update(['status' => 'connected']);
         }
 
+        $validated = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+        ]);
+
         $id = $mailbox->id;
+        $syncFrom = $validated['from'] ?? null;
+        $syncTo = $validated['to'] ?? null;
 
         // defer() sends the HTTP response first, then runs the closure in the same
         // PHP-FPM worker after fastcgi_finish_request() — no queue worker needed.
-        defer(fn () => SyncMailboxJob::dispatchSync($id));
+        defer(fn () => SyncMailboxJob::dispatchSync($id, null, null, $syncFrom, $syncTo));
 
         Log::channel('mailbox_sync')->info('Manual sync deferred', [
-            'mailbox_id'   => $id,
-            'email'        => $mailbox->email,
+            'mailbox_id' => $id,
+            'email' => $mailbox->email,
             'triggered_at' => now()->toISOString(),
         ]);
 
         return response()->json(['message' => 'Sync started. Emails will be imported in the background.']);
     }
 
-    public function syncAll(): JsonResponse
+    public function syncAll(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+        ]);
+
         $accounts = MailboxAccount::whereIn('status', ['connected', 'error'])->get();
 
         if ($accounts->isEmpty()) {
@@ -133,16 +149,18 @@ class MailboxController extends Controller
         }
 
         $ids = $accounts->pluck('id')->all();
+        $syncFrom = $validated['from'] ?? null;
+        $syncTo = $validated['to'] ?? null;
 
-        defer(function () use ($ids) {
+        defer(function () use ($ids, $syncFrom, $syncTo) {
             foreach ($ids as $id) {
-                SyncMailboxJob::dispatchSync($id);
+                SyncMailboxJob::dispatchSync($id, null, null, $syncFrom, $syncTo);
             }
         });
 
         Log::channel('mailbox_sync')->info('Sync-all deferred', [
             'account_count' => count($ids),
-            'triggered_at'  => now()->toISOString(),
+            'triggered_at' => now()->toISOString(),
         ]);
 
         return response()->json([
@@ -316,13 +334,20 @@ class MailboxController extends Controller
             ->groupBy('mailbox_sync_log_id', 'reason')
             ->get()
             ->groupBy('mailbox_sync_log_id');
+        $failureCounts = DB::table('mailbox_sync_item_logs')
+            ->select('mailbox_sync_log_id', 'reason', DB::raw('COUNT(*) as total'), DB::raw('MIN(error_message) as error_message'))
+            ->whereIn('mailbox_sync_log_id', $logs->pluck('id'))
+            ->where('outcome', 'failed')
+            ->groupBy('mailbox_sync_log_id', 'reason')
+            ->get()
+            ->groupBy('mailbox_sync_log_id');
         $decisionRows = MailboxSyncItemLog::with('folder:id,display_name')
             ->whereIn('mailbox_sync_log_id', $logs->pluck('id'))
             ->whereNotNull('decision_context')
             ->get(['id', 'mailbox_sync_log_id', 'mailbox_folder_id', 'decision_context'])
             ->groupBy('mailbox_sync_log_id');
 
-        return response()->json($logs->map(function (MailboxSyncLog $log) use ($reasonCounts, $decisionRows): array {
+        return response()->json($logs->map(function (MailboxSyncLog $log) use ($reasonCounts, $failureCounts, $decisionRows): array {
             $filterName = $log->emailFilter?->name;
             $reasons = $reasonCounts->get($log->id, collect())
                 ->map(function ($row) use ($filterName): array {
@@ -332,6 +357,22 @@ class MailboxController extends Controller
                         'code' => $code,
                         'label' => $this->syncReasonLabel($code, $filterName),
                         'count' => (int) $row->total,
+                    ];
+                })
+                ->sortByDesc('count')
+                ->values()
+                ->all();
+            $failures = $failureCounts->get($log->id, collect())
+                ->map(function ($row) use ($filterName): array {
+                    $code = $row->reason ?: 'unspecified';
+
+                    return [
+                        'code' => $code,
+                        'label' => $this->syncReasonLabel($code, $filterName),
+                        'count' => (int) $row->total,
+                        'error_summary' => $row->error_message
+                            ? Str::limit((string) $row->error_message, 180)
+                            : null,
                     ];
                 })
                 ->sortByDesc('count')
@@ -361,6 +402,7 @@ class MailboxController extends Controller
                     ? ['type' => 'rule', 'filter_id' => $log->email_filter_id, 'filter_name' => $filterName]
                     : ['type' => 'all', 'filter_id' => null, 'filter_name' => null],
                 'reason_counts' => $reasons,
+                'failure_counts' => $failures,
                 'decision_counts' => $decisions,
             ]);
         }));
@@ -376,6 +418,7 @@ class MailboxController extends Controller
             'already_deleted' => 'Already deleted locally',
             'removed_from_previous_folder' => 'Message moved to another synced folder',
             'folder_sync_failed' => 'Folder sync failed',
+            'processing_failed' => 'Email processing failed',
             'sender_not_allowed' => 'Sender was not allowed',
             'unspecified' => 'No reason recorded',
             default => Str::headline($code),

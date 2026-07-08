@@ -151,4 +151,66 @@ class AcumaticaClientOperationsTest extends TestCase
         $this->assertNotNull($recorded);
         $this->assertStringNotContainsString('$select=', $recorded);
     }
+
+    public function test_fetch_shipping_zones_uses_zone_entity_without_select(): void
+    {
+        Http::fake(['*' => Http::response([])]);
+
+        app(AcumaticaClient::class)->fetchAllShippingZones();
+
+        $recorded = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0]->url())
+            ->first(fn (string $url) => str_contains($url, '/Zone/'));
+
+        $this->assertNotNull($recorded);
+        $this->assertStringNotContainsString('$select=', $recorded);
+    }
+
+    public function test_fetch_first_by_field_builds_entity_field_filter(): void
+    {
+        Http::fake(['*' => Http::response([])]);
+
+        app(AcumaticaClient::class)->fetchFirstByField('Route', 'RouteCode', '3G');
+
+        $url = $this->entityRequestUrl('/Route/');
+
+        $this->assertStringContainsString("RouteCode eq '3G'", urldecode($url));
+        $this->assertStringContainsString('$top=1', $url);
+    }
+
+    public function test_fetch_first_by_field_quotes_odata_values(): void
+    {
+        Http::fake(['*' => Http::response([])]);
+
+        app(AcumaticaClient::class)->fetchFirstByField('Route', 'RouteName', "Langata's East");
+
+        $url = $this->entityRequestUrl('/Route/');
+
+        $this->assertStringContainsString("RouteName eq 'Langata''s East'", urldecode($url));
+    }
+
+    public function test_scalar_val_handles_empty_arrays_and_nested_zone_objects(): void
+    {
+        $this->assertNull(AcumaticaClient::scalarVal([]));
+        $this->assertNull(AcumaticaClient::scalarVal(null));
+        $this->assertSame('Z005', AcumaticaClient::scalarVal(['value' => 'Z005']));
+        $this->assertSame(
+            'Z005',
+            AcumaticaClient::scalarVal([
+                'ZoneID' => ['value' => 'Z005'],
+                'Description' => ['value' => 'Nairobi Zone'],
+            ]),
+        );
+    }
+
+    private function entityRequestUrl(string $entityPath): string
+    {
+        $recorded = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0]->url())
+            ->first(fn (string $url) => str_contains($url, $entityPath));
+
+        $this->assertNotNull($recorded, "No {$entityPath} request was recorded.");
+
+        return $recorded;
+    }
 }

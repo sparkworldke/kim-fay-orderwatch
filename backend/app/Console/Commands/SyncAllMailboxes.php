@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Jobs\SyncMailboxJob;
 use App\Models\MailboxAccount;
+use App\Services\Email\OutlookEmailService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -13,7 +14,7 @@ class SyncAllMailboxes extends Command
 
     protected $description = 'Dispatch a sync job for every connected mailbox account';
 
-    public function handle(): int
+    public function handle(OutlookEmailService $outlook): int
     {
         $accounts = MailboxAccount::whereIn('status', ['connected', 'error'])->get();
 
@@ -23,7 +24,7 @@ class SyncAllMailboxes extends Command
         }
 
         foreach ($accounts as $account) {
-            SyncMailboxJob::dispatchSync($account->id);
+            (new SyncMailboxJob($account->id))->handle($outlook);
             $this->line("  Synced: {$account->email}");
         }
 

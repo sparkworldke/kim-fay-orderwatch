@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcumaticaCustomer;
+use App\Models\AcumaticaShippingZone;
+use App\Support\SalesConsultantScope;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +15,10 @@ class CustomerController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = AcumaticaCustomer::query()->orderBy('name');
+        $query = SalesConsultantScope::applyCustomerScope(
+            AcumaticaCustomer::query()->orderBy('name'),
+            $request->user(),
+        );
 
         $q = trim((string) $request->input('q', ''));
         if ($q !== '') {
@@ -27,19 +33,55 @@ class CustomerController extends Controller
             $query->where('customer_class', $request->input('class'));
         }
 
+        if ($request->filled('class_prefix')) {
+            $prefix = trim((string) $request->input('class_prefix'));
+            $query->where('customer_class', 'like', "{$prefix}%");
+        }
+
         if ($request->has('status')) {
             $query->where('status', $request->input('status'));
+        }
+
+        if ($request->filled('shipping_zone_id')) {
+            $query->where('shipping_zone_id', strtoupper(trim((string) $request->input('shipping_zone_id'))));
         }
 
         return response()->json($query->paginate(min((int) $request->input('per_page', 50), 200)));
     }
 
     /**
+     * Shipping zone master list synced from Acumatica Zone entity.
+     */
+    public function shippingZones(): JsonResponse
+    {
+        $zones = AcumaticaShippingZone::query()
+            ->withCount('customers')
+            ->orderBy('region')
+            ->orderBy('name')
+            ->orderBy('acumatica_id')
+            ->get(['acumatica_id', 'description', 'name', 'region', 'synced_at'])
+            ->map(fn (AcumaticaShippingZone $zone) => [
+                'acumatica_id' => $zone->acumatica_id,
+                'description' => $zone->description,
+                'name' => $zone->name,
+                'region' => $zone->region,
+                'synced_at' => $zone->synced_at,
+                'customer_count' => $zone->customers_count,
+            ])
+            ->values();
+
+        return response()->json($zones);
+    }
+
+    /**
      * Category summary — each customer_class with Active / Inactive / On Hold breakdown.
      */
-    public function categories(): JsonResponse
+    public function categories(Request $request): JsonResponse
     {
-        $rows = AcumaticaCustomer::query()
+        $rows = SalesConsultantScope::applyCustomerScope(
+            AcumaticaCustomer::query(),
+            $request->user(),
+        )
             ->select([
                 DB::raw('COALESCE(customer_class, "Uncategorised") as class'),
                 DB::raw('LOWER(COALESCE(status, "unknown")) as status_lower'),
@@ -79,9 +121,12 @@ class CustomerController extends Controller
     /**
      * All customers in a category, structured as main accounts with nested branches.
      */
-    public function byCategory(string $class): JsonResponse
+    public function byCategory(Request $request, string $class): JsonResponse
     {
-        $customers = AcumaticaCustomer::query()
+        $customers = SalesConsultantScope::applyCustomerScope(
+            AcumaticaCustomer::query(),
+            $request->user(),
+        )
             ->where(function ($q) use ($class) {
                 if ($class === 'Uncategorised') {
                     $q->whereNull('customer_class')->orWhere('customer_class', '');
@@ -129,13 +174,155 @@ class CustomerController extends Controller
         return response()->json($customer);
     }
 
-    public function show(string $id): JsonResponse
+    /**
+     * Reorder predictions — items this customer has ordered on a recurring
+     * cadence that are now overdue, based on the average gap between their
+     * past orders for each item. Needs at least 2 distinct past orders per
+     * item to establish a pattern.
+     */
+    public function suggestedOrders(Request $request, string $id): JsonResponse
     {
         $customer = AcumaticaCustomer::where('acumatica_id', $id)
             ->orWhere('id', $id)
             ->firstOrFail();
 
-        return response()->json($customer);
+        if ($denied = SalesConsultantScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id)) {
+            return $denied;
+        }
+
+        $lines = DB::table('acumatica_sales_order_lines as l')
+            ->join('acumatica_sales_orders as o', 'o.id', '=', 'l.sales_order_id')
+            ->where('o.customer_acumatica_id', $customer->acumatica_id)
+            ->where('o.order_type', 'SO')
+            ->whereNotNull('o.order_date')
+            ->whereNotNull('l.inventory_id')
+            ->select(['l.inventory_id', 'l.description', 'l.uom', 'o.order_date', 'l.order_qty'])
+            ->orderBy('o.order_date')
+            ->get();
+
+        $today = now()->startOfDay();
+        $suggestions = [];
+
+        foreach ($lines->groupBy('inventory_id') as $inventoryId => $itemLines) {
+            $dates = $itemLines->map(fn ($row) => Carbon::parse($row->order_date)->startOfDay())
+                ->unique(fn ($date) => $date->toDateString())
+                ->sort()
+                ->values();
+
+            if ($dates->count() < 2) {
+                continue; // not enough history to establish a cadence
+            }
+
+            $first = $dates->first();
+            $last = $dates->last();
+            $avgIntervalDays = $first->diffInDays($last) / ($dates->count() - 1);
+
+            if ($avgIntervalDays < 1) {
+                continue; // same-day duplicates — no real cadence
+            }
+
+            $nextExpected = $last->copy()->addDays((int) round($avgIntervalDays));
+            if ($nextExpected->gt($today)) {
+                continue; // not due yet
+            }
+
+            $suggestions[] = [
+                'inventory_id' => $inventoryId,
+                'description' => $itemLines->last()->description,
+                'uom' => $itemLines->last()->uom,
+                'order_count' => $dates->count(),
+                'avg_interval_days' => (int) round($avgIntervalDays),
+                'last_order_date' => $last->toDateString(),
+                'last_order_qty' => round((float) $itemLines->last()->order_qty, 2),
+                'next_expected_date' => $nextExpected->toDateString(),
+                'days_overdue' => $nextExpected->diffInDays($today),
+                'avg_order_qty' => round((float) $itemLines->avg('order_qty'), 2),
+            ];
+        }
+
+        usort($suggestions, fn ($a, $b) => $b['days_overdue'] <=> $a['days_overdue']);
+
+        return response()->json([
+            'customer_id' => $customer->acumatica_id,
+            'customer_name' => $customer->name,
+            'suggestions' => array_values($suggestions),
+        ]);
+    }
+
+    public function show(Request $request, string $id): JsonResponse
+    {
+        $customer = AcumaticaCustomer::where('acumatica_id', $id)
+            ->orWhere('id', $id)
+            ->firstOrFail();
+
+        if ($denied = SalesConsultantScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id)) {
+            return $denied;
+        }
+
+        return response()->json($this->formatCustomer($customer));
+    }
+
+    private function formatCustomer(AcumaticaCustomer $customer): array
+    {
+        $customer->loadMissing('shippingZone');
+        $data = $customer->toArray();
+        $branches = $customer->branches()->orderBy('name')->get();
+        $data['branches'] = $branches->toArray();
+        $data['branch_count'] = $branches->count();
+        $data['shipping_zone'] = $customer->shippingZone ? [
+            'acumatica_id' => $customer->shippingZone->acumatica_id,
+            'description' => $customer->shippingZone->description,
+            'name' => $customer->shippingZone->name,
+            'region' => $customer->shippingZone->region,
+        ] : null;
+
+        return $data;
+    }
+
+    /**
+     * Most frequently purchased items across a customer's SO history — used to
+     * surface "common products" alongside their order/document list.
+     */
+    public function commonProducts(Request $request, string $id): JsonResponse
+    {
+        $customer = AcumaticaCustomer::where('acumatica_id', $id)
+            ->orWhere('id', $id)
+            ->firstOrFail();
+
+        if ($denied = SalesConsultantScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id)) {
+            return $denied;
+        }
+
+        $lines = DB::table('acumatica_sales_order_lines as l')
+            ->join('acumatica_sales_orders as o', 'o.id', '=', 'l.sales_order_id')
+            ->where('o.customer_acumatica_id', $customer->acumatica_id)
+            ->where('o.order_type', 'SO')
+            ->whereNotNull('l.inventory_id')
+            ->select(['l.inventory_id', 'l.description', 'l.uom', 'o.order_date', 'l.order_qty'])
+            ->orderBy('o.order_date')
+            ->get();
+
+        $products = [];
+        foreach ($lines->groupBy('inventory_id') as $inventoryId => $itemLines) {
+            $last = $itemLines->last();
+            $products[] = [
+                'inventory_id' => $inventoryId,
+                'description' => $last->description,
+                'uom' => $last->uom,
+                'order_count' => $itemLines->count(),
+                'total_qty' => round((float) $itemLines->sum('order_qty'), 2),
+                'last_order_date' => Carbon::parse($last->order_date)->toDateString(),
+                'last_order_qty' => round((float) $last->order_qty, 2),
+            ];
+        }
+
+        usort($products, fn ($a, $b) => ($b['order_count'] <=> $a['order_count']) ?: ($b['total_qty'] <=> $a['total_qty']));
+
+        return response()->json([
+            'customer_id' => $customer->acumatica_id,
+            'customer_name' => $customer->name,
+            'products' => array_slice(array_values($products), 0, 10),
+        ]);
     }
 
     public function store(Request $request): JsonResponse

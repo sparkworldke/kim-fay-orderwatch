@@ -2,25 +2,49 @@
 
 namespace App\Services\Admin;
 
+use App\Exceptions\AcumaticaSyncStoppedException;
 use App\Models\AcumaticaDeadLetter;
 use App\Models\AcumaticaInventoryItem;
 use App\Models\AcumaticaInventoryRunRateLog;
+use App\Models\AcumaticaProductCategory;
 use App\Models\AcumaticaSyncLog;
+use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
 use Throwable;
 
 class AcumaticaInventorySyncService
 {
+    use InteractsWithAcumaticaSyncRun;
+
+    /** Must match the page size actually requested from fetchActiveInventoryItems() below,
+     *  since the paging loop uses it to detect the last (short) page. */
+    private const PAGE_SIZE = 50;
+
+    /** acumatica_id → local PK cache, populated once per sync run */
+    private array $categoryIdCache = [];
+
     public function __construct(
         private readonly AcumaticaClient $client,
         private readonly InventoryRunRatePredictor $predictor,
+        private readonly ProductBrandClassifier $brandClassifier,
     ) {
     }
 
-    public function run(?int $triggeredByUserId = null, string $triggerType = 'manual', ?int $cronRunLogId = null): AcumaticaSyncLog
+    /**
+     * @param  array{warehouse_id?: string|null, item_class?: string|null, min_qty?: float|null}  $filters
+     */
+    public function run(?int $triggeredByUserId = null, string $triggerType = 'manual', ?int $cronRunLogId = null, array $filters = []): AcumaticaSyncLog
     {
-        $this->assertNoConcurrentInventorySync();
+        $this->assertNoActiveSync(
+            ['inventory', 'inventory_stocks'],
+            'An inventory sync is already running. Wait for it to finish or stop it first.',
+        );
 
-        $run = AcumaticaSyncLog::create([
+        $warehouseId = isset($filters['warehouse_id']) ? (string) $filters['warehouse_id'] : null;
+        $itemClass   = isset($filters['item_class']) ? (string) $filters['item_class'] : null;
+        $minQty      = isset($filters['min_qty']) ? (float) $filters['min_qty'] : null;
+        $filtersMeta = $this->filterMeta($warehouseId, $itemClass, $minQty);
+
+        $run = $this->createSyncRun([
             'sync_type'            => 'inventory',
             'cron_run_log_id'      => $cronRunLogId,
             'started_at'           => now(),
@@ -30,17 +54,30 @@ class AcumaticaInventorySyncService
             'failed_count'         => 0,
             'trigger_type'         => $triggerType,
             'triggered_by_user_id' => $triggeredByUserId,
+            'filters'              => $filtersMeta,
         ]);
 
         StructuredLogger::write('info', 'acumatica', 'inventory_sync_started', [
             'sync_run_id' => $run->id,
+            'filters'     => $filtersMeta,
         ]);
 
+        $this->syncProductCategories($run->id);
+
         try {
-            $run = $this->syncStockItemsPaged($run, stocksOnly: false);
+            $run = $this->syncStockItemsPaged(
+                $run,
+                stocksOnly: false,
+                warehouseId: $warehouseId,
+                itemClass: $itemClass,
+                minQty: $minQty,
+            );
+        } catch (AcumaticaSyncStoppedException $e) {
+            $run = $this->stopSyncRun($run, $e->getMessage());
         } catch (Throwable $e) {
             $run->update([
                 'ended_at'      => now(),
+                'heartbeat_at'  => now(),
                 'status'        => 'failed',
                 'error_message' => $e->getMessage(),
             ]);
@@ -54,12 +91,37 @@ class AcumaticaInventorySyncService
         return $run->fresh();
     }
 
-    public function runStocksOnly(?int $triggeredByUserId = null, string $triggerType = 'manual'): AcumaticaSyncLog
-    {
-        $this->assertNoConcurrentInventorySync();
+    /**
+     * @param  array{warehouse_id?: string|null, item_class?: string|null, min_qty?: float|null}  $filters
+     */
+    public function runStocksOnly(
+        ?int $triggeredByUserId = null,
+        string $triggerType = 'manual',
+        ?int $cronRunLogId = null,
+        array $filters = [],
+    ): AcumaticaSyncLog {
+        $this->assertNoActiveSync(
+            ['inventory', 'inventory_stocks'],
+            'An inventory sync is already running. Wait for it to finish or stop it first.',
+        );
 
-        $run = AcumaticaSyncLog::create([
+        $warehouseId = isset($filters['warehouse_id']) ? (string) $filters['warehouse_id'] : null;
+        $itemClass   = isset($filters['item_class']) ? (string) $filters['item_class'] : null;
+        $minQty      = isset($filters['min_qty']) ? (float) $filters['min_qty'] : null;
+
+        $filtersMeta = ['mode' => 'stocks_only'] + $this->filterMeta($warehouseId, $itemClass, $minQty);
+
+        // Warn if the requested category does not exist in our local inventory
+        if ($itemClass !== null) {
+            $knownClasses = AcumaticaInventoryItem::distinct()->pluck('item_class')->filter()->values()->all();
+            if (! in_array($itemClass, $knownClasses, true)) {
+                $filtersMeta['category_warning'] = "Category '{$itemClass}' not found in local inventory — items may be pulled fresh from Acumatica.";
+            }
+        }
+
+        $run = $this->createSyncRun([
             'sync_type'            => 'inventory_stocks',
+            'cron_run_log_id'      => $cronRunLogId,
             'started_at'           => now(),
             'status'               => 'running',
             'record_count'         => 0,
@@ -67,18 +129,30 @@ class AcumaticaInventorySyncService
             'failed_count'         => 0,
             'trigger_type'         => $triggerType,
             'triggered_by_user_id' => $triggeredByUserId,
-            'filters'              => ['mode' => 'stocks_only'],
+            'filters'              => $filtersMeta,
         ]);
 
         StructuredLogger::write('info', 'acumatica', 'inventory_stocks_sync_started', [
             'sync_run_id' => $run->id,
+            'filters'     => $filtersMeta,
         ]);
 
+        $this->syncProductCategories($run->id);
+
         try {
-            $run = $this->syncStockItemsPaged($run, stocksOnly: true);
+            $run = $this->syncStockItemsPaged(
+                $run,
+                stocksOnly: true,
+                warehouseId: $warehouseId,
+                itemClass: $itemClass,
+                minQty: $minQty,
+            );
+        } catch (AcumaticaSyncStoppedException $e) {
+            $run = $this->stopSyncRun($run, $e->getMessage());
         } catch (Throwable $e) {
             $run->update([
                 'ended_at'      => now(),
+                'heartbeat_at'  => now(),
                 'status'        => 'failed',
                 'error_message' => $e->getMessage(),
             ]);
@@ -92,36 +166,52 @@ class AcumaticaInventorySyncService
         return $run->fresh();
     }
 
-    private function assertNoConcurrentInventorySync(): void
-    {
-        if (AcumaticaSyncLog::query()
-            ->whereIn('sync_type', ['inventory', 'inventory_stocks'])
-            ->where('status', 'running')
-            ->exists()) {
-            throw new \RuntimeException('An inventory sync is already running. Wait for it to finish.');
-        }
-    }
-
-    private function syncStockItemsPaged(AcumaticaSyncLog $run, bool $stocksOnly = false): AcumaticaSyncLog
-    {
+    private function syncStockItemsPaged(
+        AcumaticaSyncLog $run,
+        bool $stocksOnly = false,
+        ?string $warehouseId = null,
+        ?string $itemClass = null,
+        ?float $minQty = null,
+    ): AcumaticaSyncLog {
         $skip           = 0;
         $total          = 0;
         $success        = 0;
         $failed         = 0;
         $skippedUnknown = 0;
+        $skippedLowQty  = 0;
         $zeroQtyCount   = 0;
 
         do {
-            $page = $this->client->fetchActiveInventoryItems($skip);
+            $this->touchSyncRun($run);
+            $page = $this->client->fetchActiveInventoryItems($skip, self::PAGE_SIZE, warehouseId: $warehouseId, itemClass: $itemClass);
             foreach ($page as $raw) {
+                $this->touchSyncRun($run);
+
                 if (! $this->isActiveInventoryItem($raw)) {
+                    continue;
+                }
+
+                // Skip records with a missing or empty InventoryID and log a warning (Req 4.1)
+                if (! $this->str($raw['InventoryID'] ?? null)) {
+                    $recordIndex = $skip + $total + $failed + $skippedUnknown + $skippedLowQty;
+                    StructuredLogger::write('warning', 'acumatica', 'inventory_sync_skipped_missing_id', [
+                        'sync_run_id'  => $run->id,
+                        'record_index' => $recordIndex,
+                        'raw_fragment' => json_encode(array_intersect_key($raw, array_flip(['InventoryID', 'Description', 'ItemClass', 'DefaultWarehouseID']))),
+                    ]);
+                    continue;
+                }
+
+                // Apply minimum quantity filter before counting the record
+                if ($minQty !== null && $this->extractQtyOnHand($raw, $warehouseId) < $minQty) {
+                    $skippedLowQty++;
                     continue;
                 }
 
                 $total++;
                 try {
                     if ($stocksOnly) {
-                        $result = $this->updateStocksOnly($raw, $run->id);
+                        $result = $this->updateStocksOnly($raw, $run->id, $warehouseId);
                         if ($result === 'skipped') {
                             $skippedUnknown++;
                             continue;
@@ -130,7 +220,7 @@ class AcumaticaInventorySyncService
                             $zeroQtyCount++;
                         }
                     } else {
-                        $this->upsertItem($raw, $run->id);
+                        $this->upsertItem($raw, $run->id, $warehouseId);
                     }
                     $success++;
                     usleep(100_000);
@@ -141,10 +231,11 @@ class AcumaticaInventorySyncService
             }
             $skip += count($page);
             usleep(500_000);
-        } while (count($page) === 100);
+        } while (count($page) === self::PAGE_SIZE);
 
         $filters = array_merge($run->filters ?? [], [
             'skipped_unknown' => $skippedUnknown,
+            'skipped_low_qty' => $skippedLowQty,
             'zero_qty_count'  => $zeroQtyCount,
         ]);
 
@@ -154,6 +245,7 @@ class AcumaticaInventorySyncService
 
         $run->update([
             'ended_at'      => now(),
+            'heartbeat_at'  => now(),
             'status'        => $failed === $total && $total > 0 ? 'failed' : 'completed',
             'record_count'  => $total,
             'success_count' => $success,
@@ -165,7 +257,7 @@ class AcumaticaInventorySyncService
     }
 
     /** @return 'updated'|'zero_qty'|'skipped' */
-    private function updateStocksOnly(array $raw, int $runId): string
+    private function updateStocksOnly(array $raw, int $runId, ?string $warehouseId = null): string
     {
         $inventoryId = $this->str($raw['InventoryID'] ?? null);
 
@@ -178,18 +270,24 @@ class AcumaticaInventorySyncService
             return 'skipped';
         }
 
-        $qtyOnHand    = $this->extractQtyOnHand($raw);
-        $qtyAvailable = $this->extractQtyAvailable($raw);
+        $qtyOnHand    = $this->extractQtyOnHand($raw, $warehouseId);
+        $qtyAvailable = $this->extractQtyAvailable($raw, $warehouseId);
         $uom          = $this->extractUom($raw);
         $previousQty  = (float) $existing->qty_on_hand;
 
         $existing->update([
             'default_uom'          => $uom ?? $existing->default_uom,
-            'default_warehouse_id' => $this->str($raw['DefaultWarehouseID'] ?? null) ?? $existing->default_warehouse_id,
+            'default_warehouse_id' => $warehouseId !== null
+                ? strtoupper(trim($warehouseId))
+                : (($this->str($raw['DefaultWarehouseID'] ?? null) !== null)
+                    ? strtoupper(trim($this->str($raw['DefaultWarehouseID'] ?? null)))
+                    : $existing->default_warehouse_id),
             'qty_on_hand'          => $qtyOnHand,
             'qty_available'        => $qtyAvailable,
+            'product_category_id'  => $this->resolveCategoryId($this->str($raw['ItemClass'] ?? null)) ?? $existing->product_category_id,
             'sync_run_id'          => $runId,
             'synced_at'            => now(),
+            'raw_payload'          => json_encode($raw),
         ]);
 
         $prediction = $this->predictor->predict($existing->fresh(), $qtyOnHand, $previousQty);
@@ -212,6 +310,7 @@ class AcumaticaInventorySyncService
     private function recordDeadLetter(int $runId, array $raw, Throwable $e): void
     {
         $resourceId = AcumaticaClient::val($raw['InventoryID'] ?? null) ?? 'unknown';
+        $payload = json_encode($raw);
 
         $existing = AcumaticaDeadLetter::where('resource_type', 'inventory_item')
             ->where('resource_id', $resourceId)
@@ -222,7 +321,7 @@ class AcumaticaInventorySyncService
                 'sync_run_id'   => $runId,
                 'attempt_count' => $existing->attempt_count + 1,
                 'last_error'    => $e->getMessage(),
-                'raw_payload'   => $raw,
+                'raw_payload'   => $payload,
             ]);
         } else {
             AcumaticaDeadLetter::create([
@@ -231,12 +330,12 @@ class AcumaticaInventorySyncService
                 'resource_id'   => $resourceId,
                 'attempt_count' => 1,
                 'last_error'    => $e->getMessage(),
-                'raw_payload'   => $raw,
+                'raw_payload'   => $payload,
             ]);
         }
     }
 
-    private function upsertItem(array $raw, int $runId): void
+    private function upsertItem(array $raw, int $runId, ?string $warehouseId = null): void
     {
         $inventoryId = $this->str($raw['InventoryID'] ?? null);
 
@@ -244,22 +343,49 @@ class AcumaticaInventorySyncService
             throw new \InvalidArgumentException('Stock item missing InventoryID');
         }
 
-        $qtyOnHand    = $this->extractQtyOnHand($raw);
-        $qtyAvailable = $this->extractQtyAvailable($raw);
+        $qtyOnHand    = $this->extractQtyOnHand($raw, $warehouseId);
+        $qtyAvailable = $this->extractQtyAvailable($raw, $warehouseId);
 
         $existing = AcumaticaInventoryItem::where('inventory_id', $inventoryId)->first();
         $previousQty = $existing ? (float) $existing->qty_on_hand : null;
 
+        $itemClass   = $this->str($raw['ItemClass'] ?? null);
+        $description = $this->str($raw['Description'] ?? null);
+        $brandInfo   = $this->brandClassifier->classify($description, $inventoryId);
+
+        $rawWarehouse      = $warehouseId ?? $this->str($raw['DefaultWarehouseID'] ?? null);
+        $normalizedWarehouse = $rawWarehouse !== null ? strtoupper(trim($rawWarehouse)) : null;
+
+        $rawLastModified   = $this->str($raw['LastModified'] ?? null);
+        $lastModifiedAt    = null;
+        if ($rawLastModified !== null) {
+            try {
+                $lastModifiedAt = new \DateTime($rawLastModified);
+            } catch (\Exception) {
+                $lastModifiedAt = null;
+            }
+        }
+
+        $rawLastCost    = $this->str($raw['LastCost'] ?? null);
+        $rawAverageCost = $this->str($raw['AverageCost'] ?? null);
+
         $item = AcumaticaInventoryItem::updateOrCreate(
             ['inventory_id' => $inventoryId],
             [
-                'description'           => $this->str($raw['Description'] ?? null),
-                'item_class'            => $this->str($raw['ItemClass'] ?? null),
+                'description'           => $description,
+                'item_class'            => $itemClass,
+                'brand'                 => $brandInfo['brand'],
+                'product_type'          => $brandInfo['product_type'],
+                'product_category_id'   => $this->resolveCategoryId($itemClass),
                 'default_uom'           => $this->extractUom($raw),
                 'valuation_method'      => $this->str($raw['ValuationMethod'] ?? null),
                 'is_stock_item'         => (bool) (AcumaticaClient::val($raw['IsStockItem'] ?? null) ?? true),
                 'sales_price'           => (float) ($this->str($raw['SalesPrice'] ?? $raw['DefaultPrice'] ?? null) ?? 0),
-                'default_warehouse_id'  => $this->str($raw['DefaultWarehouseID'] ?? null),
+                'default_warehouse_id'  => $normalizedWarehouse,
+                'item_status'           => $this->str($raw['ItemStatus'] ?? null),
+                'last_cost'             => $rawLastCost !== null ? (float) $rawLastCost : null,
+                'average_cost'          => $rawAverageCost !== null ? (float) $rawAverageCost : null,
+                'last_modified_at'      => $lastModifiedAt,
                 'qty_on_hand'           => $qtyOnHand,
                 'qty_available'         => $qtyAvailable,
                 'sync_run_id'           => $runId,
@@ -283,17 +409,19 @@ class AcumaticaInventorySyncService
         ]);
     }
 
-    private function extractQtyOnHand(array $raw): float
+    private function extractQtyOnHand(array $raw, ?string $warehouseId = null): float
     {
-        foreach (['QtyOnHand', 'TotalQtyOnHand', 'QtyOnHandTotal', 'QtyOnHandSummary'] as $field) {
-            $v = $this->str($raw[$field] ?? null);
-            if ($v !== null) {
-                return (float) $v;
+        if ($warehouseId === null) {
+            foreach (['QtyOnHand', 'TotalQtyOnHand', 'QtyOnHandTotal', 'QtyOnHandSummary'] as $field) {
+                $v = $this->str($raw[$field] ?? null);
+                if ($v !== null) {
+                    return (float) $v;
+                }
             }
         }
 
         foreach (['WarehouseDetails', 'ItemWarehouseDetails', 'InventoryItemWarehouseDetails'] as $detailKey) {
-            $sum = $this->sumWarehouseQty($raw[$detailKey] ?? null);
+            $sum = $this->sumWarehouseQty($raw[$detailKey] ?? null, $warehouseId);
             if ($sum > 0) {
                 return $sum;
             }
@@ -302,7 +430,14 @@ class AcumaticaInventorySyncService
         return 0;
     }
 
-    private function sumWarehouseQty(mixed $warehouseDetails): float
+    /**
+     * @param  list<string>  $quantityFields
+     */
+    private function sumWarehouseQty(
+        mixed $warehouseDetails,
+        ?string $warehouseId = null,
+        array $quantityFields = ['QtyOnHand', 'QtyAvailable', 'QtyOnHandSummary'],
+    ): float
     {
         if (! is_array($warehouseDetails)) {
             return 0.0;
@@ -315,15 +450,31 @@ class AcumaticaInventorySyncService
             if (! is_array($row)) {
                 continue;
             }
-            $sum += (float) ($this->str(
-                $row['QtyOnHand']
-                    ?? $row['QtyAvailable']
-                    ?? $row['QtyOnHandSummary']
-                    ?? null
-            ) ?? 0);
+            if ($warehouseId !== null) {
+                $rowWarehouse = $this->str($row['WarehouseID'] ?? $row['SiteID'] ?? null);
+                if ($rowWarehouse === null || strcasecmp($rowWarehouse, $warehouseId) !== 0) {
+                    continue;
+                }
+            }
+            foreach ($quantityFields as $field) {
+                $value = $this->str($row[$field] ?? null);
+                if ($value !== null) {
+                    $sum += (float) $value;
+                    break;
+                }
+            }
         }
 
         return $sum;
+    }
+
+    private function filterMeta(?string $warehouseId, ?string $itemClass, ?float $minQty): array
+    {
+        return array_filter([
+            'warehouse_id' => $warehouseId,
+            'item_class'   => $itemClass,
+            'min_qty'      => $minQty,
+        ], fn ($v) => $v !== null);
     }
 
     private function extractUom(array $raw): ?string
@@ -338,12 +489,21 @@ class AcumaticaInventorySyncService
         return null;
     }
 
-    private function extractQtyAvailable(array $raw): ?float
+    private function extractQtyAvailable(array $raw, ?string $warehouseId = null): ?float
     {
-        foreach (['QtyAvailable', 'TotalQtyAvailable'] as $field) {
-            $v = $this->str($raw[$field] ?? null);
-            if ($v !== null) {
-                return (float) $v;
+        if ($warehouseId === null) {
+            foreach (['QtyAvailable', 'TotalQtyAvailable'] as $field) {
+                $v = $this->str($raw[$field] ?? null);
+                if ($v !== null) {
+                    return (float) $v;
+                }
+            }
+        }
+
+        foreach (['WarehouseDetails', 'ItemWarehouseDetails', 'InventoryItemWarehouseDetails'] as $detailKey) {
+            $available = $this->sumWarehouseQty($raw[$detailKey] ?? null, $warehouseId, ['QtyAvailable', 'QtyOnHand']);
+            if ($available > 0) {
+                return $available;
             }
         }
 
@@ -371,5 +531,91 @@ class AcumaticaInventorySyncService
         }
 
         return (string) $v;
+    }
+
+    /**
+     * Fetch all ItemClass records from Acumatica and upsert them into
+     * acumatica_product_categories. Populates $categoryIdCache for the run.
+     * Non-blocking: a failure here is logged but does not abort the item sync.
+     */
+    private function syncProductCategories(int $runId): void
+    {
+        try {
+            $classes = $this->client->fetchAllItemClasses();
+
+            foreach ($classes as $raw) {
+                $classId = $this->str($raw['ClassID'] ?? null);
+                if ($classId === null) {
+                    continue;
+                }
+
+                $cat = AcumaticaProductCategory::updateOrCreate(
+                    ['acumatica_id' => $classId],
+                    [
+                        'description' => $this->str($raw['Description'] ?? null),
+                        'item_type'   => $this->str($raw['ItemType'] ?? $raw['Type'] ?? null),
+                        'default_uom' => $this->str($raw['DefaultUOM'] ?? $raw['BaseUOM'] ?? null),
+                        'sync_run_id' => $runId,
+                        'synced_at'   => now(),
+                    ],
+                );
+
+                $this->categoryIdCache[$classId] = $cat->id;
+            }
+
+            StructuredLogger::write('info', 'acumatica', 'product_categories_synced', [
+                'sync_run_id' => $runId,
+                'count'       => count($this->categoryIdCache),
+            ]);
+        } catch (Throwable $e) {
+            StructuredLogger::write('warning', 'acumatica', 'product_categories_sync_failed', [
+                'sync_run_id' => $runId,
+                'error'       => $e->getMessage(),
+            ]);
+            // Populate cache from existing DB rows so items still get linked
+            $this->categoryIdCache = AcumaticaProductCategory::pluck('id', 'acumatica_id')->all();
+        }
+    }
+
+    /**
+     * Resolve the local PK for a given Acumatica ItemClass ID.
+     * Uses the in-memory cache built by syncProductCategories().
+     * If the class wasn't returned by the ItemClass endpoint, creates a minimal
+     * placeholder row so the FK is always set when the item_class string is known.
+     */
+    private function resolveCategoryId(?string $itemClass): ?int
+    {
+        if ($itemClass === null) {
+            return null;
+        }
+
+        if (array_key_exists($itemClass, $this->categoryIdCache)) {
+            return $this->categoryIdCache[$itemClass];
+        }
+
+        // Try DB first (may have been created by a previous full sync or API call)
+        $existing = AcumaticaProductCategory::where('acumatica_id', $itemClass)->first();
+
+        if ($existing) {
+            $this->categoryIdCache[$itemClass] = $existing->id;
+            return $existing->id;
+        }
+
+        // ItemClass endpoint didn't return this class — create a placeholder so the
+        // FK can be set. Description can be filled in when the endpoint is available.
+        try {
+            $cat = AcumaticaProductCategory::create([
+                'acumatica_id' => $itemClass,
+                'description'  => null,
+                'synced_at'    => now(),
+            ]);
+            $this->categoryIdCache[$itemClass] = $cat->id;
+            return $cat->id;
+        } catch (\Throwable) {
+            // Race condition — another process may have inserted it first
+            $id = AcumaticaProductCategory::where('acumatica_id', $itemClass)->value('id');
+            $this->categoryIdCache[$itemClass] = $id;
+            return $id;
+        }
     }
 }

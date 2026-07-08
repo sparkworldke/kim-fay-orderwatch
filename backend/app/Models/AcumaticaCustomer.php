@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AcumaticaCustomer extends Model
 {
@@ -18,6 +19,7 @@ class AcumaticaCustomer extends Model
         'customer_class',
         'payment_terms',
         'tax_zone',
+        'shipping_zone_id',
         'billing_address',
         'shipping_address',
         'sync_run_id',
@@ -44,5 +46,15 @@ class AcumaticaCustomer extends Model
     public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_acumatica_id', 'acumatica_id');
+    }
+
+    public function shippingZone(): BelongsTo
+    {
+        return $this->belongsTo(AcumaticaShippingZone::class, 'shipping_zone_id', 'acumatica_id');
+    }
+
+    public function branches(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_acumatica_id', 'acumatica_id');
     }
 }

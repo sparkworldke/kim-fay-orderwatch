@@ -8,6 +8,8 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
+import { ScrollToTop } from "@/components/scroll-to-top";
 import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
@@ -51,6 +53,11 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back to the dashboard.
         </p>
+        {error?.message && (
+          <p className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-left text-xs font-mono text-destructive break-words">
+            {error.message}
+          </p>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -81,10 +88,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Kim-Fay OrderWatch" },
       { name: "description", content: "Internal order monitoring, reconciliation and revenue protection dashboard for Kim-Fay." },
       { name: "robots", content: "noindex,nofollow" },
+      { name: "theme-color", content: "#1a4480" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "OrderWatch" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "icon", href: "/kim-fay-logo.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/kim-fay-logo.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -118,7 +132,9 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ScrollToTop />
       <Outlet />
+      <PwaInstallPrompt />
       <Toaster richColors position="top-right" />
     </QueryClientProvider>
   );

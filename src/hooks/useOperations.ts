@@ -9,6 +9,45 @@ type Paginated<T> = {
   per_page: number;
 };
 
+export type ContributionRow = {
+  contribution_pct: number;
+  line_count?: number;
+  count?: number;
+  order_count?: number;
+  [key: string]: string | number | null | undefined;
+};
+
+export type FillRateExcelSummary = {
+  totals: {
+    actual_qty: number;
+    ordered_qty: number;
+    undershipped_qty: number;
+    undershipped_value: number;
+    fill_rate_pct: number | null;
+    order_count: number;
+  };
+  by_status: ContributionRow[];
+  by_reason: ContributionRow[];
+  by_department: ContributionRow[];
+  by_customer_group: ContributionRow[];
+  top_customers: ContributionRow[];
+  top_products: ContributionRow[];
+};
+
+export type BackordersExcelSummary = {
+  totals: {
+    back_order_qty: number;
+    back_order_value: number;
+    line_count: number;
+    order_count: number;
+  };
+  by_reason: ContributionRow[];
+  by_department: ContributionRow[];
+  by_customer_group: ContributionRow[];
+  top_customers: ContributionRow[];
+  top_products: ContributionRow[];
+};
+
 export type InventoryPrediction = {
   daily_run_rate: number | null;
   days_until_stockout: number | null;
@@ -22,6 +61,8 @@ export type InventoryItem = {
   inventory_id: string;
   description: string | null;
   item_class: string | null;
+  brand: string | null;
+  product_type: "manufactured" | "trading";
   default_uom: string | null;
   default_warehouse_id: string | null;
   qty_on_hand: string;
@@ -36,6 +77,7 @@ export type BackorderLine = {
   order_nbr: string;
   inventory_id: string;
   product_name: string | null;
+  product_line: string | null;
   uom: string | null;
   qty_on_hand: string | null;
   qty_available: string | null;
@@ -52,8 +94,59 @@ export type BackorderLine = {
   unit_price: string;
   revenue_at_risk: string;
   warehouse_id: string | null;
+  lead_time_days: number | null;
+  reason_code: string | null;
+  reason_notes: string | null;
+  reason_updated_at: string | null;
   currency_id: string | null;
   synced_at: string | null;
+};
+
+export type BackordersAnalytics = {
+  summary: {
+    open_lines: number;
+    open_orders: number;
+    revenue_at_risk: number;
+    total_open_qty: number;
+  };
+  excel_summary: BackordersExcelSummary;
+  filters: {
+    product_lines: string[];
+    customer_groups: string[];
+    departments: string[];
+    warehouse_ids: string[];
+    reason_codes: string[];
+  };
+  charts: {
+    trend: Array<{
+      bucket_date: string;
+      line_count: number;
+      order_count: number;
+      open_qty: number;
+      revenue_at_risk: number;
+    }>;
+    lead_time_correlation: Array<{
+      lead_time_bucket: string;
+      line_count: number;
+      avg_lead_time_days: number | null;
+      revenue_at_risk: number;
+      open_qty: number;
+    }>;
+    category_distribution: Array<{
+      product_line: string;
+      line_count: number;
+      revenue_at_risk: number;
+    }>;
+    reason_distribution: Array<{
+      reason_code: string;
+      line_count: number;
+      revenue_at_risk: number;
+    }>;
+    customer_group_distribution: ContributionRow[];
+    department_distribution: ContributionRow[];
+    customer_distribution: ContributionRow[];
+    product_distribution: ContributionRow[];
+  };
 };
 
 export type FillRateProduct = {
@@ -61,12 +154,16 @@ export type FillRateProduct = {
   product_name: string | null;
   order_qty: string;
   shipped_qty: string;
+  qty_on_shipments: string;
   open_qty: string;
   uom: string | null;
   unit_price: string;
   line_fill_rate_pct: string | null;
+  unfilled_reason_code: string | null;
   not_shipped_value: string;
 };
+
+export type DeliverySlaStatus = "ok" | "warning" | "breach" | "unknown";
 
 export type FillRateSnapshot = {
   id: number;
@@ -81,6 +178,14 @@ export type FillRateSnapshot = {
   revenue_not_shipped: string;
   currency_id: string | null;
   computed_at: string | null;
+  delivery_hours?: number | null;
+  sla_hours?: number | null;
+  sla_warning_hours?: number | null;
+  delivery_sla_status?: DeliverySlaStatus;
+  delivery_sla_label?: string;
+  shipping_zone_id?: string | null;
+  shipping_zone_description?: string | null;
+  is_metro_zone?: boolean;
   products?: FillRateProduct[];
   order?: { id: number; acumatica_order_nbr: string; customer_name: string | null; order_date: string | null };
 };
@@ -93,6 +198,10 @@ export function useInventorySummary() {
       low_stock_count: number;
       at_risk_count: number;
       last_synced_at: string | null;
+      warehouse_ids: string[];
+      brands: string[];
+      manufactured_count: number;
+      trading_count: number;
     }>("operations/inventory/summary"),
   });
 }
@@ -100,14 +209,18 @@ export function useInventorySummary() {
 export function useInventory(params: {
   q?: string;
   low_stock?: boolean;
+  warehouse_id?: string[];
   prediction_status?: string;
+  product_type?: string;
   page?: number;
   per_page?: number;
 }) {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
   if (params.low_stock) qs.set("low_stock", "1");
+  for (const warehouse of params.warehouse_id ?? []) qs.append("warehouse_id[]", warehouse);
   if (params.prediction_status) qs.set("prediction_status", params.prediction_status);
+  if (params.product_type) qs.set("product_type", params.product_type);
   qs.set("page", String(params.page ?? 1));
   qs.set("per_page", String(params.per_page ?? 50));
 
@@ -130,16 +243,55 @@ export function useBackordersSummary() {
   });
 }
 
-export function useBackorders(params: { q?: string; customer_id?: string; page?: number; per_page?: number }) {
+export function useBackorders(params: {
+  q?: string;
+  customer_id?: string;
+  customer_group?: string;
+  date_from?: string;
+  date_to?: string;
+  product_line?: string;
+  warehouse_id?: string;
+  reason_code?: string;
+  page?: number;
+  per_page?: number;
+}) {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
   if (params.customer_id) qs.set("customer_id", params.customer_id);
+  if (params.customer_group) qs.set("customer_group", params.customer_group);
+  if (params.date_from) qs.set("date_from", params.date_from);
+  if (params.date_to) qs.set("date_to", params.date_to);
+  if (params.product_line) qs.set("product_line", params.product_line);
+  if (params.warehouse_id) qs.set("warehouse_id", params.warehouse_id);
+  if (params.reason_code) qs.set("reason_code", params.reason_code);
   qs.set("page", String(params.page ?? 1));
   qs.set("per_page", String(params.per_page ?? 50));
 
   return useQuery({
     queryKey: ["operations-backorders", params],
     queryFn: () => apiFetch<Paginated<BackorderLine>>(`operations/backorders?${qs}`),
+  });
+}
+
+export function useBackordersAnalytics(params: {
+  date_from?: string;
+  date_to?: string;
+  product_line?: string;
+  customer_group?: string;
+  warehouse_id?: string;
+  reason_code?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (params.date_from) qs.set("date_from", params.date_from);
+  if (params.date_to) qs.set("date_to", params.date_to);
+  if (params.product_line) qs.set("product_line", params.product_line);
+  if (params.customer_group) qs.set("customer_group", params.customer_group);
+  if (params.warehouse_id) qs.set("warehouse_id", params.warehouse_id);
+  if (params.reason_code) qs.set("reason_code", params.reason_code);
+
+  return useQuery({
+    queryKey: ["operations-backorders-analytics", params],
+    queryFn: () => apiFetch<BackordersAnalytics>(`operations/backorders/analytics?${qs}`),
   });
 }
 
@@ -154,6 +306,32 @@ export function useBackordersByAccount(top = 10) {
       revenue_at_risk: string;
       total_open_qty: string;
     }> }>(`operations/backorders/by-account?top=${top}`),
+  });
+}
+
+export function useUpdateBackorderReason() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      reason_code,
+      reason_notes,
+    }: {
+      id: number;
+      reason_code: string | null;
+      reason_notes: string | null;
+    }) =>
+      apiFetch<BackorderLine>(`operations/backorders/${id}`, {
+        method: "PATCH",
+        body: { reason_code, reason_notes },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["operations-backorders"] });
+      qc.invalidateQueries({ queryKey: ["operations-backorders-analytics"] });
+      qc.invalidateQueries({ queryKey: ["operations-backorders-summary"] });
+      qc.invalidateQueries({ queryKey: ["operations-backorders-accounts"] });
+    },
   });
 }
 
@@ -174,10 +352,103 @@ export type ExecutiveAlert = {
   message: string;
 };
 
+export type DeliverySlaZoneImpact = {
+  acumatica_id: string | null;
+  name: string;
+  region: string | null;
+  total_orders: number;
+  delayed_orders: number;
+  warning_orders: number;
+  delayed_pct: number;
+  delayed_value: number;
+  avg_delay_hours: number | null;
+  primary_reason: string | null;
+  meets_min_sample: boolean;
+  alert_triggered: boolean;
+};
+
+export type DeliverySlaDelayedOrder = {
+  order_nbr: string;
+  customer_name: string | null;
+  customer_acumatica_id: string | null;
+  shipping_zone_id: string | null;
+  shipping_zone_name: string | null;
+  shipping_zone_region: string | null;
+  region_key: string | null;
+  order_value: number;
+  delivery_hours: number | null;
+  delivery_sla_status: string;
+  delivery_sla_label: string;
+  sla_hours: number | null;
+  primary_reason: string | null;
+  order_date: string | null;
+};
+
 export type BusinessOptimizationData = {
   date_from: string;
   date_to: string;
   ops_status: OperationsStatus;
+  delivery_sla?: {
+    rules: {
+      clock_start: string;
+      clock_start_label: string;
+      metro_sla_hours: number;
+      regional_warning_hours: number;
+      regional_breach_hours: number;
+      regions: Array<{
+        region_key: string;
+        label: string;
+        sla_hours: number;
+        warning_hours: number | null;
+        breach_hours: number;
+        is_metro: boolean;
+        alert_min_orders: number;
+        alert_delayed_pct: number;
+        clock_start: string;
+      }>;
+    };
+    summary: {
+      total_orders: number;
+      on_time_count: number;
+      on_time_pct: number | null;
+      warning_count: number;
+      delayed_count: number;
+      delayed_pct: number | null;
+      delayed_value: number;
+      unknown_count: number;
+      avg_delivery_hours: number | null;
+    };
+    by_region: Array<{
+      region_key: string;
+      label: string;
+      total_orders: number;
+      on_time_orders: number;
+      warning_orders: number;
+      delayed_orders: number;
+      on_time_pct: number | null;
+      delayed_pct: number | null;
+      delayed_value: number;
+      avg_delivery_hours: number | null;
+      sla_hours: number;
+    }>;
+    most_affected_zones: DeliverySlaZoneImpact[];
+    daily_trend: Array<{ day: string; total: number; delayed: number; on_time: number }>;
+    delayed_orders: DeliverySlaDelayedOrder[];
+  };
+  zone_guardrails?: {
+    unmapped_customer_count: number;
+    unmapped_with_orders_in_period: number;
+    alert_min_orders: number;
+    alert_delayed_pct: number;
+    date_from: string;
+    date_to: string;
+  };
+  filters?: {
+    shipping_zones: Array<{ acumatica_id: string; description: string | null; name: string | null; region: string | null }>;
+    selected_shipping_zone_id: string | null;
+    selected_region: string | null;
+    region_options: Array<{ value: string; label: string }>;
+  };
   customer_focus: {
     top_by_revenue: Array<{
       customer_acumatica_id: string;
@@ -240,13 +511,34 @@ export type BusinessOptimizationData = {
     combined_exposure: number;
     open_backorder_lines: number;
     orders_below_80_pct: number;
+    zero_qty_on_shipments_lines?: number;
+    backorders_without_reason?: number;
   };
   executive_alerts: ExecutiveAlert[];
   charts: {
     backorders_by_customer: BusinessOptimizationData["customer_focus"]["top_by_revenue"];
+    backorders_by_reason?: Array<{
+      reason_code: string;
+      line_count: number;
+      revenue_at_risk: number;
+      total_open_qty: number;
+    }>;
     fill_rate_by_status: Array<{ status: string; count: number }>;
+    fill_rate_unfilled_reasons?: Array<{
+      reason_code: string;
+      line_count: number;
+      total_demand_qty: number;
+      revenue_at_risk: number;
+    }>;
     stockout_risk_products: BusinessOptimizationData["production_forecast"]["at_risk_items"];
-    revenue_bleeding_split: Array<{ label: string; value: number }>;
+    revenue_bleeding_split?: Array<{ label: string; value: number }>;
+    backorders_by_customer_group?: ContributionRow[];
+    backorders_by_department?: ContributionRow[];
+    fill_rate_by_customer_group?: ContributionRow[];
+  };
+  excel_summary?: {
+    fill_rate: FillRateExcelSummary;
+    backorders: BackordersExcelSummary;
   };
 };
 
@@ -258,19 +550,47 @@ export function useOperationsStatus() {
   });
 }
 
-export function useBusinessOptimization(dateFrom: string, dateTo: string) {
+export function useBusinessOptimization(
+  dateFrom: string,
+  dateTo: string,
+  shippingZoneId?: string,
+  region?: string,
+) {
+  const qs = new URLSearchParams();
+  qs.set("date_from", dateFrom);
+  qs.set("date_to", dateTo);
+  if (shippingZoneId) qs.set("shipping_zone_id", shippingZoneId);
+  if (region && region !== "all") qs.set("region", region);
+
   return useQuery({
-    queryKey: ["operations-business-optimization", dateFrom, dateTo],
+    queryKey: ["operations-business-optimization", dateFrom, dateTo, shippingZoneId, region],
     queryFn: () =>
       apiFetch<BusinessOptimizationData>(
-        `operations/business-optimization?date_from=${dateFrom}&date_to=${dateTo}`,
+        `operations/business-optimization?${qs}`,
       ),
   });
 }
 
-export function useFillRateSummary(dateFrom: string, dateTo: string) {
+export type FillRateSummaryFilters = {
+  shipping_zone_id?: string;
+  customer_group?: string;
+  product_line?: string;
+  reason_code?: string;
+  status?: string;
+};
+
+export function useFillRateSummary(dateFrom: string, dateTo: string, filters: FillRateSummaryFilters = {}) {
+  const qs = new URLSearchParams();
+  qs.set("date_from", dateFrom);
+  qs.set("date_to", dateTo);
+  if (filters.shipping_zone_id) qs.set("shipping_zone_id", filters.shipping_zone_id);
+  if (filters.customer_group) qs.set("customer_group", filters.customer_group);
+  if (filters.product_line) qs.set("product_line", filters.product_line);
+  if (filters.reason_code) qs.set("reason_code", filters.reason_code);
+  if (filters.status) qs.set("status", filters.status);
+
   return useQuery({
-    queryKey: ["operations-fill-rate-summary", dateFrom, dateTo],
+    queryKey: ["operations-fill-rate-summary", dateFrom, dateTo, filters],
     queryFn: () => apiFetch<{
       date_from: string;
       date_to: string;
@@ -282,15 +602,54 @@ export function useFillRateSummary(dateFrom: string, dateTo: string) {
       at_risk_count: number;
       critical_count: number;
       na_count: number;
+      delivery_sla_breach_count: number;
+      delivery_sla_warning_count: number;
+      delivery_sla_rules: {
+        metro_zones: string;
+        metro_sla_hours: number;
+        regional_warning_hours: number;
+        regional_breach_hours: number;
+      };
       last_computed_at: string | null;
-    }>(`operations/fill-rate/summary?date_from=${dateFrom}&date_to=${dateTo}`),
+      excel_summary: FillRateExcelSummary;
+      filters: {
+        customer_groups: string[];
+        departments: string[];
+        reason_codes: string[];
+        product_lines: string[];
+        shipping_zones: Array<{ acumatica_id: string; description: string | null; name: string | null; region: string | null }>;
+      };
+    }>(`operations/fill-rate/summary?${qs}`),
   });
 }
 
-export function useFillRate(params: { q?: string; status?: string; page?: number; per_page?: number }) {
+export type FillRateSort = "high_to_low" | "low_to_high";
+
+export function useFillRate(params: {
+  q?: string;
+  status?: string;
+  date_from?: string;
+  date_to?: string;
+  customer_group?: string;
+  product_line?: string;
+  reason_code?: string;
+  shipping_zone_id?: string;
+  delivery_sla?: "breach" | "warning";
+  sort?: FillRateSort;
+  page?: number;
+  per_page?: number;
+}) {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
   if (params.status) qs.set("status", params.status);
+  if (params.delivery_sla) qs.set("delivery_sla", params.delivery_sla);
+  if (params.date_from) qs.set("date_from", params.date_from);
+  if (params.date_to) qs.set("date_to", params.date_to);
+  if (params.customer_group) qs.set("customer_group", params.customer_group);
+  if (params.product_line) qs.set("product_line", params.product_line);
+  if (params.reason_code) qs.set("reason_code", params.reason_code);
+  if (params.shipping_zone_id) qs.set("shipping_zone_id", params.shipping_zone_id);
+  if (params.sort) qs.set("sort", params.sort);
   qs.set("page", String(params.page ?? 1));
   qs.set("per_page", String(params.per_page ?? 50));
 
@@ -302,7 +661,7 @@ export function useFillRate(params: { q?: string; status?: string; page?: number
 
 export type OpsSyncRun = {
   id: number;
-  status: string;
+  status: "running" | "completed" | "failed" | "stopped";
   record_count: number;
   success_count: number;
   failed_count: number;
@@ -319,7 +678,11 @@ export function formatOpsSyncToast(label: string, run: OpsSyncRun): string {
   const base =
     run.status === "completed"
       ? `${label} updated: ${run.success_count} saved`
-      : `${label} failed: ${run.error_message ?? "Unknown error"}`;
+      : run.status === "stopped"
+        ? `${label} stopped: ${run.error_message ?? "Stopped by user"}`
+        : run.status === "running"
+          ? `${label} started and is running in the background`
+        : `${label} failed: ${run.error_message ?? "Unknown error"}`;
 
   const parts = [base];
   if (run.record_count > 0 && run.record_count !== run.success_count) {

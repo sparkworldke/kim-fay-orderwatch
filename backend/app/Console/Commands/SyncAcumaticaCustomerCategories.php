@@ -95,22 +95,46 @@ class SyncAcumaticaCustomerCategories extends Command
                 'failed'      => $failed,
             ]);
         } catch (Throwable $e) {
+            $isUnavailableEndpoint = $this->isUnavailableCategoryEndpoint($e);
+
             $run->update([
                 'ended_at'      => now(),
                 'status'        => 'failed',
+                'record_count'  => 0,
+                'success_count' => 0,
+                'failed_count'  => 1,
                 'error_message' => $e->getMessage(),
             ]);
 
-            StructuredLogger::write('error', 'acumatica', 'category_sync_failed', [
+            StructuredLogger::write($isUnavailableEndpoint ? 'warning' : 'error', 'acumatica', 'category_sync_failed', [
                 'sync_run_id' => $run->id,
                 'error'       => $e->getMessage(),
+                'scheduler_exit' => $isUnavailableEndpoint ? 'success' : 'failure',
             ]);
 
             $this->error("Category sync failed: {$e->getMessage()}");
+
+            if ($isUnavailableEndpoint) {
+                $this->warn('CustomerClass is unavailable to the configured Acumatica user. The failed sync was recorded, but the scheduler will continue.');
+
+                return Command::SUCCESS;
+            }
 
             return Command::FAILURE;
         }
 
         return Command::SUCCESS;
+    }
+
+    private function isUnavailableCategoryEndpoint(Throwable $e): bool
+    {
+        $message = strtolower($e->getMessage());
+
+        return str_contains($message, 'customerclass')
+            && (
+                str_contains($message, '403')
+                || str_contains($message, 'forbidden')
+                || str_contains($message, 'insufficient rights')
+            );
     }
 }

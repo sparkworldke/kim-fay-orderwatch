@@ -48,17 +48,17 @@ class DailyReportConfig extends Model
     public static function singleton(): self
     {
         return static::query()->firstOrCreate([], [
-            'name' => 'Daily Management Report',
+            'name' => 'Daily Executive Exceptions Report',
             'is_enabled' => true,
             'send_time' => '08:00',
             'timezone' => 'Africa/Nairobi',
             'recipients_json' => [],
             'reply_to_json' => [],
-            'subject_template' => 'OrderWatch Daily Brief – {report_date}',
-            'include_ai_insights' => true,
-            'include_comparison' => true,
-            'include_mtd' => true,
-            'include_customer_highlights' => true,
+            'subject_template' => 'OrderWatch Executive Exceptions – {report_date}',
+            'include_ai_insights' => false,
+            'include_comparison' => false,
+            'include_mtd' => false,
+            'include_customer_highlights' => false,
         ]);
     }
 

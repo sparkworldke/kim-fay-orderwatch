@@ -4,15 +4,15 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\CronJob;
-use App\Services\Cron\HourlyAutoMatchCronService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 
 class CronJobController extends Controller
 {
     public function index(): JsonResponse
     {
-        CronJob::hourlyAutoMatch();
+        CronJob::ensureDefaults();
         return response()->json(CronJob::with(['runLogs' => fn ($query) => $query->latest('started_at')->limit(1)])
             ->orderBy('name')->get()->map(fn ($job) => $this->present($job)));
     }
@@ -32,22 +32,37 @@ class CronJobController extends Controller
             'settings.acumatica_sync_enabled' => ['sometimes', 'boolean'],
             'settings.matching_enabled' => ['sometimes', 'boolean'],
             'settings.sales_order_lookback_days' => ['sometimes', 'integer', 'min:1', 'max:90'],
+            'settings.status_sync_lookback_days' => ['sometimes', 'integer', 'min:1', 'max:90'],
+            'settings.status_sync_max_orders' => ['sometimes', 'integer', 'min:50', 'max:5000'],
+            'settings.fill_rate_lookback_days' => ['sometimes', 'integer', 'min:1', 'max:30'],
         ]);
         if (isset($validated['settings'])) {
-            $validated['settings'] = array_merge($cronJob->settings ?? [], $validated['settings'], [
-                'deterministic_auto_link' => true, 'ai_auto_link' => false,
-            ]);
+            $settings = array_merge($cronJob->settings ?? [], $validated['settings']);
+            if ($cronJob->job_key === 'email-sales-order-auto-match') {
+                $settings = array_merge($settings, ['deterministic_auto_link' => true, 'ai_auto_link' => false]);
+            }
+            $validated['settings'] = $settings;
         }
         if (array_key_exists('is_enabled', $validated)) $validated['status'] = $validated['is_enabled'] ? 'active' : 'paused';
         $cronJob->update($validated);
         return response()->json($this->present($cronJob->fresh('runLogs')));
     }
 
-    public function run(Request $request, CronJob $cronJob, HourlyAutoMatchCronService $service): JsonResponse
+    public function run(Request $request, CronJob $cronJob): JsonResponse
     {
         $jobId = $cronJob->id;
         $userId = $request->user()->id;
-        defer(fn () => $service->run(CronJob::findOrFail($jobId), 'manual', $userId));
+        defer(function () use ($jobId, $userId): void {
+            $job = CronJob::findOrFail($jobId);
+            $command = trim((string) $job->command);
+            if (str_starts_with($command, 'php artisan ')) {
+                $command = trim(substr($command, strlen('php artisan ')));
+            }
+            if ($command === '') {
+                return;
+            }
+            Artisan::call($command, ['--source' => 'manual', '--user-id' => $userId]);
+        });
         return response()->json(['message' => 'Cron run started. History will update automatically.'], 202);
     }
 
@@ -67,7 +82,14 @@ class CronJobController extends Controller
 
     private function present(CronJob $job): array
     {
+        $nextRunAt = $job->computedNextRunAt();
+        if ($nextRunAt && (! $job->next_run_at || $job->next_run_at->getTimestamp() !== $nextRunAt->getTimestamp())) {
+            $job->forceFill(['next_run_at' => $nextRunAt])->save();
+            $job->refresh();
+        }
+
         return array_merge($job->attributesToArray(), [
+            'next_run_at' => $nextRunAt?->format(DATE_ATOM),
             'command_reference' => 'php artisan schedule:work',
             'scheduler_reference' => '* * * * * php artisan schedule:run',
             'runs' => $job->relationLoaded('runLogs') ? $job->runLogs->values() : [],

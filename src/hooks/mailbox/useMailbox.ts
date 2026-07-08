@@ -104,8 +104,11 @@ export function useSyncAllMailboxes() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () =>
-      apiFetch<{ message: string }>("admin/mailboxes/sync-all", { method: "POST" }),
+    mutationFn: (params?: { from?: string; to?: string }) =>
+      apiFetch<{ message: string }>("admin/mailboxes/sync-all", {
+        method: "POST",
+        body: params,
+      }),
     onSuccess: (data) => {
       toast.success(data.message);
       queryClient.invalidateQueries({ queryKey: MAILBOXES_KEY });
@@ -118,9 +121,12 @@ export function useSyncMailbox() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: number) =>
-      apiFetch<{ message: string }>(`admin/mailboxes/${id}/sync`, { method: "POST" }),
-    onSuccess: (_data, id) => {
+    mutationFn: (params: { id: number; from?: string; to?: string }) =>
+      apiFetch<{ message: string }>(`admin/mailboxes/${params.id}/sync`, {
+        method: "POST",
+        body: { from: params.from, to: params.to },
+      }),
+    onSuccess: (_data, { id }) => {
       toast.success("Sync started — emails will be imported in the background.");
       queryClient.invalidateQueries({ queryKey: MAILBOXES_KEY });
       // Refresh logs shortly so the "running" entry appears
@@ -335,6 +341,7 @@ export interface EmailQueryParams {
 export interface InboxGroupQueryParams extends EmailQueryParams {
   date_from?: string;
   date_to?: string;
+  group_by?: "domain" | "customer";
 }
 
 export function useInboxEmailGroups(params: InboxGroupQueryParams = {}) {
@@ -343,6 +350,7 @@ export function useInboxEmailGroups(params: InboxGroupQueryParams = {}) {
   if (params.search) query.set("search", params.search);
   if (params.date_from) query.set("date_from", params.date_from);
   if (params.date_to) query.set("date_to", params.date_to);
+  if (params.group_by) query.set("group_by", params.group_by);
   const qs = query.toString();
 
   return useQuery({

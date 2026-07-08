@@ -7,7 +7,7 @@ use App\Models\AcumaticaSalesOrder;
 use App\Models\DailyReportConfig;
 use App\Models\DailyReportRun;
 use App\Models\User;
-use App\Services\Reports\DailyManagementReportService;
+use App\Services\Reports\DailyExecutiveReportService;
 use App\Services\Reports\DailyReportRunnerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -18,26 +18,23 @@ class DailyManagementReportTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_report_service_builds_yesterday_mtd_and_comparison_payload(): void
+    public function test_report_service_builds_executive_payload(): void
     {
         $yesterday = now('Africa/Nairobi')->subDay();
-        $dayBefore = now('Africa/Nairobi')->subDays(2);
 
         $this->createOrder($yesterday, 'Completed', 1000);
-        $this->createOrder($yesterday, 'Open', 500);
-        $this->createOrder($dayBefore, 'Completed', 800);
+        $this->createOrder($yesterday, 'Pending Approval', 500);
 
-        $payload = app(DailyManagementReportService::class)->buildPayload(now('Africa/Nairobi'), 'Africa/Nairobi');
+        $payload = app(DailyExecutiveReportService::class)->buildPayload(now('Africa/Nairobi'), 'Africa/Nairobi');
 
+        $this->assertSame('daily_executive_email', $payload['report_type']);
         $this->assertSame($yesterday->toDateString(), $payload['report_date']);
         $this->assertSame($yesterday->format('d/m/Y'), $payload['report_date_display']);
-        $this->assertSame($yesterday->copy()->startOfMonth()->format('F Y'), $payload['mtd_period_label']);
-        $this->assertArrayHasKey('sentiment', $payload['comparison']['orders_received']);
-        $this->assertSame(2, $payload['yesterday']['orders_received']);
-        $this->assertSame(1, $payload['yesterday']['orders_completed']);
-        $this->assertSame(500.0, $payload['yesterday']['revenue_at_risk']);
-        $this->assertArrayHasKey('comparison', $payload);
-        $this->assertArrayHasKey('mtd', $payload);
+        $this->assertArrayHasKey('orders', $payload);
+        $this->assertArrayHasKey('fill_rate', $payload);
+        $this->assertArrayHasKey('backorders', $payload);
+        $this->assertArrayHasKey('sla', $payload);
+        $this->assertArrayHasKey('revenue_split', $payload);
     }
 
     public function test_scheduled_runner_skips_when_not_send_time(): void
@@ -93,7 +90,7 @@ class DailyManagementReportTest extends TestCase
         ]);
 
         Mail::assertSent(DailyManagementReportMail::class, function ($mail) {
-            return str_contains($mail->envelope()->subject, 'OrderWatch')
+            return str_contains($mail->envelope()->subject, 'Executive Exceptions')
                 && $mail->hasTo('customercare@kimfay.test')
                 && $mail->hasTo('cco@kimfay.test')
                 && $mail->hasCc('director@kimfay.test')
@@ -111,7 +108,7 @@ class DailyManagementReportTest extends TestCase
             ->assertOk()
             ->assertJsonPath('send_time', '08:00');
 
-        $this->actingAs($admin, 'sanctum')
+        $response = $this->actingAs($admin, 'sanctum')
             ->putJson('/api/admin/daily-reports/config', [
                 'recipients' => ['manager@kimfay.test'],
                 'reply_to' => ['customercare@kimfay.test', 'cco@kimfay.test'],
@@ -119,8 +116,12 @@ class DailyManagementReportTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('send_time', '07:30')
-            ->assertJsonPath('recipients.0', 'manager@kimfay.test')
-            ->assertJsonPath('reply_to.0', 'customercare@kimfay.test');
+            ->assertJsonPath('reply_to.0', 'customercare@kimfay.test')
+            ->assertJsonPath('reply_to.1', 'cco@kimfay.test');
+
+        $payload = $response->json();
+        $this->assertIsArray($payload['recipients'] ?? null);
+        $this->assertContains('manager@kimfay.test', $payload['recipients']);
 
         $this->actingAs($admin, 'sanctum')
             ->postJson('/api/admin/daily-reports/test-send')
@@ -138,26 +139,19 @@ class DailyManagementReportTest extends TestCase
         ]);
 
         $mail = new DailyManagementReportMail(
-            'OrderWatch Daily Brief',
+            'OrderWatch Executive Exceptions – 24 Jun 2026',
             [
                 'report_date_label' => '24 Jun 2026',
-                'report_date_display' => '24/06/2026',
-                'comparison_date_display' => '23/06/2026',
-                'mtd_period_label' => 'June 2026',
+                'week' => ['label' => '23 Jun – 24 Jun 2026'],
                 'generated_at_display' => '25 Jun 2026 08:00',
                 'timezone' => 'Africa/Nairobi',
-                'yesterday' => [],
-                'mtd' => [],
-                'comparison' => [],
-                'risk' => [],
-                'customer_highlights' => [],
-                'formulas' => [],
+                'orders' => ['week_totals' => ['total_orders' => 0, 'pending_approval' => 0, 'in_shipping' => 0], 'daily_table' => [], 'prior_month_carryover' => ['show' => false]],
+                'fill_rate' => ['fill_rate_pct' => null, 'orders_tracked' => 0, 'revenue_not_shipped' => 0],
+                'backorders' => ['backorder_exposure_pct' => 0, 'revenue_at_risk' => 0, 'top_reasons' => []],
+                'sla' => ['nairobi' => ['delayed_pct' => 0, 'delayed_orders' => 0, 'total_orders' => 0, 'delayed_value' => 0], 'mombasa' => ['delayed_pct' => 0, 'delayed_orders' => 0, 'total_orders' => 0, 'delayed_value' => 0]],
+                'revenue_split' => ['date_label' => '24 Jun 2026', 'kp' => 0, 'cs' => 0, 'total' => 0, 'unclassified' => 0],
             ],
-            [
-                'executive_summary' => 'Summary',
-                'performance_commentary' => 'Commentary',
-                'improvements' => [],
-            ],
+            ['ai_status' => 'disabled'],
             DailyReportConfig::singleton(),
         );
 
@@ -187,9 +181,14 @@ class DailyManagementReportTest extends TestCase
             'delivery_status' => 'sent',
             'recipient_count' => 1,
             'payload_json' => [
+                'report_type' => 'daily_executive_email',
                 'report_date_label' => '23 Jun 2026',
-                'yesterday' => ['orders_received' => 10, 'completion_rate' => 80],
-                'insights' => ['executive_summary' => 'Cached summary', 'improvements' => []],
+                'orders' => ['week_totals' => ['total_orders' => 10, 'pending_approval' => 1, 'in_shipping' => 2], 'daily_table' => [], 'prior_month_carryover' => ['show' => false]],
+                'fill_rate' => [],
+                'backorders' => [],
+                'sla' => [],
+                'revenue_split' => [],
+                'insights' => ['ai_status' => 'disabled'],
             ],
         ]);
 
@@ -205,6 +204,7 @@ class DailyManagementReportTest extends TestCase
     {
         AcumaticaSalesOrder::create([
             'acumatica_order_nbr' => 'SO'.uniqid(),
+            'order_type' => 'SO',
             'customer_name' => 'Test Customer',
             'order_date' => $date,
             'status' => $status,

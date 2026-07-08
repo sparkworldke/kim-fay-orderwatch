@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Boxes, RefreshCw, Search, TrendingDown } from "lucide-react";
+import { Boxes, ChevronDown, FileDown, RefreshCw, Search, TrendingDown } from "lucide-react";
+import { useInventoryByWarehouse } from "@/hooks/useInventoryByWarehouse";
+import { InventoryWarehouseView } from "@/components/inventory/InventoryWarehouseView";
+import { SkuDetailPanel } from "@/components/inventory/SkuDetailPanel";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,45 +13,108 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { OperationsSyncStatus } from "@/components/operations-sync-status";
 import {
-  fillRateStatusColor,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { OperationsSyncStatus } from "@/components/operations-sync-status";
+import { useStopSyncLog, useSyncLogs } from "@/hooks/admin/useAdminSettings";
+import {
   formatOpsSyncToast,
-  predictionStatusLabel,
   useInventory,
   useInventorySummary,
   useSyncInventory,
   useSyncInventoryStocks,
 } from "@/hooks/useOperations";
+import type { AcumaticaSyncLog } from "@/types/admin";
+import { downloadApiFile } from "@/lib/api";
 
 export const Route = createFileRoute("/app/inventory")({
   head: () => ({ meta: [{ title: "Inventory — Kim-Fay OrderWatch" }] }),
   component: InventoryPage,
 });
 
+const ACTIVE_SYNC_WINDOW_MS = 2 * 60 * 1000;
+const INVENTORY_IMPORT_WAREHOUSES = ["DTC", "FGS", "PRMS", "RMS1", "TRMS"] as const;
+
+function isActiveSyncLog(log: AcumaticaSyncLog) {
+  if (log.status !== "running" || log.ended_at) {
+    return false;
+  }
+
+  const pulseAt = log.heartbeat_at ?? log.started_at;
+  const pulseMs = pulseAt ? new Date(pulseAt).getTime() : Number.NaN;
+
+  return Number.isFinite(pulseMs) && Date.now() - pulseMs <= ACTIVE_SYNC_WINDOW_MS;
+}
+
+function findActiveSyncRun(logs: AcumaticaSyncLog[] | undefined, syncTypes: string[]) {
+  return logs?.find((log) => syncTypes.includes(log.sync_type) && isActiveSyncLog(log)) ?? null;
+}
+
 function InventoryPage() {
   const [q, setQ] = useState("");
   const [lowStock, setLowStock] = useState(false);
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
   const [predictionStatus, setPredictionStatus] = useState("all");
+  const [productType, setProductType] = useState("all");
+  const [importWarehouseId, setImportWarehouseId] = useState("FGS");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(null);
 
   const summary = useInventorySummary();
   const { data, isLoading, refetch } = useInventory({
     q: q || undefined,
     low_stock: lowStock || undefined,
+    warehouse_id: warehouseIds.length > 0 ? warehouseIds : undefined,
     prediction_status: predictionStatus !== "all" ? predictionStatus : undefined,
+    product_type: productType !== "all" ? productType : undefined,
     page,
     per_page: perPage,
   });
+
+  // Warehouse + band grouped view of the current page of inventory items.
+  // Shares the same query key as `useInventory` so no duplicate requests.
+  const warehouseView = useInventoryByWarehouse({
+    q: q || undefined,
+    low_stock: lowStock || undefined,
+    warehouse_id: warehouseIds.length > 0 ? warehouseIds : undefined,
+    prediction_status: predictionStatus !== "all" ? predictionStatus : undefined,
+    product_type: productType !== "all" ? productType : undefined,
+    page,
+    per_page: perPage,
+  });
+
+  function toggleWarehouse(warehouse: string) {
+    setWarehouseIds((current) => (
+      current.includes(warehouse) ? current.filter((w) => w !== warehouse) : [...current, warehouse]
+    ));
+    setPage(1);
+  }
   const sync = useSyncInventory();
   const syncStocks = useSyncInventoryStocks();
+  const syncLogs = useSyncLogs();
+  const stopSync = useStopSyncLog();
+  const activeInventorySync = findActiveSyncRun(syncLogs.data, ["inventory"]);
+  const activeStocksSync = findActiveSyncRun(syncLogs.data, ["inventory_stocks"]);
+  const anySyncActive = !!activeInventorySync || !!activeStocksSync;
 
   function handleUpdate() {
-    sync.mutate(undefined, {
+    const body = importWarehouseId !== "all" ? { warehouse_id: importWarehouseId } : undefined;
+    sync.mutate(body, {
       onSuccess: (res) => {
         if (res.sync_run.status === "completed") {
           toast.success(formatOpsSyncToast("Inventory", res.sync_run));
+        } else if (res.sync_run.status === "stopped") {
+          toast.warning(formatOpsSyncToast("Inventory", res.sync_run));
+        } else if (res.sync_run.status === "running") {
+          toast.info(formatOpsSyncToast("Inventory", res.sync_run));
         } else {
           toast.error(formatOpsSyncToast("Inventory", res.sync_run));
         }
@@ -61,7 +126,8 @@ function InventoryPage() {
   }
 
   function handleSyncStocks() {
-    syncStocks.mutate(undefined, {
+    const body = importWarehouseId !== "all" ? { warehouse_id: importWarehouseId } : undefined;
+    syncStocks.mutate(body, {
       onSuccess: (res) => {
         const msg = formatOpsSyncToast("Stocks", res.sync_run);
         if (res.sync_run.status === "completed") {
@@ -70,6 +136,10 @@ function InventoryPage() {
           } else {
             toast.success(msg);
           }
+        } else if (res.sync_run.status === "stopped") {
+          toast.warning(msg);
+        } else if (res.sync_run.status === "running") {
+          toast.info(msg);
         } else {
           toast.error(msg);
         }
@@ -80,7 +150,26 @@ function InventoryPage() {
     });
   }
 
-  const anySyncPending = sync.isPending || syncStocks.isPending;
+  async function handleDownload() {
+    const qs = new URLSearchParams();
+    if (q) qs.set("q", q);
+    if (lowStock) qs.set("low_stock", "1");
+    for (const warehouse of warehouseIds) qs.append("warehouse_id[]", warehouse);
+    if (predictionStatus !== "all") qs.set("prediction_status", predictionStatus);
+    if (productType !== "all") qs.set("product_type", productType);
+
+    setIsDownloading(true);
+    try {
+      await downloadApiFile(`operations/inventory/export?${qs}`, `inventory-export-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.xlsx`, { timeoutMs: 180_000 });
+      toast.success("Inventory Excel download started.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to download inventory.");
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
+  const anySyncPending = sync.isPending || syncStocks.isPending || anySyncActive;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -91,15 +180,51 @@ function InventoryPage() {
             Stock levels from Acumatica — use Update to refresh existing items and add new ones
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[150px]">
+            <Label className="text-xs">Import warehouse</Label>
+            <Select value={importWarehouseId} onValueChange={setImportWarehouseId}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Warehouse" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All/default</SelectItem>
+                {INVENTORY_IMPORT_WAREHOUSES.map((warehouse) => (
+                  <SelectItem key={warehouse} value={warehouse}>{warehouse}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="outline" onClick={handleSyncStocks} disabled={anySyncPending}>
             <RefreshCw className={`mr-2 h-4 w-4 ${syncStocks.isPending ? "animate-spin" : ""}`} />
-            {syncStocks.isPending ? "Syncing stocks…" : "Sync stocks only"}
+            {syncStocks.isPending || activeStocksSync ? "Syncing stocks…" : "Sync stocks only"}
+          </Button>
+          <Button variant="outline" onClick={handleDownload} disabled={isDownloading}>
+            <FileDown className={`mr-2 h-4 w-4 ${isDownloading ? "animate-pulse" : ""}`} />
+            {isDownloading ? "Preparing..." : "Download Excel"}
           </Button>
           <Button onClick={handleUpdate} disabled={anySyncPending}>
             <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
-            {sync.isPending ? "Updating…" : "Update inventory"}
+            {sync.isPending || activeInventorySync ? "Updating…" : "Update inventory"}
           </Button>
+          {activeStocksSync && (
+            <Button
+              variant="outline"
+              onClick={() => stopSync.mutate(activeStocksSync.id)}
+              disabled={stopSync.isPending}
+            >
+              Stop stocks sync
+            </Button>
+          )}
+          {activeInventorySync && (
+            <Button
+              variant="outline"
+              onClick={() => stopSync.mutate(activeInventorySync.id)}
+              disabled={stopSync.isPending}
+            >
+              Stop inventory sync
+            </Button>
+          )}
         </div>
       </div>
 
@@ -132,6 +257,45 @@ function InventoryPage() {
           </div>
         </div>
         <div className="w-44">
+          <Label>Warehouse</Label>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-between font-normal">
+                <span className="truncate">
+                  {warehouseIds.length === 0
+                    ? "All warehouses"
+                    : warehouseIds.length === 1
+                      ? warehouseIds[0]
+                      : `${warehouseIds.length} warehouses`}
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem
+                onSelect={(e) => { e.preventDefault(); setWarehouseIds([]); setPage(1); }}
+                disabled={warehouseIds.length === 0}
+              >
+                All warehouses
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {(summary.data?.warehouse_ids ?? []).map((warehouse) => (
+                <DropdownMenuCheckboxItem
+                  key={warehouse}
+                  checked={warehouseIds.includes(warehouse)}
+                  onSelect={(e) => e.preventDefault()}
+                  onCheckedChange={() => toggleWarehouse(warehouse)}
+                >
+                  {warehouse}
+                </DropdownMenuCheckboxItem>
+              ))}
+              {(summary.data?.warehouse_ids ?? []).length === 0 && (
+                <DropdownMenuItem disabled>No warehouses yet</DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="w-44">
           <Label>Prediction</Label>
           <Select value={predictionStatus} onValueChange={(v) => { setPredictionStatus(v); setPage(1); }}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -144,66 +308,36 @@ function InventoryPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="w-48">
+          <Label>Product type</Label>
+          <Select value={productType} onValueChange={(v) => { setProductType(v); setPage(1); }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All products</SelectItem>
+              <SelectItem value="manufactured">
+                Manufactured{summary.data ? ` (${summary.data.manufactured_count})` : ""}
+              </SelectItem>
+              <SelectItem value="trading">
+                Trading{summary.data ? ` (${summary.data.trading_count})` : ""}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <Button variant={lowStock ? "default" : "outline"} onClick={() => { setLowStock(!lowStock); setPage(1); }}>
           Low stock only
         </Button>
       </div>
 
-      <div className="rounded-lg border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/40 text-left">
-              <th className="px-4 py-3 font-medium">Item</th>
-              <th className="px-4 py-3 font-medium">Warehouse</th>
-              <th className="px-4 py-3 font-medium">UOM</th>
-              <th className="px-4 py-3 font-medium text-right">On hand</th>
-              <th className="px-4 py-3 font-medium text-right">Run rate / day</th>
-              <th className="px-4 py-3 font-medium text-right">Days left</th>
-              <th className="px-4 py-3 font-medium">Prediction</th>
-              <th className="px-4 py-3 font-medium">Synced</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && Array.from({ length: 8 }).map((_, i) => (
-              <tr key={i} className="border-b"><td colSpan={8} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>
-            ))}
-            {!isLoading && (data?.data ?? []).map((item) => (
-              <tr key={item.id} className="border-b hover:bg-muted/20">
-                <td className="px-4 py-3">
-                  <div className="font-medium">{item.inventory_id}</div>
-                  <div className="text-xs text-muted-foreground truncate max-w-[240px]">{item.description ?? "—"}</div>
-                </td>
-                <td className="px-4 py-3">{item.default_warehouse_id ?? "—"}</td>
-                <td className="px-4 py-3 text-xs">{item.default_uom ?? "—"}</td>
-                <td className="px-4 py-3 text-right font-mono">{Number(item.qty_on_hand).toLocaleString()}</td>
-                <td className="px-4 py-3 text-right font-mono">
-                  {item.prediction?.daily_run_rate != null ? Number(item.prediction.daily_run_rate).toFixed(2) : "—"}
-                </td>
-                <td className="px-4 py-3 text-right font-mono">
-                  {item.prediction?.days_until_stockout ?? "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {item.prediction?.prediction_status ? (
-                    <Badge variant={fillRateStatusColor(item.prediction.prediction_status === "healthy" ? "healthy" : item.prediction.prediction_status === "at_risk" ? "at_risk" : item.prediction.prediction_status === "critical" ? "critical" : "na")}>
-                      {predictionStatusLabel(item.prediction.prediction_status)}
-                    </Badge>
-                  ) : "—"}
-                </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {item.synced_at ? new Date(item.synced_at).toLocaleString() : "—"}
-                </td>
-              </tr>
-            ))}
-            {!isLoading && (data?.data ?? []).length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No inventory items — run a sync to pull from Acumatica</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <InventoryWarehouseView
+        items={warehouseView.items}
+        onSkuClick={(item) => setSelectedInventoryId(item.inventory_id)}
+        isLoading={warehouseView.isLoading}
+        warehouseOptions={summary.data?.warehouse_ids}
+      />
 
       {data && (
         <PaginationControls
-          page={page}
+          currentPage={page}
           perPage={perPage}
           total={data.total}
           lastPage={data.last_page}
@@ -211,6 +345,11 @@ function InventoryPage() {
           onPerPageChange={(n) => { setPerPage(n); setPage(1); }}
         />
       )}
+
+      <SkuDetailPanel
+        inventoryId={selectedInventoryId}
+        onClose={() => setSelectedInventoryId(null)}
+      />
     </div>
   );
 }

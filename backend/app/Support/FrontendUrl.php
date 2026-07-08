@@ -6,17 +6,31 @@ class FrontendUrl
 {
     public static function base(): string
     {
-        return rtrim((string) config('app.frontend_url', 'http://localhost:5173'), '/');
-    }
+        $configured = trim((string) config('app.frontend_url', ''));
 
-    public static function path(string $path = ''): string
-    {
-        $normalized = '/'.ltrim($path, '/');
-
-        if ($normalized === '/') {
-            return self::base();
+        if ($configured === '') {
+            $configured = trim((string) config('services.microsoft.frontend_url', ''));
         }
 
-        return self::base().$normalized;
+        if ($configured === '') {
+            $configured = 'http://localhost:5173';
+        }
+
+        return rtrim($configured, '/');
+    }
+
+    /** @param array<string, scalar|null> $query */
+    public static function path(string $path = '', array $query = []): string
+    {
+        $normalized = '/'.ltrim($path, '/');
+        $base = $normalized === '/' ? self::base() : self::base().$normalized;
+
+        if ($query === []) {
+            return $base;
+        }
+
+        $queryString = http_build_query(array_filter($query, fn (mixed $value) => $value !== null && $value !== ''));
+
+        return $queryString === '' ? $base : "{$base}?{$queryString}";
     }
 }

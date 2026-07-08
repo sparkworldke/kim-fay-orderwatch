@@ -5,12 +5,13 @@ namespace App\Services\Reports;
 use App\Models\DailyReportConfig;
 use App\Models\DailyReportRun;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 class DailyReportRunnerService
 {
     public function __construct(
-        private readonly DailyManagementReportService $report,
+        private readonly DailyExecutiveReportService $report,
         private readonly DailyManagementInsightService $insights,
         private readonly DailyReportMailerService $mailer,
     ) {}
@@ -42,7 +43,8 @@ class DailyReportRunnerService
         string $trigger = 'scheduler',
         bool $force = false,
         ?Carbon $asOf = null,
-        ?array $overrideRecipients = null,
+        ?array $overrideSendTo = null,
+        ?array $overrideCc = null,
     ): DailyReportRun {
         $started = hrtime(true);
         $timezone = $config->timezone ?: 'Africa/Nairobi';
@@ -61,6 +63,20 @@ class DailyReportRunnerService
             ]);
         }
 
+        $lock = Cache::lock("daily-report:{$config->id}:{$reportDate->toDateString()}", 300);
+        if (! $lock->get()) {
+            return DailyReportRun::create([
+                'report_config_id' => $config->id,
+                'report_date' => $reportDate,
+                'started_at' => now(),
+                'completed_at' => now(),
+                'status' => 'skipped',
+                'delivery_status' => 'skipped',
+                'error_summary' => 'Another daily report run is already in progress for this date.',
+                'duration_ms' => 0,
+            ]);
+        }
+
         $run = DailyReportRun::create([
             'report_config_id' => $config->id,
             'report_date' => $reportDate,
@@ -71,22 +87,17 @@ class DailyReportRunnerService
         try {
             $payload = $this->report->buildPayload($asOf, $timezone);
 
-            if (! $config->include_mtd) {
-                unset($payload['mtd'], $payload['mtd_comparison'], $payload['prior_mtd']);
-            }
-            if (! $config->include_comparison) {
-                unset($payload['comparison'], $payload['mtd_comparison']);
-            }
-            if (! $config->include_customer_highlights) {
-                unset($payload['customer_highlights']);
-            }
-
-            $aiInsights = $this->insights->generate($payload, $config->include_ai_insights);
+            $aiInsights = $config->include_ai_insights
+                ? $this->insights->generate($payload, true)
+                : ['ai_status' => 'disabled', 'executive_summary' => '', 'performance_commentary' => '', 'improvements' => []];
             $payload['insights'] = $aiInsights;
 
             $sendConfig = clone $config;
-            if ($overrideRecipients !== null) {
-                $sendConfig->recipients_json = $overrideRecipients;
+            if ($overrideSendTo !== null || $overrideCc !== null) {
+                $sendTo = $overrideSendTo ?? $config->replyTo();
+                $cc = $overrideCc ?? array_values(array_diff($config->recipients(), $sendTo));
+                $sendConfig->reply_to_json = $sendTo;
+                $sendConfig->recipients_json = array_values(array_unique(array_merge($sendTo, $cc)));
             }
 
             $delivery = $this->mailer->send($run, $sendConfig, $payload, $aiInsights);
@@ -124,10 +135,12 @@ class DailyReportRunnerService
             ]);
 
             return $run->fresh('deliveryLogs');
+        } finally {
+            $lock->release();
         }
     }
 
-    public function resendLast(DailyReportConfig $config, ?array $overrideRecipients = null): ?DailyReportRun
+    public function resendLast(DailyReportConfig $config, ?array $overrideSendTo = null, ?array $overrideCc = null): ?DailyReportRun
     {
         $last = DailyReportRun::query()
             ->where('report_config_id', $config->id)
@@ -154,8 +167,11 @@ class DailyReportRunnerService
             $insights = $payload['insights'] ?? $this->insights->generate($payload, $config->include_ai_insights);
 
             $sendConfig = clone $config;
-            if ($overrideRecipients !== null) {
-                $sendConfig->recipients_json = $overrideRecipients;
+            if ($overrideSendTo !== null || $overrideCc !== null) {
+                $sendTo = $overrideSendTo ?? $config->replyTo();
+                $cc = $overrideCc ?? array_values(array_diff($config->recipients(), $sendTo));
+                $sendConfig->reply_to_json = $sendTo;
+                $sendConfig->recipients_json = array_values(array_unique(array_merge($sendTo, $cc)));
             }
 
             $delivery = $this->mailer->send($run, $sendConfig, $payload, $insights);

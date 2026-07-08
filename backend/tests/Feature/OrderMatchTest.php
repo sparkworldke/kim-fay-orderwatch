@@ -98,7 +98,7 @@ class OrderMatchTest extends TestCase
 
     public function test_queue_endpoint_returns_groups(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'Customer Service Agent', 'is_active' => true]);
         $account = MailboxAccount::create([
             'email' => 'q@test.com', 'access_token_encrypted' => 'x', 'refresh_token_encrypted' => 'y', 'status' => 'connected',
         ]);
@@ -114,7 +114,7 @@ class OrderMatchTest extends TestCase
             'canonical_po'       => 'PO-99',
         ]);
 
-        $this->actingAs($user)
+        $this->actingAs($user, 'sanctum')
             ->getJson('/api/order-match/queue')
             ->assertOk()
             ->assertJsonStructure(['groups', 'total']);

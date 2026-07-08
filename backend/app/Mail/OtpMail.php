@@ -9,20 +9,26 @@ use Illuminate\Mail\Mailables\Envelope;
 
 class OtpMail extends Mailable
 {
-
     public function __construct(
         private readonly string $otp,
         private readonly string $userName,
+        private readonly string $purpose = 'login',
     ) {}
 
     public function envelope(): Envelope
     {
+        $subject = match ($this->purpose) {
+            'password-update' => 'Your password update verification code',
+            'welcome' => 'Welcome to Kim-Fay OrderWatch - your verification code',
+            default => 'Your Kim-Fay OrderWatch verification code',
+        };
+
         return new Envelope(
             from: new \Illuminate\Mail\Mailables\Address(
                 config('mail.from.address'),
                 config('mail.from.name'),
             ),
-            subject: 'Your Kim-Fay OrderWatch verification code',
+            subject: $subject,
         );
     }
 
@@ -44,6 +50,30 @@ class OtpMail extends Mailable
         $code = e($this->otp);
         $appUrl = e(FrontendUrl::path('/app'));
         $authUrl = e(FrontendUrl::path('/auth'));
+
+        $purposeInstructions = match ($this->purpose) {
+            'password-update' => <<<HTML
+                <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.6;">
+                    Use this verification code to update your password.
+                </p>
+            HTML,
+            'welcome' => <<<HTML
+                <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.6;">
+                    Welcome to Kim-Fay OrderWatch! You can use this verification code to sign in, or you can set up a permanent password first.
+                </p>
+                <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.8;">
+                    <strong>Option 1: Sign in immediately with this OTP</strong><br>
+                    Go to {$authUrl}, select "Sign in with OTP", and enter the code below.<br><br>
+                    <strong>Option 2: Set up a permanent password</strong><br>
+                    After signing in with the OTP, you can set a password in your Profile page.
+                </p>
+            HTML,
+            default => <<<HTML
+                <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.6;">
+                    Use this verification code to sign in to your account.
+                </p>
+            HTML,
+        };
 
         return <<<HTML
         <!DOCTYPE html>
@@ -74,9 +104,7 @@ class OtpMail extends Mailable
                                     <p style="margin:0 0 16px;font-size:16px;color:#374151;line-height:1.6;">
                                         Hi {$name},
                                     </p>
-                                    <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.6;">
-                                        Your verification code is:
-                                    </p>
+                                    {$purposeInstructions}
 
                                     <!-- OTP display -->
                                     <table width="100%" cellpadding="0" cellspacing="0">

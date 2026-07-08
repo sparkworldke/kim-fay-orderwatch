@@ -1,16 +1,25 @@
-import { createFileRoute, useSearch } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
   Download,
   GitMerge,
+  PencilLine,
   RefreshCw,
 } from "lucide-react";
 import { Fragment, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,9 +31,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 
+import { CustomerLink, DateLink, OrderLink, ViewDateButton } from "@/components/entity-links";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { useOrderStats, useOrders, useUpdateOrder } from "@/hooks/useOrders";
+import { useOrderStats, useOrders, useRefreshOrderStatuses, useUpdateOrder } from "@/hooks/useOrders";
 import { useMatchOrders } from "@/hooks/admin/useAdminSettings";
 import {
   conflictAmountDelta,
@@ -36,6 +47,8 @@ import {
   formatSignedAmount,
   type MatchConflict,
 } from "@/lib/match-conflicts";
+import { useAuth } from "@/lib/auth";
+import { REJECTION_REASON_OPTIONS, rejectionReasonLabel } from "@/lib/order-reasons";
 import { formatPoLoadDuration } from "@/lib/po-load-time";
 import type { AcumaticaSalesOrder } from "@/types/admin";
 
@@ -69,9 +82,12 @@ const MATCH_STATUSES = [
 ];
 
 function OrdersPage() {
+  const { session } = useAuth();
   const search = useSearch({ from: "/app/orders" });
   const [q, setQ]                   = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [repCode, setRepCode]       = useState("");
+  const [debouncedRepCode, setDebouncedRepCode] = useState("");
   const [status, setStatus]         = useState(search.status ?? "all");
 
   const [matchStatus, setMatchStatus] = useState("all");
@@ -82,6 +98,10 @@ function OrdersPage() {
   const [dateTo, setDateTo]         = useState(() => search.date_to   ?? today());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [showFlagAmounts, setShowFlagAmounts] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<AcumaticaSalesOrder | null>(null);
+  const [draftStatus, setDraftStatus] = useState("Open");
+  const [draftRejectionCode, setDraftRejectionCode] = useState("none");
+  const [draftRejectionNotes, setDraftRejectionNotes] = useState("");
   const [page, setPage]       = useState(1);
   const [perPage, setPerPage] = useState(50);
   const resetPage = () => setPage(1);
@@ -92,8 +112,15 @@ function OrdersPage() {
     (handleQ as { _t?: ReturnType<typeof setTimeout> })._t = setTimeout(() => { setDebouncedQ(v); resetPage(); }, 400);
   };
 
+  const handleRepCode = (v: string) => {
+    setRepCode(v);
+    clearTimeout((handleRepCode as { _t?: ReturnType<typeof setTimeout> })._t);
+    (handleRepCode as { _t?: ReturnType<typeof setTimeout> })._t = setTimeout(() => { setDebouncedRepCode(v); resetPage(); }, 400);
+  };
+
   const { data, isLoading, isError, refetch } = useOrders({
     q:            debouncedQ || undefined,
+    rep_code:     debouncedRepCode || undefined,
     status:       status !== "all" ? status : undefined,
     match_status: matchStatus !== "all" ? matchStatus : undefined,
     has_email:    hasEmailFilter === "yes" ? true : undefined,
@@ -107,10 +134,14 @@ function OrdersPage() {
   });
 
   const updateOrder = useUpdateOrder();
+  const orderStatusRefresh = useRefreshOrderStatuses();
   const matchOrders = useMatchOrders();
   const orderStats  = useOrderStats({ q: debouncedQ || undefined, order_type: "SO", date_from: dateFrom || undefined, date_to: dateTo || undefined });
 
   const activeMatchCard = hasEmailFilter === "yes" ? "email_in" : matchStatus;
+  const canEditRejections = session?.role === "Administrator"
+    || session?.role === "Customer Service Manager"
+    || session?.role === "Sales Operations";
 
   function applyMatchCardFilter(filter: string) {
     resetPage();
@@ -158,6 +189,35 @@ function OrdersPage() {
     toast.success(`Exported ${data.data.length} orders`);
   }
 
+  function openRejectionEditor(order: AcumaticaSalesOrder) {
+    setEditingOrder(order);
+    setDraftStatus(order.status ?? "Open");
+    setDraftRejectionCode(order.rejection_reason_code ?? "none");
+    setDraftRejectionNotes(order.rejection_reason ?? "");
+  }
+
+  function saveOrderRejection() {
+    if (!editingOrder) return;
+
+    if (draftStatus === "Rejected" && draftRejectionCode === "none") {
+      toast.error("Select a rejection reason before saving a rejected order.");
+      return;
+    }
+
+    updateOrder.mutate({
+      id: editingOrder.id,
+      status: draftStatus,
+      rejection_reason_code: draftRejectionCode === "none" ? null : draftRejectionCode,
+      rejection_reason: draftRejectionNotes.trim() || null,
+    }, {
+      onSuccess: () => {
+        toast.success("Order status and rejection reason saved.");
+        setEditingOrder(null);
+      },
+      onError: (error: Error) => toast.error(error.message),
+    });
+  }
+
   const orders = data?.data ?? [];
 
   return (
@@ -183,6 +243,10 @@ function OrdersPage() {
         <div className="grid gap-1.5">
           <Label className="text-xs">Search</Label>
           <Input value={q} onChange={(e) => handleQ(e.target.value)} placeholder="Order #, customer, PO…" className="h-9 w-48 text-sm" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label className="text-xs">Consultant</Label>
+          <Input value={repCode} onChange={(e) => handleRepCode(e.target.value)} placeholder="Name or rep code…" className="h-9 w-44 text-sm" />
         </div>
         <div className="grid gap-1.5">
           <Label className="text-xs">From</Label>
@@ -224,6 +288,17 @@ function OrdersPage() {
         </Select>
         <Button variant="outline" size="sm" className="h-9" onClick={() => refetch()}>
           <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          onClick={() => orderStatusRefresh.mutate({ date_from: dateFrom, date_to: dateTo })}
+          disabled={orderStatusRefresh.isPending}
+          title="Import today's Acumatica orders and update statuses for the selected date range through today"
+        >
+          <RefreshCw className={`mr-1 h-3.5 w-3.5 ${orderStatusRefresh.isPending ? "animate-spin" : ""}`} />
+          {orderStatusRefresh.isPending ? "Updating..." : "Update order status"}
         </Button>
         <Button variant="outline" size="sm" className="h-9" onClick={exportCsv} disabled={!orders.length}>
           <Download className="mr-1 h-3.5 w-3.5" /> Export
@@ -323,13 +398,18 @@ function OrdersPage() {
 
                         {/* Customer */}
                         <td className="px-3 py-3">
-                          <div className="font-medium leading-tight">{order.customer_name ?? "—"}</div>
-                          <div className="font-mono text-[10px] text-muted-foreground">{order.customer_acumatica_id}</div>
+                          <CustomerLink
+                            customerId={order.customer_acumatica_id}
+                            className="block"
+                          >
+                            <div className="font-medium leading-tight">{order.customer_name ?? "—"}</div>
+                            <div className="font-mono text-[10px] text-muted-foreground">{order.customer_acumatica_id}</div>
+                          </CustomerLink>
                         </td>
 
                         {/* Order # */}
                         <td className="px-3 py-3">
-                          <span className="font-mono text-xs font-semibold">{order.acumatica_order_nbr}</span>
+                          <OrderLink customerId={order.customer_acumatica_id} orderId={order.acumatica_order_nbr} />
                           <span className="ml-1 font-mono text-[10px] text-muted-foreground">{order.order_type}</span>
                         </td>
 
@@ -357,6 +437,14 @@ function OrdersPage() {
                             {order.match_status === "matched_discrepancies" && (
                               <DiscrepancySummary order={order} showAmounts={showFlagAmounts} className="mb-3" />
                             )}
+                            {canEditRejections && (
+                              <div className="mb-3 flex justify-end">
+                                <Button variant="outline" size="sm" onClick={() => openRejectionEditor(order)}>
+                                  <PencilLine className="mr-1 h-3.5 w-3.5" />
+                                  Edit status / rejection
+                                </Button>
+                              </div>
+                            )}
                             <div className="grid gap-3 sm:grid-cols-3">
                               <DetailCard
                                 label="Email Subject"
@@ -365,7 +453,7 @@ function OrdersPage() {
                               />
                               <DetailCard
                                 label="Reason for Rejection"
-                                value={order.rejection_reason}
+                                value={renderRejectionDetail(order)}
                                 empty="No rejection reason recorded"
                                 tone="red"
                               />
@@ -407,6 +495,71 @@ function OrdersPage() {
           />
         </>
       )}
+      <Dialog open={!!editingOrder} onOpenChange={(open) => !open && setEditingOrder(null)}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Update Order Rejection Tracking</DialogTitle>
+            <DialogDescription>
+              Capture the rejection status, standardized reason, and optional notes for audit follow-up.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>Order status</Label>
+              <Select value={draftStatus} onValueChange={setDraftStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ORDER_STATUSES.map((statusOption) => (
+                    <SelectItem key={statusOption} value={statusOption}>{statusOption}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Rejection reason</Label>
+              <Select
+                value={draftRejectionCode}
+                onValueChange={setDraftRejectionCode}
+                disabled={draftStatus !== "Rejected"}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select rejection reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No rejection reason</SelectItem>
+                  {REJECTION_REASON_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {draftStatus === "Rejected" && draftRejectionCode === "none" && (
+                <p className="text-xs text-destructive">A rejection reason is required when status is Rejected.</p>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="rejection-notes">Additional notes</Label>
+              <Textarea
+                id="rejection-notes"
+                rows={5}
+                placeholder="Document extra context for why the order was rejected..."
+                value={draftRejectionNotes}
+                onChange={(event) => setDraftRejectionNotes(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingOrder(null)}>Cancel</Button>
+            <Button
+              onClick={saveOrderRejection}
+              disabled={updateOrder.isPending || (draftStatus === "Rejected" && draftRejectionCode === "none")}
+            >
+              {updateOrder.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -603,7 +756,9 @@ function MergedDates({ order }: { order: AcumaticaSalesOrder }) {
           <span className="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
           <div>
             <span className="font-medium text-violet-700 dark:text-violet-300">Email</span>
-            <div className="text-muted-foreground">{emailLabel}</div>
+            <div className="text-muted-foreground">
+              <DateLink value={order.email_received_at}>{emailLabel}</DateLink>
+            </div>
           </div>
         </div>
       )}
@@ -612,7 +767,9 @@ function MergedDates({ order }: { order: AcumaticaSalesOrder }) {
           <span className="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />
           <div>
             <span className="font-medium text-blue-700 dark:text-blue-300">SO</span>
-            <div className="text-muted-foreground">{soLabel}</div>
+            <div className="text-muted-foreground">
+              <DateLink value={order.order_date}>{soLabel}</DateLink>
+            </div>
           </div>
         </div>
       )}
@@ -864,11 +1021,31 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
+function renderRejectionDetail(order: AcumaticaSalesOrder): React.ReactNode {
+  const codeLabel = rejectionReasonLabel(order.rejection_reason_code);
+  const notes = order.rejection_reason?.trim();
+
+  if (!codeLabel && !notes) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      {codeLabel && (
+        <Badge variant="destructive" className="w-fit">
+          {codeLabel}
+        </Badge>
+      )}
+      {notes && <p className="text-xs leading-relaxed">{notes}</p>}
+    </div>
+  );
+}
+
 // -------------------------------------------------------------------------
 // Detail card (expanded row)
 // -------------------------------------------------------------------------
 
-function DetailCard({ label, value, empty, tone }: { label: string; value: string | null; empty: string; tone?: "red" | "amber" }) {
+function DetailCard({ label, value, empty, tone }: { label: string; value: React.ReactNode; empty: string; tone?: "red" | "amber" }) {
   const toneClass = tone === "red"
     ? "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30"
     : tone === "amber"
@@ -878,7 +1055,7 @@ function DetailCard({ label, value, empty, tone }: { label: string; value: strin
     <div className={`rounded-md border p-3 ${toneClass}`}>
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
       {value
-        ? <p className="text-xs leading-relaxed">{value}</p>
+        ? <div className="text-xs leading-relaxed">{value}</div>
         : <p className="text-xs italic text-muted-foreground/60">{empty}</p>}
     </div>
   );
@@ -916,7 +1093,9 @@ function DateSlot({
         {label}
       </div>
       {formatted ? (
-        <div className={`mt-0.5 text-xs font-medium ${valueCls}`}>{formatted}</div>
+        <div className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${valueCls}`}>
+          <DateLink value={value} showButton>{formatted}</DateLink>
+        </div>
       ) : (
         <div className="mt-0.5 text-xs italic text-muted-foreground/40">Not recorded</div>
       )}

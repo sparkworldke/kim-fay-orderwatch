@@ -24,15 +24,18 @@ class OtpController extends Controller
     public function request(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'email' => 'required|email',
+            'email'   => 'required|email',
+            'purpose' => 'sometimes|string|in:login',
         ]);
 
         $email = strtolower(trim($validated['email']));
+        $purpose = $validated['purpose'] ?? 'login';
         $user = User::where('email', $email)->first();
 
         if (! $user) {
             Log::info('otp_request', [
                 'email_hash' => hash('sha256', $email),
+                'purpose' => $purpose,
                 'ip' => $request->ip(),
                 'outcome' => 'email_not_found',
             ]);
@@ -46,6 +49,7 @@ class OtpController extends Controller
         if (! $user->isEligibleForOtp()) {
             Log::warning('otp_request_blocked', [
                 'email_hash' => hash('sha256', $email),
+                'purpose' => $purpose,
                 'ip' => $request->ip(),
                 'outcome' => 'user_inactive_or_unverified',
             ]);
@@ -56,24 +60,47 @@ class OtpController extends Controller
             ], 403);
         }
 
-        Otp::where('email', $email)->delete();
+        $existingOtp = Otp::where('email', $email)->where('purpose', $purpose)->first();
+        $now = now();
+        $resendAttempts = 0;
+        $resendWindowStart = $now;
+
+        if ($existingOtp) {
+            $windowStart = $existingOtp->resend_window_start ?? $existingOtp->created_at;
+            $resendWindowActive = $windowStart && $now->diffInMinutes($windowStart) < 10;
+
+            if ($resendWindowActive && $existingOtp->resend_attempts >= 3) {
+                return response()->json([
+                    'message' => 'Too many resend attempts. Please try again in a few minutes.',
+                    'code' => 'too_many_resends',
+                ], 429);
+            }
+
+            $resendAttempts = $resendWindowActive ? $existingOtp->resend_attempts + 1 : 1;
+            $resendWindowStart = $resendWindowActive ? $windowStart : $now;
+            $existingOtp->delete();
+        }
 
         $otp = $this->otpService->generate();
         $otpRecord = Otp::create([
-            'user_id' => $user->id,
-            'email' => $email,
-            'otp_hash' => $this->otpService->hash($otp),
-            'expires_at' => now()->addMinutes(15),
-            'attempts' => 0,
+            'user_id'          => $user->id,
+            'email'            => $email,
+            'purpose'          => $purpose,
+            'otp_hash'         => $this->otpService->hash($otp),
+            'expires_at'       => now()->addMinutes(15),
+            'attempts'         => 0,
+            'resend_attempts'  => $resendAttempts,
+            'resend_window_start' => $resendWindowStart,
         ]);
 
         try {
-            Mail::to($user->email)->send(new OtpMail($otp, $user->name));
+            Mail::to($user->email)->send(new OtpMail($otp, $user->name, $purpose));
         } catch (\Throwable $e) {
             $otpRecord->delete();
 
             Log::error('otp_mail_failed', [
                 'email_hash' => hash('sha256', $email),
+                'purpose' => $purpose,
                 'mail_mailer' => config('mail.default'),
                 'mail_from' => config('mail.from.address'),
                 'exception' => $e::class,
@@ -88,6 +115,7 @@ class OtpController extends Controller
 
         Log::info('otp_request', [
             'email_hash' => hash('sha256', $email),
+            'purpose' => $purpose,
             'ip' => $request->ip(),
             'outcome' => 'otp_dispatched',
         ]);
@@ -140,19 +168,21 @@ class OtpController extends Controller
     public function verify(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'email' => 'required|email',
-            'otp' => 'required|string|size:6',
-            'login_mode' => 'required|in:otp-only,otp-and-password',
+            'email'    => 'required|email',
+            'otp'      => 'required|string|size:6',
+            'purpose'  => 'sometimes|string|in:login',
+            'login_mode' => 'required_if:purpose,login|in:otp-only,otp-and-password',
             'password' => 'required_if:login_mode,otp-and-password|string',
         ]);
 
         $email = strtolower(trim($validated['email']));
         $otp = $validated['otp'];
-        $loginMode = $validated['login_mode'];
+        $purpose = $validated['purpose'] ?? 'login';
+        $loginMode = $validated['login_mode'] ?? 'otp-only';
         $password = $validated['password'] ?? null;
 
         $user = User::where('email', $email)->first();
-        $otpRecord = Otp::where('email', $email)->first();
+        $otpRecord = Otp::where('email', $email)->where('purpose', $purpose)->first();
 
         if (! $otpRecord) {
             $this->recordSignInLog($request, $user, $email, $loginMode, 'failure');

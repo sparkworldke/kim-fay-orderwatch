@@ -34,6 +34,10 @@ class DailyReportController extends Controller
             'recipients.*' => ['email'],
             'reply_to' => ['sometimes', 'array'],
             'reply_to.*' => ['email'],
+            'send_to' => ['sometimes', 'array'],
+            'send_to.*' => ['email'],
+            'cc' => ['sometimes', 'array'],
+            'cc.*' => ['email'],
             'subject_template' => ['sometimes', 'string', 'max:255'],
             'include_ai_insights' => ['sometimes', 'boolean'],
             'include_comparison' => ['sometimes', 'boolean'],
@@ -47,13 +51,32 @@ class DailyReportController extends Controller
             'include_ai_insights', 'include_comparison', 'include_mtd', 'include_customer_highlights',
         ]);
 
-        if (isset($validated['recipients'])) {
-            $validated['recipients_json'] = $validated['recipients'];
+        $sendTo = null;
+        $cc = null;
+
+        if (isset($validated['send_to'])) {
+            $sendTo = $validated['send_to'];
+            unset($validated['send_to']);
+        }
+        if (isset($validated['cc'])) {
+            $cc = $validated['cc'];
+            unset($validated['cc']);
+        }
+
+        if (isset($validated['reply_to']) && $sendTo === null) {
+            $sendTo = $validated['reply_to'];
+            unset($validated['reply_to']);
+        }
+        if (isset($validated['recipients']) && $cc === null) {
+            $cc = $validated['recipients'];
             unset($validated['recipients']);
         }
-        if (isset($validated['reply_to'])) {
-            $validated['reply_to_json'] = $validated['reply_to'];
-            unset($validated['reply_to']);
+
+        if ($sendTo !== null || $cc !== null) {
+            $sendTo = $sendTo ?? $config->replyTo();
+            $cc = $cc ?? array_values(array_diff($config->recipients(), $sendTo));
+            $validated['reply_to_json'] = $sendTo;
+            $validated['recipients_json'] = array_values(array_unique(array_merge($sendTo, $cc)));
         }
 
         $config->update($validated);
@@ -71,16 +94,21 @@ class DailyReportController extends Controller
         $validated = $request->validate([
             'recipients' => ['sometimes', 'array'],
             'recipients.*' => ['email'],
+            'send_to' => ['sometimes', 'array'],
+            'send_to.*' => ['email'],
+            'cc' => ['sometimes', 'array'],
+            'cc.*' => ['email'],
         ]);
 
         $config = DailyReportConfig::singleton();
-        $recipients = $validated['recipients'] ?? $config->recipients();
+        $sendTo = $validated['send_to'] ?? null;
+        $cc = $validated['cc'] ?? ($validated['recipients'] ?? null);
 
-        if ($recipients === [] && $config->replyTo() === []) {
+        if (($sendTo ?? $config->replyTo()) === [] && ($cc ?? $config->recipients()) === []) {
             return response()->json(['message' => 'Add at least one Reply-To or CC recipient before sending a test.'], 422);
         }
 
-        $run = $this->runner->run($config, 'manual_test', true, null, $recipients);
+        $run = $this->runner->run($config, 'manual_test', true, null, $sendTo, $cc);
 
         $this->audit->log('daily_report_test_sent', 'daily_report_run', $run->id, [
             'status' => $run->status,
@@ -98,10 +126,16 @@ class DailyReportController extends Controller
         $validated = $request->validate([
             'recipients' => ['sometimes', 'array'],
             'recipients.*' => ['email'],
+            'send_to' => ['sometimes', 'array'],
+            'send_to.*' => ['email'],
+            'cc' => ['sometimes', 'array'],
+            'cc.*' => ['email'],
         ]);
 
         $config = DailyReportConfig::singleton();
-        $run = $this->runner->resendLast($config, $validated['recipients'] ?? null);
+        $sendTo = $validated['send_to'] ?? null;
+        $cc = $validated['cc'] ?? ($validated['recipients'] ?? null);
+        $run = $this->runner->resendLast($config, $sendTo, $cc);
 
         if (! $run) {
             return response()->json(['message' => 'No completed report is available to resend.'], 404);
@@ -135,6 +169,8 @@ class DailyReportController extends Controller
     private function presentConfig(DailyReportConfig $config): array
     {
         $latest = $config->latestRun;
+        $sendTo = $config->replyTo();
+        $cc = array_values(array_diff($config->recipients(), $sendTo));
 
         return [
             'id' => $config->id,
@@ -142,6 +178,8 @@ class DailyReportController extends Controller
             'is_enabled' => $config->is_enabled,
             'send_time' => $config->send_time,
             'timezone' => $config->timezone,
+            'send_to' => $sendTo,
+            'cc' => $cc,
             'recipients' => $config->recipients(),
             'reply_to' => $config->replyTo(),
             'subject_template' => $config->subject_template,

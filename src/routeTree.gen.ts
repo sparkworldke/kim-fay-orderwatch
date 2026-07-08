@@ -13,7 +13,11 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppZonesRouteImport } from './routes/app.zones'
+import { Route as AppTeamRouteImport } from './routes/app.team'
 import { Route as AppSoImportsRouteImport } from './routes/app.so-imports'
+import { Route as AppSalesConsultantsRouteImport } from './routes/app.sales-consultants'
+import { Route as AppRolesRouteImport } from './routes/app.roles'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppProfileRouteImport } from './routes/app.profile'
 import { Route as AppOrdersRouteImport } from './routes/app.orders'
@@ -26,10 +30,19 @@ import { Route as AppDiscrepanciesRouteImport } from './routes/app.discrepancies
 import { Route as AppCustomersRouteImport } from './routes/app.customers'
 import { Route as AppCustomerFeedRouteImport } from './routes/app.customer-feed'
 import { Route as AppCreditNotesMoreRouteImport } from './routes/app.credit-notes-more'
+import { Route as AppBusinessOptimizationRouteImport } from './routes/app.business-optimization'
 import { Route as AppBackordersRouteImport } from './routes/app.backorders'
 import { Route as AppAiIntelligenceRouteImport } from './routes/app.ai-intelligence'
 import { Route as AppAiInsightsRouteImport } from './routes/app.ai-insights'
 import { Route as AppAdministrationRouteImport } from './routes/app.administration'
+import { Route as AppSalesConsultantsIdRouteImport } from './routes/app.sales-consultants.$id'
+import { Route as AppOrdersByDateDateRouteImport } from './routes/app.orders-by-date.$date'
+import { Route as AppCustomerOrdersCustomerIdRouteImport } from './routes/app.customer-orders.$customerId'
+import { Route as AppCustomerOrdersCustomerIdSuggestedRouteImport } from './routes/app.customer-orders.$customerId.suggested'
+import { Route as AppCustomerOrdersCustomerIdSoOrderIdRouteImport } from './routes/app.customer-orders.$customerId.so.$orderId'
+import { Route as AppCustomerOrdersCustomerIdBranchBranchIdRouteImport } from './routes/app.customer-orders.$customerId.branch.$branchId'
+import { Route as AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRouteImport } from './routes/app.customer-orders.$customerId.branch.$branchId.suggested'
+import { Route as AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRouteImport } from './routes/app.customer-orders.$customerId.branch.$branchId.so.$orderId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -51,9 +64,29 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppZonesRoute = AppZonesRouteImport.update({
+  id: '/zones',
+  path: '/zones',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTeamRoute = AppTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSoImportsRoute = AppSoImportsRouteImport.update({
   id: '/so-imports',
   path: '/so-imports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSalesConsultantsRoute = AppSalesConsultantsRouteImport.update({
+  id: '/sales-consultants',
+  path: '/sales-consultants',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRolesRoute = AppRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
   getParentRoute: () => AppRoute,
 } as any)
 const AppReportsRoute = AppReportsRouteImport.update({
@@ -116,6 +149,11 @@ const AppCreditNotesMoreRoute = AppCreditNotesMoreRouteImport.update({
   path: '/credit-notes-more',
   getParentRoute: () => AppRoute,
 } as any)
+const AppBusinessOptimizationRoute = AppBusinessOptimizationRouteImport.update({
+  id: '/business-optimization',
+  path: '/business-optimization',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBackordersRoute = AppBackordersRouteImport.update({
   id: '/backorders',
   path: '/backorders',
@@ -136,6 +174,52 @@ const AppAdministrationRoute = AppAdministrationRouteImport.update({
   path: '/administration',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSalesConsultantsIdRoute = AppSalesConsultantsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppSalesConsultantsRoute,
+} as any)
+const AppOrdersByDateDateRoute = AppOrdersByDateDateRouteImport.update({
+  id: '/orders-by-date/$date',
+  path: '/orders-by-date/$date',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCustomerOrdersCustomerIdRoute =
+  AppCustomerOrdersCustomerIdRouteImport.update({
+    id: '/customer-orders/$customerId',
+    path: '/customer-orders/$customerId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppCustomerOrdersCustomerIdSuggestedRoute =
+  AppCustomerOrdersCustomerIdSuggestedRouteImport.update({
+    id: '/suggested',
+    path: '/suggested',
+    getParentRoute: () => AppCustomerOrdersCustomerIdRoute,
+  } as any)
+const AppCustomerOrdersCustomerIdSoOrderIdRoute =
+  AppCustomerOrdersCustomerIdSoOrderIdRouteImport.update({
+    id: '/so/$orderId',
+    path: '/so/$orderId',
+    getParentRoute: () => AppCustomerOrdersCustomerIdRoute,
+  } as any)
+const AppCustomerOrdersCustomerIdBranchBranchIdRoute =
+  AppCustomerOrdersCustomerIdBranchBranchIdRouteImport.update({
+    id: '/branch/$branchId',
+    path: '/branch/$branchId',
+    getParentRoute: () => AppCustomerOrdersCustomerIdRoute,
+  } as any)
+const AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute =
+  AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRouteImport.update({
+    id: '/suggested',
+    path: '/suggested',
+    getParentRoute: () => AppCustomerOrdersCustomerIdBranchBranchIdRoute,
+  } as any)
+const AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRoute =
+  AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRouteImport.update({
+    id: '/so/$orderId',
+    path: '/so/$orderId',
+    getParentRoute: () => AppCustomerOrdersCustomerIdBranchBranchIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -145,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/ai-intelligence': typeof AppAiIntelligenceRoute
   '/app/backorders': typeof AppBackordersRoute
+  '/app/business-optimization': typeof AppBusinessOptimizationRoute
   '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
   '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
@@ -157,8 +242,20 @@ export interface FileRoutesByFullPath {
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/roles': typeof AppRolesRoute
+  '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
   '/app/so-imports': typeof AppSoImportsRoute
+  '/app/team': typeof AppTeamRoute
+  '/app/zones': typeof AppZonesRoute
   '/app/': typeof AppIndexRoute
+  '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
+  '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
+  '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
+  '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
+  '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
+  '/app/customer-orders/$customerId/branch/$branchId/so/$orderId': typeof AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -167,6 +264,7 @@ export interface FileRoutesByTo {
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/ai-intelligence': typeof AppAiIntelligenceRoute
   '/app/backorders': typeof AppBackordersRoute
+  '/app/business-optimization': typeof AppBusinessOptimizationRoute
   '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
   '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
@@ -179,8 +277,20 @@ export interface FileRoutesByTo {
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/roles': typeof AppRolesRoute
+  '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
   '/app/so-imports': typeof AppSoImportsRoute
+  '/app/team': typeof AppTeamRoute
+  '/app/zones': typeof AppZonesRoute
   '/app': typeof AppIndexRoute
+  '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
+  '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
+  '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
+  '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
+  '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
+  '/app/customer-orders/$customerId/branch/$branchId/so/$orderId': typeof AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -191,6 +301,7 @@ export interface FileRoutesById {
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/ai-intelligence': typeof AppAiIntelligenceRoute
   '/app/backorders': typeof AppBackordersRoute
+  '/app/business-optimization': typeof AppBusinessOptimizationRoute
   '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
   '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
@@ -203,8 +314,20 @@ export interface FileRoutesById {
   '/app/orders': typeof AppOrdersRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/roles': typeof AppRolesRoute
+  '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
   '/app/so-imports': typeof AppSoImportsRoute
+  '/app/team': typeof AppTeamRoute
+  '/app/zones': typeof AppZonesRoute
   '/app/': typeof AppIndexRoute
+  '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
+  '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
+  '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
+  '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
+  '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
+  '/app/customer-orders/$customerId/branch/$branchId/so/$orderId': typeof AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -216,6 +339,7 @@ export interface FileRouteTypes {
     | '/app/ai-insights'
     | '/app/ai-intelligence'
     | '/app/backorders'
+    | '/app/business-optimization'
     | '/app/credit-notes-more'
     | '/app/customer-feed'
     | '/app/customers'
@@ -228,8 +352,20 @@ export interface FileRouteTypes {
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
+    | '/app/roles'
+    | '/app/sales-consultants'
     | '/app/so-imports'
+    | '/app/team'
+    | '/app/zones'
     | '/app/'
+    | '/app/customer-orders/$customerId'
+    | '/app/orders-by-date/$date'
+    | '/app/sales-consultants/$id'
+    | '/app/customer-orders/$customerId/suggested'
+    | '/app/customer-orders/$customerId/branch/$branchId'
+    | '/app/customer-orders/$customerId/so/$orderId'
+    | '/app/customer-orders/$customerId/branch/$branchId/suggested'
+    | '/app/customer-orders/$customerId/branch/$branchId/so/$orderId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -238,6 +374,7 @@ export interface FileRouteTypes {
     | '/app/ai-insights'
     | '/app/ai-intelligence'
     | '/app/backorders'
+    | '/app/business-optimization'
     | '/app/credit-notes-more'
     | '/app/customer-feed'
     | '/app/customers'
@@ -250,8 +387,20 @@ export interface FileRouteTypes {
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
+    | '/app/roles'
+    | '/app/sales-consultants'
     | '/app/so-imports'
+    | '/app/team'
+    | '/app/zones'
     | '/app'
+    | '/app/customer-orders/$customerId'
+    | '/app/orders-by-date/$date'
+    | '/app/sales-consultants/$id'
+    | '/app/customer-orders/$customerId/suggested'
+    | '/app/customer-orders/$customerId/branch/$branchId'
+    | '/app/customer-orders/$customerId/so/$orderId'
+    | '/app/customer-orders/$customerId/branch/$branchId/suggested'
+    | '/app/customer-orders/$customerId/branch/$branchId/so/$orderId'
   id:
     | '__root__'
     | '/'
@@ -261,6 +410,7 @@ export interface FileRouteTypes {
     | '/app/ai-insights'
     | '/app/ai-intelligence'
     | '/app/backorders'
+    | '/app/business-optimization'
     | '/app/credit-notes-more'
     | '/app/customer-feed'
     | '/app/customers'
@@ -273,8 +423,20 @@ export interface FileRouteTypes {
     | '/app/orders'
     | '/app/profile'
     | '/app/reports'
+    | '/app/roles'
+    | '/app/sales-consultants'
     | '/app/so-imports'
+    | '/app/team'
+    | '/app/zones'
     | '/app/'
+    | '/app/customer-orders/$customerId'
+    | '/app/orders-by-date/$date'
+    | '/app/sales-consultants/$id'
+    | '/app/customer-orders/$customerId/suggested'
+    | '/app/customer-orders/$customerId/branch/$branchId'
+    | '/app/customer-orders/$customerId/so/$orderId'
+    | '/app/customer-orders/$customerId/branch/$branchId/suggested'
+    | '/app/customer-orders/$customerId/branch/$branchId/so/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -313,11 +475,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/zones': {
+      id: '/app/zones'
+      path: '/zones'
+      fullPath: '/app/zones'
+      preLoaderRoute: typeof AppZonesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/team': {
+      id: '/app/team'
+      path: '/team'
+      fullPath: '/app/team'
+      preLoaderRoute: typeof AppTeamRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/so-imports': {
       id: '/app/so-imports'
       path: '/so-imports'
       fullPath: '/app/so-imports'
       preLoaderRoute: typeof AppSoImportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/sales-consultants': {
+      id: '/app/sales-consultants'
+      path: '/sales-consultants'
+      fullPath: '/app/sales-consultants'
+      preLoaderRoute: typeof AppSalesConsultantsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/roles': {
+      id: '/app/roles'
+      path: '/roles'
+      fullPath: '/app/roles'
+      preLoaderRoute: typeof AppRolesRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/reports': {
@@ -404,6 +594,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCreditNotesMoreRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/business-optimization': {
+      id: '/app/business-optimization'
+      path: '/business-optimization'
+      fullPath: '/app/business-optimization'
+      preLoaderRoute: typeof AppBusinessOptimizationRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/backorders': {
       id: '/app/backorders'
       path: '/backorders'
@@ -432,14 +629,121 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdministrationRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/sales-consultants/$id': {
+      id: '/app/sales-consultants/$id'
+      path: '/$id'
+      fullPath: '/app/sales-consultants/$id'
+      preLoaderRoute: typeof AppSalesConsultantsIdRouteImport
+      parentRoute: typeof AppSalesConsultantsRoute
+    }
+    '/app/orders-by-date/$date': {
+      id: '/app/orders-by-date/$date'
+      path: '/orders-by-date/$date'
+      fullPath: '/app/orders-by-date/$date'
+      preLoaderRoute: typeof AppOrdersByDateDateRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/customer-orders/$customerId': {
+      id: '/app/customer-orders/$customerId'
+      path: '/customer-orders/$customerId'
+      fullPath: '/app/customer-orders/$customerId'
+      preLoaderRoute: typeof AppCustomerOrdersCustomerIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/customer-orders/$customerId/suggested': {
+      id: '/app/customer-orders/$customerId/suggested'
+      path: '/suggested'
+      fullPath: '/app/customer-orders/$customerId/suggested'
+      preLoaderRoute: typeof AppCustomerOrdersCustomerIdSuggestedRouteImport
+      parentRoute: typeof AppCustomerOrdersCustomerIdRoute
+    }
+    '/app/customer-orders/$customerId/so/$orderId': {
+      id: '/app/customer-orders/$customerId/so/$orderId'
+      path: '/so/$orderId'
+      fullPath: '/app/customer-orders/$customerId/so/$orderId'
+      preLoaderRoute: typeof AppCustomerOrdersCustomerIdSoOrderIdRouteImport
+      parentRoute: typeof AppCustomerOrdersCustomerIdRoute
+    }
+    '/app/customer-orders/$customerId/branch/$branchId': {
+      id: '/app/customer-orders/$customerId/branch/$branchId'
+      path: '/branch/$branchId'
+      fullPath: '/app/customer-orders/$customerId/branch/$branchId'
+      preLoaderRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteImport
+      parentRoute: typeof AppCustomerOrdersCustomerIdRoute
+    }
+    '/app/customer-orders/$customerId/branch/$branchId/suggested': {
+      id: '/app/customer-orders/$customerId/branch/$branchId/suggested'
+      path: '/suggested'
+      fullPath: '/app/customer-orders/$customerId/branch/$branchId/suggested'
+      preLoaderRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRouteImport
+      parentRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdRoute
+    }
+    '/app/customer-orders/$customerId/branch/$branchId/so/$orderId': {
+      id: '/app/customer-orders/$customerId/branch/$branchId/so/$orderId'
+      path: '/so/$orderId'
+      fullPath: '/app/customer-orders/$customerId/branch/$branchId/so/$orderId'
+      preLoaderRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRouteImport
+      parentRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdRoute
+    }
   }
 }
+
+interface AppSalesConsultantsRouteChildren {
+  AppSalesConsultantsIdRoute: typeof AppSalesConsultantsIdRoute
+}
+
+const AppSalesConsultantsRouteChildren: AppSalesConsultantsRouteChildren = {
+  AppSalesConsultantsIdRoute: AppSalesConsultantsIdRoute,
+}
+
+const AppSalesConsultantsRouteWithChildren =
+  AppSalesConsultantsRoute._addFileChildren(AppSalesConsultantsRouteChildren)
+
+interface AppCustomerOrdersCustomerIdBranchBranchIdRouteChildren {
+  AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
+  AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRoute
+}
+
+const AppCustomerOrdersCustomerIdBranchBranchIdRouteChildren: AppCustomerOrdersCustomerIdBranchBranchIdRouteChildren =
+  {
+    AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute:
+      AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute,
+    AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRoute:
+      AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRoute,
+  }
+
+const AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren =
+  AppCustomerOrdersCustomerIdBranchBranchIdRoute._addFileChildren(
+    AppCustomerOrdersCustomerIdBranchBranchIdRouteChildren,
+  )
+
+interface AppCustomerOrdersCustomerIdRouteChildren {
+  AppCustomerOrdersCustomerIdSuggestedRoute: typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  AppCustomerOrdersCustomerIdBranchBranchIdRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
+  AppCustomerOrdersCustomerIdSoOrderIdRoute: typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
+}
+
+const AppCustomerOrdersCustomerIdRouteChildren: AppCustomerOrdersCustomerIdRouteChildren =
+  {
+    AppCustomerOrdersCustomerIdSuggestedRoute:
+      AppCustomerOrdersCustomerIdSuggestedRoute,
+    AppCustomerOrdersCustomerIdBranchBranchIdRoute:
+      AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren,
+    AppCustomerOrdersCustomerIdSoOrderIdRoute:
+      AppCustomerOrdersCustomerIdSoOrderIdRoute,
+  }
+
+const AppCustomerOrdersCustomerIdRouteWithChildren =
+  AppCustomerOrdersCustomerIdRoute._addFileChildren(
+    AppCustomerOrdersCustomerIdRouteChildren,
+  )
 
 interface AppRouteChildren {
   AppAdministrationRoute: typeof AppAdministrationRoute
   AppAiInsightsRoute: typeof AppAiInsightsRoute
   AppAiIntelligenceRoute: typeof AppAiIntelligenceRoute
   AppBackordersRoute: typeof AppBackordersRoute
+  AppBusinessOptimizationRoute: typeof AppBusinessOptimizationRoute
   AppCreditNotesMoreRoute: typeof AppCreditNotesMoreRoute
   AppCustomerFeedRoute: typeof AppCustomerFeedRoute
   AppCustomersRoute: typeof AppCustomersRoute
@@ -452,8 +756,14 @@ interface AppRouteChildren {
   AppOrdersRoute: typeof AppOrdersRoute
   AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppRolesRoute: typeof AppRolesRoute
+  AppSalesConsultantsRoute: typeof AppSalesConsultantsRouteWithChildren
   AppSoImportsRoute: typeof AppSoImportsRoute
+  AppTeamRoute: typeof AppTeamRoute
+  AppZonesRoute: typeof AppZonesRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppCustomerOrdersCustomerIdRoute: typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  AppOrdersByDateDateRoute: typeof AppOrdersByDateDateRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -461,6 +771,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAiInsightsRoute: AppAiInsightsRoute,
   AppAiIntelligenceRoute: AppAiIntelligenceRoute,
   AppBackordersRoute: AppBackordersRoute,
+  AppBusinessOptimizationRoute: AppBusinessOptimizationRoute,
   AppCreditNotesMoreRoute: AppCreditNotesMoreRoute,
   AppCustomerFeedRoute: AppCustomerFeedRoute,
   AppCustomersRoute: AppCustomersRoute,
@@ -473,8 +784,15 @@ const AppRouteChildren: AppRouteChildren = {
   AppOrdersRoute: AppOrdersRoute,
   AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,
+  AppRolesRoute: AppRolesRoute,
+  AppSalesConsultantsRoute: AppSalesConsultantsRouteWithChildren,
   AppSoImportsRoute: AppSoImportsRoute,
+  AppTeamRoute: AppTeamRoute,
+  AppZonesRoute: AppZonesRoute,
   AppIndexRoute: AppIndexRoute,
+  AppCustomerOrdersCustomerIdRoute:
+    AppCustomerOrdersCustomerIdRouteWithChildren,
+  AppOrdersByDateDateRoute: AppOrdersByDateDateRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

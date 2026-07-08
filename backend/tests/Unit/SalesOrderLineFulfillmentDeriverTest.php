@@ -10,16 +10,19 @@ class SalesOrderLineFulfillmentDeriverTest extends TestCase
     public function test_derives_backorders_imported_status(): void
     {
         $mapped = SalesOrderLineFulfillmentDeriver::mapFromRaw([
-            'InventoryID' => ['value' => 'SKU-1'],
-            'OrderQty'    => ['value' => 10],
-            'ShippedQty'  => ['value' => 4],
-            'OpenQty'     => ['value' => 6],
-            'UnitPrice'   => ['value' => 100],
+            'InventoryID'     => ['value' => 'SKU-1'],
+            'OrderQty'        => ['value' => 10],
+            'ShippedQty'      => ['value' => 4],
+            'QtyOnShipments'  => ['value' => 4],
+            'OpenQty'         => ['value' => 6],
+            'UnitPrice'       => ['value' => 100],
         ]);
 
         $this->assertSame('Backorders Imported', $mapped['fulfillment_status']);
         $this->assertSame(6.0, $mapped['backorder_qty']);
         $this->assertSame(40.0, $mapped['fill_rate_pct']);
+        $this->assertSame(4.0, $mapped['qty_on_shipments']);
+        $this->assertSame('qty_on_shipments', $mapped['qty_on_shipments_source']);
     }
 
     public function test_uses_usr_qty_at_approval_for_fill_rate(): void
@@ -29,12 +32,52 @@ class SalesOrderLineFulfillmentDeriverTest extends TestCase
             'OrderQty'          => ['value' => 100],
             'UsrQtyAtApproval'  => ['value' => 50],
             'ShippedQty'        => ['value' => 25],
+            'QtyOnShipments'    => ['value' => 25],
             'OpenQty'           => ['value' => 25],
         ]);
 
         $this->assertSame(50.0, $mapped['qty_at_approval']);
         $this->assertSame(25.0, $mapped['backorder_qty']);
         $this->assertSame(50.0, $mapped['fill_rate_pct']);
+    }
+
+    public function test_qty_on_shipments_zero_marks_out_of_stock_reason(): void
+    {
+        $mapped = SalesOrderLineFulfillmentDeriver::mapFromRaw([
+            'InventoryID'    => ['value' => 'FAYWP0024'],
+            'OrderQty'       => ['value' => 10],
+            'QtyOnShipments' => ['value' => 0],
+            'UnitPrice'      => ['value' => 1706.90],
+        ]);
+
+        $this->assertSame(0.0, $mapped['qty_on_shipments']);
+        $this->assertSame(0.0, $mapped['fill_rate_pct']);
+        $this->assertSame('inventory_shortage', $mapped['unfilled_reason_code']);
+    }
+
+    public function test_falls_back_to_shipped_qty_when_qty_on_shipments_missing(): void
+    {
+        $mapped = SalesOrderLineFulfillmentDeriver::mapFromRaw([
+            'InventoryID' => ['value' => 'SKU-LEGACY'],
+            'OrderQty'    => ['value' => 10],
+            'ShippedQty'  => ['value' => 7],
+        ]);
+
+        $this->assertSame(7.0, $mapped['qty_on_shipments']);
+        $this->assertSame('shipped_qty_fallback', $mapped['qty_on_shipments_source']);
+        $this->assertSame(70.0, $mapped['fill_rate_pct']);
+    }
+
+    public function test_prefers_acumatica_reason_code_over_derived_out_of_stock(): void
+    {
+        $mapped = SalesOrderLineFulfillmentDeriver::mapFromRaw([
+            'InventoryID'    => ['value' => 'SKU-3'],
+            'OrderQty'       => ['value' => 8],
+            'QtyOnShipments' => ['value' => 0],
+            'ReasonCode'     => ['value' => 'SUPPLIER_DELAY'],
+        ]);
+
+        $this->assertSame('supplier_delay', $mapped['unfilled_reason_code']);
     }
 
     public function test_safe_fill_rate_returns_null_when_denominator_missing(): void

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
+  Crosshair,
   Filter,
   FolderTree,
   Inbox,
@@ -15,10 +16,12 @@ import {
   MailOpen,
   Minus,
   OctagonX,
+  Paperclip,
   Plus,
   RefreshCw,
   Search,
   Settings,
+  ShieldCheck,
   Trash2,
   Unplug,
   XCircle,
@@ -65,6 +68,7 @@ import {
   useMailboxSyncLogs,
   useStartOAuth,
   useStopSync,
+  useSyncAllMailboxes,
   useSyncMailbox,
   useSyncRule,
   useUpdateEmailFilter,
@@ -85,6 +89,7 @@ import { useCustomers } from "@/hooks/useCustomers";
 import type { CreateEmailFilterPayload, EmailFilter, EmailFilterCondition, EmailFilterType, EmailMessage, InboxCustomerGroup, MailboxAccount, MailboxFolder, SyncLog } from "@/types/mailbox";
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
+import { MatchReviewQueue, OrderMatchingPanel, SenderImportPanel } from "@/components/email-import/EmailImportPanels";
 
 export const Route = createFileRoute("/app/mailbox")({
   head: () => ({ meta: [{ title: "Mailbox - Kim-Fay OrderWatch" }] }),
@@ -119,10 +124,22 @@ function MailboxPage() {
       </div>
 
       <Tabs defaultValue="inbox" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex h-auto flex-wrap gap-1">
           <TabsTrigger value="inbox" className="gap-1.5">
             <Inbox className="h-3.5 w-3.5" />
             Inbox
+          </TabsTrigger>
+          <TabsTrigger value="email-import" className="gap-1.5">
+            <Mail className="h-3.5 w-3.5" />
+            Email Import
+          </TabsTrigger>
+          <TabsTrigger value="order-matching" className="gap-1.5">
+            <Crosshair className="h-3.5 w-3.5" />
+            Order Matching
+          </TabsTrigger>
+          <TabsTrigger value="match-review" className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            PO / Email Match Review
           </TabsTrigger>
           <TabsTrigger value="filters" className="gap-1.5">
             <Filter className="h-3.5 w-3.5" />
@@ -144,6 +161,15 @@ function MailboxPage() {
 
         <TabsContent value="inbox">
           <InboxPanel />
+        </TabsContent>
+        <TabsContent value="email-import">
+          <SenderImportPanel />
+        </TabsContent>
+        <TabsContent value="order-matching">
+          <OrderMatchingPanel />
+        </TabsContent>
+        <TabsContent value="match-review">
+          <MatchReviewQueue />
         </TabsContent>
         <TabsContent value="filters">
           <FilterRulesPanel />
@@ -504,6 +530,7 @@ function InboxPanel() {
   const initialRange = resolveDatePreset("last_7_days");
   const [dateFrom, setDateFrom] = useState(initialRange.from);
   const [dateTo, setDateTo] = useState(initialRange.to);
+  const [groupBy, setGroupBy] = useState<"domain" | "customer">("domain");
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const { session } = useAuth();
@@ -515,6 +542,7 @@ function InboxPanel() {
     mailbox_id: mailboxId,
     date_from: dateFrom,
     date_to: dateTo,
+    group_by: groupBy,
   });
 
   const calendarRange: DateRange | undefined = useMemo(() => ({
@@ -528,14 +556,8 @@ function InboxPanel() {
   }, [search]);
 
   useEffect(() => {
-    if (!data?.groups.length) return;
-    setExpandedGroups((current) => {
-      if (current.size > 0) return current;
-      const first = data.groups[0];
-      const key = first.customer_id ? String(first.customer_id) : "unassigned";
-      return new Set([key]);
-    });
-  }, [data?.groups]);
+    setExpandedGroups(new Set());
+  }, [groupBy, debouncedSearch, mailboxId, dateFrom, dateTo]);
 
   function applyPreset(id: DatePresetId) {
     setPreset(id);
@@ -565,7 +587,7 @@ function InboxPanel() {
   }
 
   function groupKey(group: InboxCustomerGroup) {
-    return group.customer_id ? String(group.customer_id) : "unassigned";
+    return group.group_key;
   }
 
   return (
@@ -633,6 +655,16 @@ function InboxPanel() {
           </Select>
         )}
 
+        <Select value={groupBy} onValueChange={(value) => setGroupBy(value as "domain" | "customer")}>
+          <SelectTrigger className="w-[170px]">
+            <SelectValue placeholder="Group by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="domain">Customer Domain</SelectItem>
+            <SelectItem value="customer">Customer</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Button variant="outline" size="icon" onClick={() => refetch()} title="Refresh">
           <RefreshCw className="h-4 w-4" />
         </Button>
@@ -698,21 +730,30 @@ function InboxPanel() {
                       {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                       <div className="min-w-0 flex-1">
                         <div className="font-medium">
-                          {group.customer_name}
+                          {group.group_label}
                           {group.acumatica_id && (
                             <span className="ml-2 font-mono text-xs text-muted-foreground">{group.acumatica_id}</span>
                           )}
                         </div>
-                        <div className="mt-0.5 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-                          <span>{group.email_count} emails</span>
-                          <span>· {group.with_po_count} with PO</span>
+                        {group.group_type === "domain" && group.domain && group.group_label !== group.domain && (
+                          <div className="mt-0.5 text-xs text-muted-foreground">{group.domain}</div>
+                        )}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          <Badge variant="outline" className="h-5 gap-1 text-[10px]">
+                            <Mail className="h-3 w-3" />
+                            {group.email_count} emails
+                          </Badge>
+                          <Badge variant="outline" className="h-5 gap-1 text-[10px]">
+                            <Paperclip className="h-3 w-3" />
+                            {group.attachment_count} attachments
+                          </Badge>
+                          <Badge variant={group.with_po_count > 0 ? "default" : "outline"} className="h-5 text-[10px]">
+                            {group.with_po_count} PO
+                          </Badge>
                           <span>· {group.po_processing_count} PO processing</span>
                           {group.needs_review_count > 0 && <span>· {group.needs_review_count} review</span>}
                         </div>
                       </div>
-                      {group.with_po_count > 0 && (
-                        <Badge variant="default" className="shrink-0">{group.with_po_count} PO</Badge>
-                      )}
                     </button>
                     {open && (
                       <div className="divide-y border-t bg-muted/10">
@@ -810,22 +851,157 @@ function EmailRow({ email }: { email: EmailMessage }) {
 
 // ─── Filter Rules Panel ───────────────────────────────────────────────────────
 
+function MailboxSyncButton({
+  mailboxId,
+  isSyncing,
+  label = "Sync",
+  all = false,
+}: {
+  mailboxId?: number;
+  isSyncing: boolean;
+  label?: string;
+  all?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [preset, setPreset] = useState<DatePresetId>("last_7_days");
+  const defaultRange = folderSyncDefaultRange();
+  const [dateFrom, setDateFrom] = useState(defaultRange.from);
+  const [dateTo, setDateTo] = useState(defaultRange.to);
+  const syncOne = useSyncMailbox();
+  const syncAllMutation = useSyncAllMailboxes();
+  const sync = all ? syncAllMutation : syncOne;
+
+  function applyPreset(next: DatePresetId) {
+    setPreset(next);
+    if (next !== "custom") {
+      const range = resolveDatePreset(next);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+    } else {
+      setDateFrom(toDateTimeLocalValue(dateFrom, "start"));
+      setDateTo(toDateTimeLocalValue(dateTo, "end"));
+    }
+  }
+
+  function handleSync() {
+    const from = preset === "custom" ? dateFrom : dateFrom.slice(0, 10);
+    const to = preset === "custom" ? dateTo : dateTo.slice(0, 10);
+
+    if (all) {
+      syncAllMutation.mutate({ from, to });
+    } else if (mailboxId) {
+      syncOne.mutate({ id: mailboxId, from, to });
+    }
+
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" disabled={isSyncing}>
+            <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", isSyncing && "animate-spin")} />
+            {label}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-80" align="end">
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">Import All</p>
+              <p className="text-xs text-muted-foreground">
+                Imports every email for the selected dates — read, unread, and previously opened (max 90 days).
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {DATE_PRESETS.filter((item) => item.id !== "custom").map((item) => (
+                <Button
+                  key={item.id}
+                  size="sm"
+                  variant={preset === item.id ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
+                  onClick={() => applyPreset(item.id)}
+                >
+                  {item.label}
+                </Button>
+              ))}
+              <Button
+                size="sm"
+                variant={preset === "custom" ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                onClick={() => setPreset("custom")}
+              >
+                <CalendarDays className="mr-1 h-3 w-3" />
+                Custom
+              </Button>
+            </div>
+            {preset === "custom" ? (
+              <div className="grid grid-cols-1 gap-2">
+                <div>
+                  <Label className="text-xs">From (date &amp; time)</Label>
+                  <Input
+                    type="datetime-local"
+                    value={dateFrom}
+                    onChange={(event) => setDateFrom(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">To (date &amp; time)</Label>
+                  <Input
+                    type="datetime-local"
+                    value={dateTo}
+                    onChange={(event) => setDateTo(event.target.value)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">{formatSyncRangeLabel(dateFrom, dateTo)} (full days)</p>
+            )}
+            <Button className="w-full" size="sm" onClick={handleSync} disabled={sync.isPending}>
+              {sync.isPending ? "Importing all emails…" : "Import all in range"}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </>
+  );
+}
+
 function FilterRulesPanel() {
   const { data, isLoading, isError, refetch } = useEmailFilters();
   const { session } = useAuth();
   const isAdmin = session?.role === "Administrator";
   const { data: mailboxes } = useMailboxAccounts(isAdmin);
   const sync = useSyncMailbox();
+  const syncAll = useSyncAllMailboxes();
   const [createOpen, setCreateOpen] = useState(false);
   const [syncedIds, setSyncedIds] = useState<number[]>([]);
+  const [syncAllOpen, setSyncAllOpen] = useState(false);
+  const [syncAllPreset, setSyncAllPreset] = useState<DatePresetId>("last_7_days");
+  const defaultRange = folderSyncDefaultRange();
+  const [syncAllDateFrom, setSyncAllDateFrom] = useState(defaultRange.from);
+  const [syncAllDateTo, setSyncAllDateTo] = useState(defaultRange.to);
 
-  function syncAll() {
-    const accounts = mailboxes ?? [];
-    setSyncedIds(accounts.map((a) => a.id));
-    accounts.forEach((a) => sync.mutate(a.id, { onSettled: () => setSyncedIds((ids) => ids.filter((id) => id !== a.id)) }));
+  function applySyncAllPreset(next: DatePresetId) {
+    setSyncAllPreset(next);
+    if (next !== "custom") {
+      const range = resolveDatePreset(next);
+      setSyncAllDateFrom(range.from);
+      setSyncAllDateTo(range.to);
+    } else {
+      setSyncAllDateFrom(toDateTimeLocalValue(syncAllDateFrom, "start"));
+      setSyncAllDateTo(toDateTimeLocalValue(syncAllDateTo, "end"));
+    }
   }
 
-  const hasSyncing = syncedIds.length > 0;
+  function handleSyncAll() {
+    const from = syncAllPreset === "custom" ? syncAllDateFrom : syncAllDateFrom.slice(0, 10);
+    const to = syncAllPreset === "custom" ? syncAllDateTo : syncAllDateTo.slice(0, 10);
+    syncAll.mutate({ from, to });
+    setSyncAllOpen(false);
+  }
+
+  const hasSyncing = syncedIds.length > 0 || sync.isPending || syncAll.isPending;
 
   return (
     <div className="space-y-4">
@@ -840,17 +1016,11 @@ function FilterRulesPanel() {
         </div>
         <div className="flex shrink-0 gap-2">
           {isAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              disabled={hasSyncing || !mailboxes?.length}
-              onClick={syncAll}
-              title={!mailboxes?.length ? "No mailbox connected" : "Sync inbox now"}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${hasSyncing ? "animate-spin" : ""}`} />
-              {hasSyncing ? "Syncing…" : "Sync Inbox"}
-            </Button>
+            <MailboxSyncButton
+              all
+              isSyncing={hasSyncing}
+              label="Sync Inbox"
+            />
           )}
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
@@ -1628,9 +1798,8 @@ function AccountsPanel() {
             <MailboxAccountRow
               key={account.id}
               account={account}
-              onSync={() => sync.mutate(account.id)}
               onDisconnect={() => disconnect.mutate(account.id)}
-              syncPending={sync.isPending}
+              syncPending={false}
               disconnectPending={disconnect.isPending}
             />
           ))}
@@ -1644,13 +1813,11 @@ function AccountsPanel() {
 
 function MailboxAccountRow({
   account,
-  onSync,
   onDisconnect,
   syncPending,
   disconnectPending,
 }: {
   account: MailboxAccount;
-  onSync: () => void;
   onDisconnect: () => void;
   syncPending: boolean;
   disconnectPending: boolean;
@@ -1683,16 +1850,11 @@ function MailboxAccountRow({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={onSync}
-            disabled={syncPending || hasRunning}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${hasRunning ? "animate-spin" : ""}`} />
-            {hasRunning ? "Syncing" : "Sync"}
-          </Button>
+          <MailboxSyncButton
+            mailboxId={account.id}
+            isSyncing={syncPending || hasRunning}
+            label={hasRunning ? "Syncing" : "Sync"}
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -1824,9 +1986,9 @@ function SyncLogRow({ log, mailboxId }: { log: SyncLog; mailboxId: number }) {
 
           <div className="mt-3">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Skipped reasons</div>
-            {log.reason_counts.length > 0 ? (
+            {(log.reason_counts ?? []).length > 0 ? (
               <div className="mt-1 space-y-1">
-                {log.reason_counts.map((reason) => (
+                {(log.reason_counts ?? []).map((reason) => (
                   <div key={reason.code} className="flex items-center justify-between gap-3 rounded bg-muted/30 px-2 py-1.5">
                     <span>{reason.label}</span>
                     <Badge variant="secondary" className="tabular-nums">{reason.count}</Badge>
@@ -1837,11 +1999,31 @@ function SyncLogRow({ log, mailboxId }: { log: SyncLog; mailboxId: number }) {
               <p className="mt-1 text-muted-foreground">No skipped emails in this run.</p>
             )}
           </div>
-          {log.decision_counts.length > 0 && (
+          <div className="mt-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Failed reasons</div>
+            {(log.failure_counts ?? []).length > 0 ? (
+              <div className="mt-1 space-y-1">
+                {(log.failure_counts ?? []).map((reason) => (
+                  <div key={reason.code} className="rounded bg-destructive/5 px-2 py-1.5 text-destructive">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>{reason.label}</span>
+                      <Badge variant="destructive" className="tabular-nums">{reason.count}</Badge>
+                    </div>
+                    {reason.error_summary && (
+                      <p className="mt-1 text-[11px] leading-relaxed text-destructive/80">{reason.error_summary}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-muted-foreground">No failed emails in this run.</p>
+            )}
+          </div>
+          {(log.decision_counts ?? []).length > 0 && (
             <div className="mt-3">
               <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ingestion decisions</div>
               <div className="mt-1 space-y-1">
-                {log.decision_counts.map((decision) => (
+                {(log.decision_counts ?? []).map((decision) => (
                   <div key={`${decision.classification}-${decision.reason_code}-${decision.folder_name || "none"}`} className="flex items-center justify-between gap-3 rounded bg-muted/30 px-2 py-1.5">
                     <span>{decision.label}{decision.folder_name ? ` · ${decision.folder_name}` : ""}</span>
                     <Badge variant="secondary" className="tabular-nums">{decision.count}</Badge>

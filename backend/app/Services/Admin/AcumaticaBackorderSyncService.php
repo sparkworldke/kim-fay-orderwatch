@@ -2,22 +2,46 @@
 
 namespace App\Services\Admin;
 
+use App\Exceptions\AcumaticaSyncStoppedException;
 use App\Models\AcumaticaBackorderLine;
 use App\Models\AcumaticaDeadLetter;
 use App\Models\AcumaticaSyncLog;
+use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class AcumaticaBackorderSyncService
 {
+    use InteractsWithAcumaticaSyncRun;
+
+    /** @var array{reason_codes_imported:int,reason_notes_imported:int,missing_reason_codes:int,invalid_reason_codes:int,sample_missing_order_nbrs:list<string>} */
+    private array $reasonValidationSummary = [
+        'reason_codes_imported' => 0,
+        'reason_notes_imported' => 0,
+        'missing_reason_codes' => 0,
+        'invalid_reason_codes' => 0,
+        'sample_missing_order_nbrs' => [],
+    ];
+
     public function __construct(
         private readonly AcumaticaClient $client,
     ) {
     }
 
-    public function run(?int $triggeredByUserId = null, string $triggerType = 'manual', ?int $cronRunLogId = null): AcumaticaSyncLog
+    public function run(
+        ?int $triggeredByUserId = null,
+        string $triggerType = 'manual',
+        ?int $cronRunLogId = null,
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
+    ): AcumaticaSyncLog
     {
-        $run = AcumaticaSyncLog::create([
+        $this->assertNoActiveSync(
+            ['backorders'],
+            'A backorder sync is already running. Wait for it to finish or stop it first.',
+        );
+
+        $run = $this->createSyncRun([
             'sync_type'            => 'backorders',
             'cron_run_log_id'      => $cronRunLogId,
             'started_at'           => now(),
@@ -27,30 +51,60 @@ class AcumaticaBackorderSyncService
             'failed_count'         => 0,
             'trigger_type'         => $triggerType,
             'triggered_by_user_id' => $triggeredByUserId,
+            'filters'              => array_filter([
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+            ]),
+        ]);
+
+        StructuredLogger::write('info', 'acumatica', 'backorder_sync_started', [
+            'sync_run_id' => $run->id,
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
         ]);
 
         try {
-            $orders = $this->client->fetchAllOpenSalesOrdersForBackorders();
-            $run    = $this->processOrders($orders, $run);
+            $isDateLimited = $dateFrom && $dateTo;
+            $orders = $isDateLimited
+                ? $this->client->fetchAllOpenSalesOrdersForBackordersByDateRange($dateFrom, $dateTo, fn () => $this->touchSyncRun($run))
+                : $this->client->fetchAllOpenSalesOrdersForBackorders(fn () => $this->touchSyncRun($run));
+            $run    = $this->processOrders($orders, $run, ! $isDateLimited);
+        } catch (AcumaticaSyncStoppedException $e) {
+            $run = $this->stopSyncRun($run, $e->getMessage());
         } catch (Throwable $e) {
             $run->update([
                 'ended_at'      => now(),
+                'heartbeat_at'  => now(),
                 'status'        => 'failed',
                 'error_message' => $e->getMessage(),
+            ]);
+
+            StructuredLogger::write('error', 'acumatica', 'backorder_sync_failed', [
+                'sync_run_id' => $run->id,
+                'error'       => $e->getMessage(),
             ]);
         }
 
         return $run->fresh();
     }
 
-    private function processOrders(array $orders, AcumaticaSyncLog $run): AcumaticaSyncLog
+    private function processOrders(array $orders, AcumaticaSyncLog $run, bool $pruneStaleLines = true): AcumaticaSyncLog
     {
+        $this->reasonValidationSummary = [
+            'reason_codes_imported' => 0,
+            'reason_notes_imported' => 0,
+            'missing_reason_codes' => 0,
+            'invalid_reason_codes' => 0,
+            'sample_missing_order_nbrs' => [],
+        ];
         $seenKeys    = [];
         $success     = 0;
         $failed      = 0;
         $linesSynced = 0;
 
         foreach ($orders as $raw) {
+            $this->touchSyncRun($run);
+
             try {
                 $keys = $this->upsertBackorderLines($raw, $run->id);
                 if ($keys !== []) {
@@ -86,19 +140,29 @@ class AcumaticaBackorderSyncService
             }
         }
 
-        if (! empty($seenKeys)) {
+        if ($pruneStaleLines && ! empty($seenKeys)) {
             $this->pruneStaleLines($seenKeys);
         }
 
         $run->update([
             'ended_at'      => now(),
+            'heartbeat_at'  => now(),
             'status'        => $failed > 0 && $linesSynced === 0 ? 'failed' : 'completed',
             'record_count'  => count($orders),
             'success_count' => $linesSynced > 0 ? $linesSynced : $success,
             'failed_count'  => $failed,
+            'filters'       => array_merge($run->filters ?? [], $this->reasonValidationSummary),
             'error_message' => $linesSynced === 0 && $failed === 0 && count($orders) > 0
                 ? 'Fetched '.count($orders).' open orders but no lines matched backorder criteria (check OpenQty in Acumatica Details).'
                 : null,
+        ]);
+
+        StructuredLogger::write('info', 'acumatica', 'backorder_sync_completed', [
+            'sync_run_id' => $run->id,
+            'total' => count($orders),
+            'success' => $success,
+            'failed' => $failed,
+            'reason_validation' => $this->reasonValidationSummary,
         ]);
 
         return $run;
@@ -147,6 +211,7 @@ class AcumaticaBackorderSyncService
             $openQty = $mapped['open_qty'] > 0 ? $mapped['open_qty'] : $mapped['backorder_qty'];
             $unitPrice = $mapped['unit_price'];
             $revenueAtRisk = $unitPrice > 0 ? round($openQty * $unitPrice, 2) : 0;
+            $this->recordReasonValidation($orderNbr, $inventoryId, $mapped);
 
             AcumaticaBackorderLine::updateOrCreate(
                 ['order_nbr' => $orderNbr, 'inventory_id' => $inventoryId],
@@ -196,11 +261,14 @@ class AcumaticaBackorderSyncService
     ): array {
         $attrs = array_merge($extra, [
             'order_qty'       => $mapped['order_qty'],
-            'shipped_qty'     => $mapped['shipped_qty'],
-            'open_qty'        => $openQty,
+            'shipped_qty'      => $mapped['shipped_qty'],
+            'qty_on_shipments' => $mapped['qty_on_shipments'],
+            'open_qty'         => $openQty,
             'unit_price'      => $unitPrice,
             'revenue_at_risk' => $revenueAtRisk,
             'warehouse_id'    => $mapped['warehouse_id'],
+            'reason_code'     => $mapped['reason_code'],
+            'reason_notes'    => $mapped['reason_notes'],
         ]);
 
         if (Schema::hasColumn('acumatica_backorder_lines', 'uom')) {
@@ -221,6 +289,42 @@ class AcumaticaBackorderSyncService
         }
 
         return $attrs;
+    }
+
+    /** @param array<string, mixed> $mapped */
+    private function recordReasonValidation(string $orderNbr, string $inventoryId, array $mapped): void
+    {
+        $reasonCode = is_string($mapped['reason_code'] ?? null) ? trim((string) $mapped['reason_code']) : null;
+        $reasonNotes = is_string($mapped['reason_notes'] ?? null) ? trim((string) $mapped['reason_notes']) : null;
+
+        if ($reasonCode !== null && $reasonCode !== '') {
+            $this->reasonValidationSummary['reason_codes_imported']++;
+        }
+
+        if ($reasonNotes !== null && $reasonNotes !== '') {
+            $this->reasonValidationSummary['reason_notes_imported']++;
+        }
+
+        if ($reasonCode === null || $reasonCode === '') {
+            $this->reasonValidationSummary['missing_reason_codes']++;
+            $sampleKey = "{$orderNbr}|{$inventoryId}";
+            if (count($this->reasonValidationSummary['sample_missing_order_nbrs']) < 10
+                && ! in_array($sampleKey, $this->reasonValidationSummary['sample_missing_order_nbrs'], true)) {
+                $this->reasonValidationSummary['sample_missing_order_nbrs'][] = $sampleKey;
+            }
+
+            StructuredLogger::write('warning', 'acumatica', 'backorder_reason_code_missing', [
+                'order_nbr' => $orderNbr,
+                'inventory_id' => $inventoryId,
+            ]);
+
+            return;
+        }
+
+        if (strlen($reasonCode) > 80) {
+            $this->reasonValidationSummary['invalid_reason_codes']++;
+            throw new \RuntimeException("Backorder reason code exceeds 80 characters for {$orderNbr}/{$inventoryId}");
+        }
     }
 
     private function str(mixed $field): ?string

@@ -48,79 +48,90 @@ class DailyManagementReportMail extends Mailable
 
     private function buildHtml(): string
     {
-        $y = $this->payload['yesterday'] ?? [];
-        $mtd = $this->payload['mtd'] ?? [];
-        $comparison = $this->payload['comparison'] ?? [];
-        $risk = $this->payload['risk'] ?? [];
-        $highlights = $this->payload['customer_highlights'] ?? [];
-        $formulas = $this->payload['formulas'] ?? [];
-        $dashboardUrl = FrontendUrl::path('/app');
-
-        $executive = e($this->insights['executive_summary'] ?? '');
-        $commentary = e($this->insights['performance_commentary'] ?? '');
-        $improvements = $this->insights['improvements'] ?? [];
+        $orders = $this->payload['orders'] ?? [];
+        $fill = $this->payload['fill_rate'] ?? $this->payload['fill_rate_backorders'] ?? [];
+        $backorders = $this->payload['backorders'] ?? [];
+        $sla = $this->payload['sla'] ?? [];
+        $revenue = $this->payload['revenue_split'] ?? [];
 
         $reportLabel = e($this->payload['report_date_label'] ?? '');
-        $yesterdayDate = e($this->payload['report_date_display'] ?? '');
-        $previousDate = e($this->payload['comparison_date_display'] ?? '');
-        $mtdLabel = e($this->payload['mtd_period_label'] ?? '');
+        $weekLabel = e($this->payload['week']['label'] ?? '');
         $generatedAt = e($this->payload['generated_at_display'] ?? '');
         $timezone = e($this->payload['timezone'] ?? 'Africa/Nairobi');
+        $dashboardUrl = FrontendUrl::path('/app');
 
-        $improvementHtml = '';
-        foreach ($improvements as $item) {
-            $improvementHtml .= '<li style="margin-bottom:6px;">'.e((string) $item).'</li>';
-        }
+        $yesterday = $orders['yesterday'] ?? [];
+        $weekTotals = $orders['week_totals'] ?? [];
+        $ordersHeader = sprintf(
+            '<p style="margin:0 0 6px;font-size:13px;"><strong>Yesterday (%s):</strong> %s orders &bull; %s completed &bull; %s pending approval &bull; %s in shipping</p>
+             <p style="margin:0 0 12px;font-size:12px;color:#6b7280;"><strong>Week to date (Mon–Sat):</strong> %s orders &bull; %s completed &bull; %s pending approval &bull; %s in shipping</p>',
+            e($yesterday['date_label'] ?? $reportLabel),
+            (int) ($yesterday['total_orders'] ?? 0),
+            (int) ($yesterday['completed_orders'] ?? 0),
+            (int) ($yesterday['pending_approval'] ?? 0),
+            (int) ($yesterday['in_shipping'] ?? 0),
+            (int) ($weekTotals['total_orders'] ?? 0),
+            (int) ($weekTotals['completed_orders'] ?? 0),
+            (int) ($weekTotals['pending_approval'] ?? 0),
+            (int) ($weekTotals['in_shipping'] ?? 0),
+        );
 
-        $comparisonRows = '';
-        foreach ([
-            'orders_received' => 'Orders Received',
-            'total_order_value' => 'Order Value (KES)',
-            'orders_completed' => 'Completed Orders',
-            'completion_rate' => 'Completion Rate (%)',
-            'outstanding_orders' => 'Outstanding Orders',
-            'revenue_at_risk' => 'Revenue at Risk (KES)',
-            'critical_orders' => 'Critical Orders',
-        ] as $key => $label) {
-            if (! isset($comparison[$key])) {
-                continue;
-            }
-            $row = $comparison[$key];
-            $changeCell = $this->changeCell($key, $row);
-            $comparisonRows .= sprintf(
-                '<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">%s</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">%s</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">%s</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">%s</td></tr>',
-                e($label),
-                $this->formatMetric($key, $row['yesterday'] ?? 0),
-                $this->formatMetric($key, $row['day_before'] ?? 0),
-                $changeCell,
+        $dailyRows = '';
+        foreach ($orders['daily_table'] ?? [] as $row) {
+            $dailyRows .= sprintf(
+                '<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">%s</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">%d</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">%d</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">%d</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">%d</td></tr>',
+                e($row['date_label'] ?? ''),
+                (int) ($row['total_orders'] ?? 0),
+                (int) ($row['completed_orders'] ?? 0),
+                (int) ($row['pending_approval'] ?? 0),
+                (int) ($row['in_shipping'] ?? 0),
             );
         }
 
-        $topPositive = e($highlights['top_positive']['customer_name'] ?? $this->insights['top_positive'] ?? 'No data');
-        $topRisk = e($highlights['top_risk']['customer_name'] ?? $this->insights['top_negative'] ?? 'No data');
-        $pendingManualReview = (int) ($risk['pending_manual_review'] ?? 0);
-        $unmatchedEmails = (int) ($risk['unmatched_emails'] ?? 0);
+        $carryover = $orders['prior_month_carryover'] ?? [];
+        $carryoverHtml = '';
+        if (! empty($carryover['show'])) {
+            $carryoverHtml = sprintf(
+                '<p style="margin:12px 0 0;font-size:13px;color:#b45309;"><strong>Prior month (%s):</strong> %d incomplete orders &mdash; %d pending approval, %d in shipping</p>',
+                e($carryover['month_label'] ?? ''),
+                (int) ($carryover['total_incomplete'] ?? 0),
+                (int) ($carryover['pending_approval'] ?? 0),
+                (int) ($carryover['in_shipping'] ?? 0),
+            );
+        }
 
-        $revenueAtRiskFormula = e($formulas['revenue_at_risk'] ?? 'SUM(order_total) for uncaptured orders');
-        $completionFormula = e($formulas['completion_rate'] ?? 'orders_completed / orders_received × 100');
-        $criticalFormula = e($formulas['critical_orders'] ?? 'Orders on hold, pending approval, or rejected');
+        $reasonRows = '';
+        foreach ($backorders['top_reasons'] ?? $fill['top_reasons'] ?? [] as $reason) {
+            $reasonRows .= sprintf(
+                '<tr><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">%s</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;">%d</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;">KES %s</td></tr>',
+                e((string) ($reason['reason_label'] ?? $reason['reason_code'] ?? 'Unknown')),
+                (int) ($reason['line_count'] ?? 0),
+                number_format((float) ($reason['revenue_at_risk'] ?? 0), 0),
+            );
+        }
 
-        $mtdRows = $this->kpiRow('Orders Received', (string) ($mtd['orders_received'] ?? 0))
-            .$this->kpiRow('Orders Completed', (string) ($mtd['orders_completed'] ?? 0))
-            .$this->kpiRow('Completion Rate', ($mtd['completion_rate'] ?? 0).'%')
-            .$this->kpiRow('Revenue (KES)', number_format((float) ($mtd['total_order_value'] ?? 0), 0))
-            .$this->kpiRow('Revenue at Risk (KES)', number_format((float) ($mtd['revenue_at_risk'] ?? 0), 0))
-            .$this->kpiRow('Critical Orders', (string) ($mtd['critical_orders'] ?? 0));
+        $nairobi = $sla['nairobi'] ?? [];
+        $mombasa = $sla['mombasa'] ?? [];
+        $slaHtml = sprintf(
+            '<p style="margin:0 0 8px;font-size:13px;"><strong>Nairobi (24hr):</strong> %.1f%% not delivered after 24h (%d of %d orders, %d completed, KES %s at risk)</p>
+             <p style="margin:0;font-size:13px;"><strong>Mombasa (24hr):</strong> %.1f%% not delivered after 24h (%d of %d orders, %d completed, KES %s at risk)</p>',
+            (float) ($nairobi['delayed_pct'] ?? 0),
+            (int) ($nairobi['delayed_orders'] ?? 0),
+            (int) ($nairobi['total_orders'] ?? 0),
+            (int) ($nairobi['completed_orders'] ?? 0),
+            number_format((float) ($nairobi['delayed_value'] ?? 0), 0),
+            (float) ($mombasa['delayed_pct'] ?? 0),
+            (int) ($mombasa['delayed_orders'] ?? 0),
+            (int) ($mombasa['total_orders'] ?? 0),
+            (int) ($mombasa['completed_orders'] ?? 0),
+            number_format((float) ($mombasa['delayed_value'] ?? 0), 0),
+        );
 
-        $yesterdayRows = $this->kpiRow('Orders Received', (string) ($y['orders_received'] ?? 0))
-            .$this->kpiRow('Order Value (KES)', number_format((float) ($y['total_order_value'] ?? 0), 0))
-            .$this->kpiRow('Completed', (string) ($y['orders_completed'] ?? 0))
-            .$this->kpiRow('Completion Rate', ($y['completion_rate'] ?? 0).'%')
-            .$this->kpiRow('Outstanding Orders', (string) ($y['outstanding_orders'] ?? 0))
-            .$this->kpiRow('Revenue at Risk (KES)', number_format((float) ($y['revenue_at_risk'] ?? 0), 0));
-
-        $glossary = $this->glossaryBlock($revenueAtRiskFormula, $completionFormula, $criticalFormula);
-        $legend = $this->legendBlock();
+        $revenueDate = e($revenue['date_label'] ?? $reportLabel);
+        $unclassified = (float) ($revenue['unclassified'] ?? 0);
+        $unclassifiedHtml = $unclassified > 0
+            ? sprintf('<p style="margin:8px 0 0;font-size:12px;color:#6b7280;">Unclassified: KES %s</p>', number_format($unclassified, 0))
+            : '';
 
         return <<<HTML
         <!DOCTYPE html>
@@ -132,61 +143,63 @@ class DailyManagementReportMail extends Mailable
         <table width="640" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;max-width:640px;width:100%;box-shadow:0 2px 8px rgba(0,0,0,.08);">
             <tr><td style="background:#1a1a2e;padding:24px 32px;color:#fff;">
                 <div style="font-size:20px;font-weight:700;">Kim-Fay OrderWatch</div>
-                <div style="font-size:13px;opacity:.85;margin-top:4px;">Daily Management Brief &mdash; {$reportLabel}</div>
+                <div style="font-size:13px;opacity:.85;margin-top:4px;">Executive Exceptions &mdash; {$reportLabel}</div>
             </td></tr>
-            <tr><td style="padding:20px 32px 8px;font-size:12px;color:#6b7280;line-height:1.6;">
-                <strong>Yesterday:</strong> {$yesterdayDate} &nbsp;&bull;&nbsp;
-                <strong>Previous Day:</strong> {$previousDate} &nbsp;&bull;&nbsp;
-                <strong>MTD:</strong> {$mtdLabel}<br />
-                Generated: {$generatedAt} ({$timezone})
+            <tr><td style="padding:16px 32px 8px;font-size:12px;color:#6b7280;">
+                <strong>Report date:</strong> {$reportLabel} (yesterday) &nbsp;&bull;&nbsp; Generated: {$generatedAt} ({$timezone})
             </td></tr>
-            {$glossary}
-            {$legend}
-            <tr><td style="padding:8px 32px 24px;">
-                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">Executive Summary</h2>
-                <p style="margin:0;line-height:1.6;font-size:14px;">{$executive}</p>
-            </td></tr>
-            <tr><td style="padding:0 32px 20px;">
-                <h3 style="margin:0 0 4px;font-size:14px;color:#111827;">MTD &mdash; {$mtdLabel}</h3>
-                <p style="margin:0 0 10px;font-size:11px;color:#6b7280;">Month-to-date totals up to {$yesterdayDate}</p>
-                <table width="100%" style="font-size:13px;border-collapse:collapse;">
-                    {$mtdRows}
-                </table>
-            </td></tr>
-            <tr><td style="padding:0 32px 20px;">
-                <h3 style="margin:0 0 4px;font-size:14px;color:#111827;">Yesterday &mdash; {$yesterdayDate}</h3>
-                <p style="margin:0 0 10px;font-size:11px;color:#6b7280;">Performance for the previous calendar day</p>
-                <table width="100%" style="font-size:13px;border-collapse:collapse;">
-                    {$yesterdayRows}
-                </table>
-            </td></tr>
-            <tr><td style="padding:0 32px 20px;">
-                <h3 style="margin:0 0 4px;font-size:14px;color:#111827;">vs Previous Day &mdash; {$previousDate}</h3>
-                <p style="margin:0 0 10px;font-size:11px;color:#6b7280;">{$yesterdayDate} compared with {$previousDate}</p>
-                <table width="100%" style="font-size:12px;border-collapse:collapse;">
+
+            <tr><td style="padding:16px 32px 8px;">
+                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">1. Order Exceptions</h2>
+                {$ordersHeader}
+                <p style="margin:0 0 8px;font-size:11px;color:#6b7280;">Orders received by day (Mon–Sat, Sundays excluded)</p>
+                <table width="100%" style="font-size:12px;border-collapse:collapse;margin-top:8px;">
                     <tr style="background:#f9fafb;">
-                        <th style="padding:8px 12px;text-align:left;">Metric</th>
-                        <th style="padding:8px 12px;text-align:right;">{$yesterdayDate}</th>
-                        <th style="padding:8px 12px;text-align:right;">{$previousDate}</th>
-                        <th style="padding:8px 12px;text-align:right;">Change</th>
+                        <th style="padding:8px 12px;text-align:left;">Date</th>
+                        <th style="padding:8px 12px;text-align:right;">Total</th>
+                        <th style="padding:8px 12px;text-align:right;">Completed</th>
+                        <th style="padding:8px 12px;text-align:right;">Pending Approval</th>
+                        <th style="padding:8px 12px;text-align:right;">In Shipping</th>
                     </tr>
-                    {$comparisonRows}
+                    {$dailyRows}
                 </table>
+                {$carryoverHtml}
             </td></tr>
-            <tr><td style="padding:0 32px 20px;">
-                <h3 style="margin:0 0 8px;font-size:14px;">Operational Efficiency</h3>
-                <p style="margin:0 0 8px;font-size:13px;line-height:1.5;">{$commentary}</p>
-                <p style="margin:0;font-size:12px;color:#6b7280;">Pending manual review: {$pendingManualReview} &bull; Unmatched emails yesterday: {$unmatchedEmails}</p>
+
+            <tr><td style="padding:16px 32px 8px;">
+                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">2. Fill Rate &mdash; {$reportLabel}</h2>
+                <p style="margin:0;font-size:13px;">
+                    <strong>Fill rate (yesterday):</strong> {$this->formatPct($fill['fill_rate_pct'] ?? null)} &nbsp;&bull;&nbsp;
+                    <strong>Orders tracked:</strong> {$this->formatInt($fill['orders_tracked'] ?? 0)} &nbsp;&bull;&nbsp;
+                    <strong>Revenue not shipped:</strong> KES {$this->formatKes($fill['revenue_not_shipped'] ?? 0)}
+                </p>
             </td></tr>
-            <tr><td style="padding:0 32px 20px;">
-                <h3 style="margin:0 0 8px;font-size:14px;">Account Highlights</h3>
-                <p style="margin:0;font-size:13px;"><strong>Top performer:</strong> {$topPositive}</p>
-                <p style="margin:6px 0 0;font-size:13px;"><strong>Highest risk:</strong> {$topRisk}</p>
+
+            <tr><td style="padding:16px 32px 8px;">
+                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">3. Backorders &mdash; {$reportLabel}</h2>
+                <p style="margin:0 0 10px;font-size:13px;">
+                    <strong>Backorder exposure:</strong> {$this->formatPct($backorders['backorder_exposure_pct'] ?? $fill['backorder_exposure_pct'] ?? null)} &nbsp;&bull;&nbsp;
+                    <strong>Revenue at risk:</strong> KES {$this->formatKes($backorders['revenue_at_risk'] ?? $fill['backorder_revenue_at_risk'] ?? 0)}
+                </p>
+                <h3 style="margin:12px 0 6px;font-size:13px;">Top reasons (coded in Acumatica)</h3>
+                <table width="100%" style="font-size:12px;border-collapse:collapse;">{$reasonRows}</table>
             </td></tr>
-            <tr><td style="padding:0 32px 28px;">
-                <h3 style="margin:0 0 10px;font-size:14px;">What Needs Improvement Today</h3>
-                <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.5;">{$improvementHtml}</ul>
+
+            <tr><td style="padding:16px 32px 8px;">
+                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">4. Nairobi &amp; Mombasa 24hr SLA &mdash; {$reportLabel}</h2>
+                {$slaHtml}
             </td></tr>
+
+            <tr><td style="padding:16px 32px 24px;">
+                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">5. Revenue Split ({$revenueDate})</h2>
+                <table width="100%" style="font-size:13px;border-collapse:collapse;">
+                    <tr><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">KP (customer class KP*)</td><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">KES {$this->formatKes($revenue['kp'] ?? 0)}</td></tr>
+                    <tr><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">CS (Consumer Sales)</td><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">KES {$this->formatKes($revenue['cs'] ?? 0)}</td></tr>
+                    <tr><td style="padding:6px 0;">Total yesterday</td><td style="padding:6px 0;text-align:right;font-weight:600;">KES {$this->formatKes($revenue['total'] ?? 0)}</td></tr>
+                </table>
+                {$unclassifiedHtml}
+            </td></tr>
+
             <tr><td style="padding:20px 32px;background:#f9fafb;text-align:center;font-size:12px;color:#6b7280;">
                 Generated by OrderWatch &bull; <a href="{$dashboardUrl}" style="color:#4f6ef7;">View full dashboard</a>
             </td></tr>
@@ -196,87 +209,22 @@ class DailyManagementReportMail extends Mailable
         HTML;
     }
 
-    private function glossaryBlock(string $revenueFormula, string $completionFormula, string $criticalFormula): string
+    private function formatPct(mixed $value): string
     {
-        $rows = [
-            ['MTD', 'Month-to-Date — cumulative totals from the 1st of the month up to yesterday.'],
-            ['Orders Received', 'All sales orders recorded on the reporting day.'],
-            ['Orders Completed', 'Orders captured with status Completed, Shipping, or Back Order.'],
-            ['Completion Rate', $completionFormula],
-            ['Outstanding Orders', 'Orders received but not yet completed or captured.'],
-            ['Revenue at Risk', $revenueFormula],
-            ['Critical Orders', $criticalFormula],
-        ];
-
-        $html = '';
-        foreach ($rows as [$term, $definition]) {
-            $html .= '<tr><td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;font-weight:600;vertical-align:top;width:38%;">'.e($term).'</td>'
-                .'<td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#4b5563;">'.e($definition).'</td></tr>';
+        if ($value === null || $value === '') {
+            return 'N/A';
         }
 
-        return <<<HTML
-        <tr><td style="padding:12px 32px 0;">
-            <div style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
-                <div style="background:#f3f4f6;padding:8px 12px;font-size:12px;font-weight:700;color:#374151;">Metrics Glossary</div>
-                <table width="100%" style="font-size:12px;border-collapse:collapse;">{$html}</table>
-            </div>
-        </td></tr>
-        HTML;
+        return number_format((float) $value, 1).'%';
     }
 
-    private function legendBlock(): string
+    private function formatKes(mixed $value): string
     {
-        return <<<'HTML'
-        <tr><td style="padding:12px 32px 0;">
-            <div style="border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;font-size:11px;color:#4b5563;">
-                <strong style="color:#374151;">Change indicators:</strong>
-                <span style="display:inline-block;margin:4px 10px 0 0;padding:2px 8px;border-radius:4px;background:#dcfce7;color:#15803d;font-weight:600;">&#9650; Green &mdash; Improvement</span>
-                <span style="display:inline-block;margin:4px 10px 0 0;padding:2px 8px;border-radius:4px;background:#fef3c7;color:#b45309;font-weight:600;">&#9644; Amber &mdash; Stagnant</span>
-                <span style="display:inline-block;margin:4px 0 0;padding:2px 8px;border-radius:4px;background:#fee2e2;color:#b91c1c;font-weight:600;">&#9660; Red &mdash; Decline</span>
-            </div>
-        </td></tr>
-        HTML;
+        return number_format((float) $value, 0);
     }
 
-    /** @param  array<string, mixed>  $row */
-    private function changeCell(string $key, array $row): string
+    private function formatInt(mixed $value): string
     {
-        $sentiment = $row['sentiment'] ?? 'stagnant';
-        $styles = match ($sentiment) {
-            'improvement' => ['bg' => '#dcfce7', 'color' => '#15803d', 'arrow' => '&#9650;'],
-            'decline' => ['bg' => '#fee2e2', 'color' => '#b91c1c', 'arrow' => '&#9660;'],
-            default => ['bg' => '#fef3c7', 'color' => '#b45309', 'arrow' => '&#9644;'],
-        };
-
-        $value = $this->formatMetric($key, $row['absolute_change'] ?? 0, true);
-        $percent = isset($row['percent_change']) ? ' ('.($row['percent_change'] > 0 ? '+' : '').$row['percent_change'].'%)' : '';
-
-        return sprintf(
-            '<span style="display:inline-block;padding:3px 8px;border-radius:4px;background:%s;color:%s;font-weight:600;white-space:nowrap;">%s %s%s</span>',
-            $styles['bg'],
-            $styles['color'],
-            $value,
-            $styles['arrow'],
-            e($percent),
-        );
-    }
-
-    private function kpiRow(string $label, string $value): string
-    {
-        return '<tr><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">'.e($label).'</td><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">'.e($value).'</td></tr>';
-    }
-
-    private function formatMetric(string $key, mixed $value, bool $signed = false): string
-    {
-        if (in_array($key, ['total_order_value', 'revenue_at_risk'], true)) {
-            $prefix = $signed && $value > 0 ? '+' : '';
-            return $prefix.'KES '.number_format((float) $value, 0);
-        }
-        if ($key === 'completion_rate') {
-            $prefix = $signed && $value > 0 ? '+' : '';
-            return $prefix.number_format((float) $value, 1).($signed ? ' pts' : '%');
-        }
-        $prefix = $signed && $value > 0 ? '+' : '';
-        return $prefix.(string) $value;
+        return number_format((int) $value);
     }
 }

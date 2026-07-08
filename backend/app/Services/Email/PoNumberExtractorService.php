@@ -132,9 +132,51 @@ class PoNumberExtractorService
      * @param array<string, string|null> $sources
      * @return array<int, array{po_number:string,source:string,method:string,confidence:int,raw_match:string,deterministic:bool}>
      */
+    /**
+     * Check if two PO numbers are numerically close (within 10 of each other)
+     */
+    private function areNumericallyClose(string $a, string $b): bool
+    {
+        $numA = filter_var($a, FILTER_VALIDATE_INT);
+        $numB = filter_var($b, FILTER_VALIDATE_INT);
+        if ($numA === false || $numB === false) {
+            return false;
+        }
+        return abs($numA - $numB) <= 10;
+    }
+
     public function extractAll(string $senderEmail, array $sources): array
     {
         $found = $this->extractDeterministicAll($senderEmail, $sources);
+
+        // Separate PDF ground truth candidates
+        $pdfGroundTruth = array_filter($found, fn ($c) => $c['method'] === 'pdf_ground_truth');
+        if (!empty($pdfGroundTruth)) {
+            $pdfPoNumbers = array_column($pdfGroundTruth, 'po_number');
+
+            // Boost all candidates that match PDF ground truth
+            foreach ($found as &$candidate) {
+                if (in_array($candidate['po_number'], $pdfPoNumbers, true)) {
+                    $candidate['confidence'] = 100;
+                    $candidate['method'] = 'verified_by_pdf';
+                }
+                // Also boost candidates that are numerically close to PDF ground truth
+                else {
+                    foreach ($pdfPoNumbers as $pdfPo) {
+                        if ($this->areNumericallyClose($candidate['po_number'], $pdfPo)) {
+                            $candidate['confidence'] = min($candidate['confidence'] + 20, 95);
+                            $candidate['method'] = 'close_match_to_pdf';
+                            break;
+                        }
+                    }
+                }
+            }
+            unset($candidate);
+        }
+
+        // Sort by confidence descending
+        usort($found, fn ($a, $b) => $b['confidence'] <=> $a['confidence']);
+
         if ($found !== []) {
             return $found;
         }
@@ -157,6 +199,103 @@ class PoNumberExtractorService
     }
 
     /** Deterministic-only scan used by ingestion; never invokes an AI provider. */
+    /**
+     * Extract all numeric sequences of length >3 from text, normalize them to core digits.
+     * @return array<int, array{po_number:string, source:string, method:string, confidence:int, raw_match:string, deterministic:bool}>
+     */
+    private function extractAllNumericSequences(string $senderEmail, array $sources): array
+    {
+        $found = [];
+
+        foreach ($sources as $source => $text) {
+            if (! is_string($text) || trim($text) === '') {
+                continue;
+            }
+
+            // First extract ground truth POs from PDF attachments using PartnerPoPdfContextService
+            if (str_starts_with($source, 'attachment_content:')) {
+                $structured = $this->partnerPdf->parseStructured($text, $senderEmail);
+                if ($structured['canonical_po'] !== null) {
+                    $key = $structured['canonical_po'].'|'.$source.'|pdf_ground_truth';
+                    $found[$key] = [
+                        'po_number' => $this->normalise($structured['canonical_po']),
+                        'source' => $source,
+                        'method' => 'pdf_ground_truth',
+                        'confidence' => 100,
+                        'raw_match' => $structured['po_number'] ?? $structured['canonical_po'],
+                        'deterministic' => true,
+                    ];
+                }
+            }
+
+            // Extract all numeric sequences >3 digits
+            if (preg_match_all('/\d{4,}/', $text, $matches) !== false) {
+                foreach ($matches[0] as $match) {
+                    // Normalize: trim to core digits (remove leading zeros, etc.)
+                    $po = $this->canonical->normalisePo($match) ?? $this->normalise($match);
+                    if ($po === null || strlen($po) < 4) {
+                        continue;
+                    }
+                    $key = $po.'|'.$source.'|numeric_sequence';
+                    if (!isset($found[$key])) {
+                        $found[$key] = [
+                            'po_number' => $po,
+                            'source' => $source,
+                            'method' => 'numeric_sequence',
+                            'confidence' => 80,
+                            'raw_match' => $match,
+                            'deterministic' => true,
+                        ];
+                    }
+                }
+            }
+
+            // Extract sequences that look like PO numbers with prefixes/suffixes
+            if (preg_match_all('/(?:PO|PO#|Order|Order#|No)[^\d]*(\d{4,})/i', $text, $prefixedMatches) !== false) {
+                foreach ($prefixedMatches[1] as $prefixedMatch) {
+                    $po = $this->canonical->normalisePo($prefixedMatch) ?? $this->normalise($prefixedMatch);
+                    if ($po === null || strlen($po) < 4) {
+                        continue;
+                    }
+                    $key = $po.'|'.$source.'|prefixed_po';
+                    if (!isset($found[$key])) {
+                        $found[$key] = [
+                            'po_number' => $po,
+                            'source' => $source,
+                            'method' => 'prefixed_po',
+                            'confidence' => 90,
+                            'raw_match' => $prefixedMatch,
+                            'deterministic' => true,
+                        ];
+                    }
+                }
+            }
+
+            // Extract sequences with non-digit separators (like 036-00081125)
+            if (preg_match_all('/(\d+(?:[-\d]*\d)?)/', $text, $separatorMatches) !== false) {
+                foreach ($separatorMatches[1] as $sepMatch) {
+                    $po = $this->canonical->normalisePo($sepMatch);
+                    if ($po === null || strlen($po) < 4) {
+                        continue;
+                    }
+                    $key = $po.'|'.$source.'|separator_sequence';
+                    if (!isset($found[$key])) {
+                        $found[$key] = [
+                            'po_number' => $po,
+                            'source' => $source,
+                            'method' => 'separator_sequence',
+                            'confidence' => 85,
+                            'raw_match' => $sepMatch,
+                            'deterministic' => true,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return array_values($found);
+    }
+
     public function extractDeterministicAll(string $senderEmail, array $sources): array
     {
         $naivasCandidates = $this->extractNaivasCanonicalCandidates($senderEmail, $sources);
@@ -206,6 +345,15 @@ class PoNumberExtractorService
                         'deterministic' => true,
                     ];
                 }
+            }
+        }
+
+        // Also add all numeric sequence candidates and PDF ground truth candidates
+        $numericCandidates = $this->extractAllNumericSequences($senderEmail, $sources);
+        foreach ($numericCandidates as $candidate) {
+            $key = $candidate['po_number'].'|'.$candidate['source'].'|'.$candidate['method'];
+            if (!isset($found[$key])) {
+                $found[$key] = $candidate;
             }
         }
 

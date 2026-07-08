@@ -2,22 +2,32 @@
 
 namespace App\Services\Admin;
 
+use App\Exceptions\AcumaticaSyncStoppedException;
 use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaDeadLetter;
 use App\Models\AcumaticaReconciliationResult;
 use App\Models\AcumaticaSyncLog;
+use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
 use Throwable;
 
 class AcumaticaCustomerSyncService
 {
+    use InteractsWithAcumaticaSyncRun;
+
     public function __construct(
         private readonly AcumaticaClient $client,
+        private readonly AcumaticaShippingZoneSyncService $shippingZoneSync,
     ) {
     }
 
     public function run(?int $triggeredByUserId = null): AcumaticaSyncLog
     {
-        $run = AcumaticaSyncLog::create([
+        $this->assertNoActiveSync(
+            ['customers'],
+            'A customer sync is already running. Wait for it to finish or stop it first.',
+        );
+
+        $run = $this->createSyncRun([
             'sync_type'            => 'customers',
             'started_at'           => now(),
             'status'               => 'running',
@@ -34,13 +44,20 @@ class AcumaticaCustomerSyncService
         ]);
 
         try {
-            $customers = $this->client->fetchAllCustomers();
+            $this->shippingZoneSync->run(
+                triggeredByUserId: $triggeredByUserId,
+                allowCustomerFallback: false,
+            );
+
+            $customers = $this->client->fetchAllCustomers(fn () => $this->touchSyncRun($run));
 
             $total   = count($customers);
             $success = 0;
             $failed  = 0;
 
             foreach ($customers as $raw) {
+                $this->touchSyncRun($run);
+
                 try {
                     $this->upsertCustomer($raw, $run->id);
                     $success++;
@@ -67,6 +84,7 @@ class AcumaticaCustomerSyncService
 
             $run->update([
                 'ended_at'      => now(),
+                'heartbeat_at'  => now(),
                 'status'        => $failed === $total && $total > 0 ? 'failed' : 'completed',
                 'record_count'  => $total,
                 'success_count' => $success,
@@ -79,9 +97,12 @@ class AcumaticaCustomerSyncService
                 'success'       => $success,
                 'failed'        => $failed,
             ]);
+        } catch (AcumaticaSyncStoppedException $e) {
+            $run = $this->stopSyncRun($run, $e->getMessage());
         } catch (Throwable $e) {
             $run->update([
                 'ended_at'      => now(),
+                'heartbeat_at'  => now(),
                 'status'        => 'failed',
                 'error_message' => $e->getMessage(),
             ]);
@@ -113,15 +134,22 @@ class AcumaticaCustomerSyncService
         $phone           = is_array($primaryContact) ? AcumaticaClient::val($primaryContact['Phone1'] ?? null) : null;
 
         $existing = AcumaticaCustomer::where('acumatica_id', $acumaticaId)->first();
+        $shippingZoneId = $this->normalizeZoneId(AcumaticaClient::scalarVal($raw['ShippingZoneID'] ?? null));
+        $this->shippingZoneSync->ensureZoneExists($shippingZoneId, $runId);
+
+        $parentAcumaticaId = $this->resolveParentCustomerId($raw, $acumaticaId);
 
         $data = [
             'name'                     => AcumaticaClient::val($raw['CustomerName'] ?? null) ?? '',
             'status'                   => AcumaticaClient::val($raw['Status'] ?? null),
             'email'                    => $email,
             'phone'                    => $phone,
+            'parent_acumatica_id'      => $parentAcumaticaId,
+            'is_main_account'          => $parentAcumaticaId === null,
             'customer_class'           => AcumaticaClient::val($raw['CustomerClass'] ?? null),
             'payment_terms'            => AcumaticaClient::val($raw['PaymentTermsID'] ?? null),
             'tax_zone'                 => AcumaticaClient::val($raw['TaxZone'] ?? null),
+            'shipping_zone_id'         => $shippingZoneId,
             'billing_address'          => $billingAddress,
             'shipping_address'         => $shippingAddress,
             'sync_run_id'              => $runId,
@@ -182,7 +210,7 @@ class AcumaticaCustomerSyncService
 
     private function checkReconciliation(AcumaticaCustomer $existing, array $incoming, int $runId, string $acumaticaId): void
     {
-        $watchFields = ['customer_class', 'payment_terms', 'tax_zone'];
+        $watchFields = ['customer_class', 'payment_terms', 'tax_zone', 'shipping_zone_id'];
 
         foreach ($watchFields as $field) {
             $oldVal = $existing->{$field};
@@ -201,5 +229,34 @@ class AcumaticaCustomerSyncService
                 ]);
             }
         }
+    }
+
+    /** @param  array<string, mixed>  $raw */
+    private function resolveParentCustomerId(array $raw, string $acumaticaId): ?string
+    {
+        foreach (['ParentCustomer', 'BillToCustomer', 'BillCustomer', 'ParentCustomerID', 'BillToCustomerID'] as $field) {
+            $value = AcumaticaClient::val($raw[$field] ?? null);
+            if (! is_string($value) || trim($value) === '') {
+                continue;
+            }
+
+            $parentId = strtoupper(trim($value));
+            if ($parentId !== $acumaticaId) {
+                return $parentId;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeZoneId(?string $zoneId): ?string
+    {
+        if ($zoneId === null) {
+            return null;
+        }
+
+        $normalized = strtoupper(trim($zoneId));
+
+        return $normalized !== '' ? $normalized : null;
     }
 }

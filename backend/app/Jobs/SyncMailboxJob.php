@@ -21,13 +21,20 @@ class SyncMailboxJob implements ShouldQueue
     /** Hard ceiling per sync run — large mailboxes can be slow. */
     public int $timeout = 300;
 
-    /** Do not auto-retry; failed syncs should be re-triggered explicitly. */
-    public int $tries = 1;
+    /** Retry transient mailbox failures with exponential backoff. */
+    public int $tries = 3;
+
+    public function backoff(): array
+    {
+        return [60, 180];
+    }
 
     public function __construct(
         public readonly int $mailboxAccountId,
         public readonly ?int $emailFilterId = null,
         public readonly ?int $cronRunLogId = null,
+        public readonly ?string $syncFrom = null,
+        public readonly ?string $syncTo = null,
     ) {}
 
     public function handle(OutlookEmailService $outlook): void
@@ -39,6 +46,8 @@ class SyncMailboxJob implements ShouldQueue
                 'mailbox_account_id' => $account->id,
                 'cron_run_log_id' => $this->cronRunLogId,
                 'email_filter_id' => $this->emailFilterId,
+                'sync_from' => $this->syncFrom,
+                'sync_to' => $this->syncTo,
                 'started_at' => now(),
                 'status' => 'running',
             ]);
@@ -62,7 +71,7 @@ class SyncMailboxJob implements ShouldQueue
         Log::channel('mailbox_sync')->info('sync_started', $context);
 
         try {
-            $count = $outlook->syncEmails($account, $this->emailFilterId, $log);
+            $count = $outlook->syncEmails($account, $this->emailFilterId, $log, $this->syncFrom, $this->syncTo);
 
             $durationMs = (int) ($log->started_at->diffInMilliseconds(now()));
 

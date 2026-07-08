@@ -41,6 +41,7 @@ class AuthController extends Controller
                 'name'  => $user->name,
                 'email' => $user->email,
                 'role'  => $user->role ?? 'Administrator',
+                'rep_code' => $user->rep_code,
             ],
         ]);
     }
@@ -57,6 +58,7 @@ class AuthController extends Controller
             'name'  => $user->name,
             'email' => $user->email,
             'role'  => $user->role ?? 'Administrator',
+            'rep_code' => $user->rep_code,
         ]);
     }
 

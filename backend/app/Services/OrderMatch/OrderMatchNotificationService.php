@@ -61,7 +61,7 @@ class OrderMatchNotificationService
         $mailboxUrl = FrontendUrl::path('/app/mailbox');
         $body = "The Order Match review queue has {$count} pending emails for period {$period}.\n\nRecommended action: Review backorder queue and clear high-confidence auto-match entries.\n\nOpen mailbox: {$mailboxUrl}";
 
-        $this->dispatch($rule, $subject, $body, $this->adminRecipients());
+        $this->dispatch($rule, $subject, $body, $this->recipientsForRule($rule, $this->adminRecipients()));
 
         return ['triggered' => true, 'count' => $count];
     }
@@ -96,7 +96,7 @@ class OrderMatchNotificationService
             $mailboxUrl = FrontendUrl::path('/app/mailbox');
             $body = "Duplicate PO {$po} appears on {$n} emails in period {$period}.\n\nRecommended action: Review backorder queue and nominate canonical email before accepting matches.\n\nOpen mailbox: {$mailboxUrl}";
 
-            $this->dispatch($rule, $subject, $body, $this->opsRecipients());
+            $this->dispatch($rule, $subject, $body, $this->recipientsForRule($rule, $this->opsRecipients()));
             $triggered[] = ['po' => $po, 'count' => $n];
         }
 
@@ -145,6 +145,7 @@ class OrderMatchNotificationService
                     'rule_id'           => $rule->id,
                     'evaluated_at'      => now(),
                     'channel'           => 'email',
+                    'recipient_user_id' => User::where('email', $email)->value('id'),
                     'delivery_status'   => 'failed',
                 ]);
                 Log::error('order_match_notification_send_failed', ['to' => $email, 'error' => $e->getMessage()]);
@@ -152,6 +153,15 @@ class OrderMatchNotificationService
         }
 
         $rule->update(['last_evaluated_at' => now(), 'last_triggered_at' => now()]);
+    }
+
+    /** @return list<string> */
+    private function recipientsForRule(NotificationRule $rule, array $defaults): array
+    {
+        return array_values(array_unique(array_filter([
+            ...$defaults,
+            ...$rule->configuredRecipientEmails(),
+        ])));
     }
 
     /** @return list<string> */

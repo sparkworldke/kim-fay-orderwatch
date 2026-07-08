@@ -1,5 +1,6 @@
 import "./lib/error-capture";
 
+import { API_UPSTREAM } from "./lib/api-upstream";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
@@ -37,8 +38,34 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   });
 }
 
+async function proxyApiRequest(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api\/?/, "");
+  const target = new URL(`${API_UPSTREAM.replace(/\/+$/, "")}/${suffix}`);
+  target.search = url.search;
+
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+
+  const init: RequestInit = {
+    method: request.method,
+    headers,
+    redirect: "follow",
+  };
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = request.body;
+  }
+
+  return fetch(target.toString(), init);
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    const { pathname } = new URL(request.url);
+    if (pathname === "/api" || pathname.startsWith("/api/")) {
+      return proxyApiRequest(request);
+    }
+
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

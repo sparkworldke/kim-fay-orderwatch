@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { useOrders } from "@/hooks/useOrders";
+import { useOrderStats, useOrders } from "@/hooks/useOrders";
 import { useSyncCreditNotesAndMore } from "@/hooks/useOperations";
+import { DATE_PRESETS, type DatePresetId, resolveDatePreset } from "@/lib/date-presets";
 
 export const Route = createFileRoute("/app/credit-notes-more")({
   head: () => ({ meta: [{ title: "Credit Notes & More — Kim-Fay OrderWatch" }] }),
@@ -50,12 +51,43 @@ function typeBadgeVariant(type: string): "default" | "secondary" | "outline" | "
   }
 }
 
+function DocTypeCard({
+  label,
+  value,
+  active,
+  loading,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active: boolean;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md border p-3 text-left transition-colors ${
+        active ? "border-primary bg-primary/5" : "bg-card hover:bg-muted/40"
+      }`}
+    >
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums">
+        {loading ? "..." : value.toLocaleString()}
+      </div>
+    </button>
+  );
+}
+
 function CreditNotesMorePage() {
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [documentType, setDocumentType] = useState("all");
   const [status, setStatus] = useState("all");
   const [dateFrom, setDateFrom] = useState(startOfMonth());
   const [dateTo, setDateTo] = useState(today());
+  const [datePreset, setDatePreset] = useState<DatePresetId>("this_month");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
 
@@ -72,28 +104,71 @@ function CreditNotesMorePage() {
     q: debouncedQ || undefined,
     status: status !== "all" ? status : undefined,
     order_type: "CREDIT_NOTES_MORE",
+    document_type: documentType !== "all" ? documentType : undefined,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
     page,
     per_page: perPage,
   });
+  const stats = useOrderStats({
+    q: debouncedQ || undefined,
+    status: status !== "all" ? status : undefined,
+    order_type: "CREDIT_NOTES_MORE",
+    document_type: documentType !== "all" ? documentType : undefined,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+  });
+  const typeStats = useOrderStats({
+    q: debouncedQ || undefined,
+    status: status !== "all" ? status : undefined,
+    order_type: "CREDIT_NOTES_MORE",
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+  });
 
   const sync = useSyncCreditNotesAndMore();
 
   function handleSync() {
+    if (!dateFrom || !dateTo) {
+      toast.error("Set a date range before syncing.");
+      return;
+    }
+    if (dateFrom > dateTo) {
+      toast.error("Start date must be before end date.");
+      return;
+    }
+
     sync.mutate(
-      { date_from: dateFrom, date_to: dateTo },
+      {
+        date_from: dateFrom,
+        date_to: dateTo,
+        ...(documentType !== "all" ? { document_type: documentType } : {}),
+      },
       {
         onSuccess: (res) => {
           toast.success(`Sync ${res.sync_run.status}: ${res.sync_run.success_count} documents imported`);
           refetch();
+          stats.refetch();
+          typeStats.refetch();
         },
         onError: (e: Error) => toast.error(e.message),
       },
     );
   }
 
+  function applyDatePreset(preset: DatePresetId) {
+    setDatePreset(preset);
+    if (preset !== "custom") {
+      const range = resolveDatePreset(preset);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+      setPage(1);
+    }
+  }
+
   const items = data?.data ?? [];
+  const byType = typeStats.data?.by_type ?? {};
+  const total = typeStats.data?.total ?? 0;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -113,9 +188,23 @@ function CreditNotesMorePage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <DocTypeCard
+          label="All documents"
+          value={total}
+          active={documentType === "all"}
+          loading={typeStats.isLoading}
+          onClick={() => { setDocumentType("all"); setPage(1); }}
+        />
         {ORDER_TYPES.map((t) => (
-          <Badge key={t.value} variant="outline">{t.label}</Badge>
+          <DocTypeCard
+            key={t.value}
+            label={t.label}
+            value={byType[t.value] ?? 0}
+            active={documentType === t.value}
+            loading={typeStats.isLoading}
+            onClick={() => { setDocumentType(t.value); setPage(1); }}
+          />
         ))}
       </div>
 
@@ -130,12 +219,33 @@ function CreditNotesMorePage() {
           />
         </div>
         <div className="grid gap-1.5">
+          <Label className="text-xs">Document type</Label>
+          <Select value={documentType} onValueChange={(v) => { setDocumentType(v); setPage(1); }}>
+            <SelectTrigger className="h-9 w-[190px] text-sm"><SelectValue placeholder="Document type" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All document types</SelectItem>
+              {ORDER_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label className="text-xs">Dates</Label>
+          <Select value={datePreset} onValueChange={(v) => applyDatePreset(v as DatePresetId)}>
+            <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="Dates" /></SelectTrigger>
+            <SelectContent>
+              {DATE_PRESETS.filter((preset) => preset.id !== "last_30_days").map((preset) => (
+                <SelectItem key={preset.id} value={preset.id}>{preset.id === "custom" ? "Date range" : preset.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
           <Label className="text-xs">From</Label>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 w-36 text-sm" />
+          <Input type="date" value={dateFrom} onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); setPage(1); }} className="h-9 w-36 text-sm" />
         </div>
         <div className="grid gap-1.5">
           <Label className="text-xs">To</Label>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 w-36 text-sm" />
+          <Input type="date" value={dateTo} onChange={(e) => { setDatePreset("custom"); setDateTo(e.target.value); setPage(1); }} className="h-9 w-36 text-sm" />
         </div>
         <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
           <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -191,7 +301,7 @@ function CreditNotesMorePage() {
 
       {data && (
         <PaginationControls
-          page={page}
+          currentPage={page}
           perPage={perPage}
           total={data.total}
           lastPage={data.last_page}

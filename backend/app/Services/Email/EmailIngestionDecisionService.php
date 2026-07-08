@@ -3,7 +3,6 @@
 namespace App\Services\Email;
 
 use App\Models\Email;
-use App\Models\EmailImportConfig;
 
 class EmailIngestionDecisionService
 {
@@ -38,10 +37,9 @@ class EmailIngestionDecisionService
             }
         }
         $unique = collect($evidence)->pluck('po_number')->unique()->values();
-        $senderAllowed = EmailImportConfig::where('is_active', true)->get()
-            ->contains(fn ($config) => $config->matchesSender($email->from_email ?? ''));
+        $senderAllowed = $email->import_guardrail_status === 'matched';
         $folderTrusted = $folder && $folder->is_order_folder && $folder->trust_level === 'trusted_order';
-        $customerMapped = $folder?->customer_id !== null;
+        $customerMapped = $email->matched_customer_id !== null || $folder?->customer_id !== null;
         $ruleTrusted = $folder?->rules->contains(fn ($rule) => $rule->is_enabled && $rule->is_trusted) ?? false;
 
         $decisionSources = array_values(array_filter([
@@ -49,6 +47,9 @@ class EmailIngestionDecisionService
             $folderTrusted ? 'folder_trusted' : null,
             $customerMapped ? 'folder_customer_mapped' : null,
             $ruleTrusted ? 'existing_rule_trusted' : null,
+            $email->import_guardrail_status && $email->import_guardrail_status !== 'matched'
+                ? 'guardrail_' . $email->import_guardrail_status
+                : null,
             $evidence !== [] ? 'po_number_detected' : null,
             $unverifiedThread ? 'unverified_thread_context' : null,
         ]));

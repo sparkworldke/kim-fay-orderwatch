@@ -15,6 +15,8 @@ import {
   FileText,
   Radio,
   Target,
+  MapPin,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -29,6 +31,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { LogoImage } from "@/components/logo-image";
+import { useAuth } from "@/lib/auth";
+import { canAccessNavItem } from "@/lib/nav-permissions";
 
 const NAV = [
   { group: "Overview", items: [
@@ -43,7 +47,9 @@ const NAV = [
     { title: "Inventory", url: "/app/inventory", icon: Boxes },
     { title: "Backorders", url: "/app/backorders", icon: PackageX },
     { title: "Fill Rate", url: "/app/fill-rate", icon: Gauge },
+    { title: "Zones", url: "/app/zones", icon: MapPin },
     { title: "Customers", url: "/app/customers", icon: Users },
+    { title: "Sales Consultants", url: "/app/sales-consultants", icon: Users },
   ]},
   { group: "Workflow", items: [
     { title: "Order Match", url: "/app/order-match", icon: GitMerge },
@@ -51,15 +57,19 @@ const NAV = [
   ]},
   { group: "System", items: [
     { title: "Administration", url: "/app/administration", icon: Settings },
+    { title: "Team Members", url: "/app/team", icon: Users },
+    { title: "Roles & Permissions", url: "/app/roles", icon: ShieldCheck },
     { title: "Sales Order Imports", url: "/app/so-imports", icon: PackageCheck },
     { title: "Profile", url: "/app/profile", icon: UserCircle },
   ]},
 ] as const;
 
 export function AppSidebar() {
+  const { session } = useAuth();
   const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const role = session?.role;
 
   const isActive = (url: string, exact?: boolean) =>
     exact ? pathname === url : pathname === url || pathname.startsWith(url + "/");
@@ -86,12 +96,15 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {NAV.map((g) => (
+        {NAV.map((g) => {
+          const visibleItems = g.items.filter((item) => canAccessNavItem(role, item.url));
+          if (visibleItems.length === 0) return null;
+          return (
           <SidebarGroup key={g.group}>
             {!collapsed && <SidebarGroupLabel>{g.group}</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                {g.items.map((item) => (
+                {visibleItems.map((item) => (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild isActive={isActive(item.url, (item as { exact?: boolean }).exact)} tooltip={item.title}>
                       <Link to={item.url} className="flex items-center gap-2" onClick={handleNavClick}>
@@ -104,7 +117,8 @@ export function AppSidebar() {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-        ))}
+          );
+        })}
       </SidebarContent>
     </Sidebar>
   );

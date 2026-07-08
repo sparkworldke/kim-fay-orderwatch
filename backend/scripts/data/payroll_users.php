@@ -1,0 +1,45 @@
+<?php
+
+/**
+ * Sales consultants extracted from payroll_email_matches.xlsx.
+ * Source sheets: Matched Payroll Emails, Review Needed (deduplicated by rep_code).
+ */
+return [
+    ['rep_code' => 'C1262', 'name' => 'Mercyline Kemunto Moranga', 'email' => 'kpsales.hygiene@kimfay.com'],
+    ['rep_code' => 'C835', 'name' => 'Nicole Wanjiru Wanjiku', 'email' => null],
+    ['rep_code' => 'C599', 'name' => 'Victoria Munanie Kyalo Ndetei', 'email' => 'adsupervisor@kimfay.com'],
+    ['rep_code' => 'C967', 'name' => 'Berna Piwang Abondo', 'email' => 'berna.piwang@kimfay.com'],
+    ['rep_code' => 'JUM', 'name' => 'Kunal Harsadrai Thakar', 'email' => 'npd@kimfay.com'],
+    ['rep_code' => 'P013', 'name' => 'Georgina Muthini Kiilu', 'email' => 'georgina.kac@kimfay.com'],
+    ['rep_code' => 'P014', 'name' => 'Beatrice Luteshi', 'email' => 'bluteshi@kimfay.com'],
+    ['rep_code' => 'P022', 'name' => 'Lucy Gakii Rimberia', 'email' => 'lucygakii@kimfay.com'],
+    ['rep_code' => 'P025', 'name' => 'Susan Ngina Mwathi', 'email' => 'susan@kimfay.com'],
+    ['rep_code' => 'P033', 'name' => 'Johnsam Kioko Musyoki', 'email' => 'jkioko@kimfay.com'],
+    ['rep_code' => 'P076', 'name' => 'Jane Kirigo Kuria', 'email' => 'jane.kac@kimfay.com'],
+    ['rep_code' => 'P096', 'name' => 'Doreen Mukami Mugwika', 'email' => 'dmugwika@kimfay.com'],
+    ['rep_code' => 'P104', 'name' => 'Irene Naliaka Luketelo', 'email' => 'iluketelo@kimfay.com'],
+    ['rep_code' => 'P105', 'name' => 'Vincent Okondo Omollo', 'email' => null],
+    ['rep_code' => 'P120', 'name' => 'George Amenya Morang\'a', 'email' => 'gamenya@kimfay.com'],
+    ['rep_code' => 'P149', 'name' => 'Lilian Kalondu Kimeu', 'email' => 'lilian.kimeu@kimfay.com'],
+    ['rep_code' => 'P193', 'name' => 'June Jemutai Chesire', 'email' => 'june.kp@kimfay.com'],
+    ['rep_code' => 'P230', 'name' => 'Kevin Werunga Barasa', 'email' => 'kelvin.werunga@kimfay.com'],
+    ['rep_code' => 'P245', 'name' => 'Beryl Akinyi Muga', 'email' => 'muga.kac@kimfay.com'],
+    ['rep_code' => 'P272', 'name' => 'Lawrence Amukhono Amukhono', 'email' => null],
+    ['rep_code' => 'P293', 'name' => 'Dennis Mutwiri Kimathi', 'email' => 'dennis.kac@kimfay.com'],
+    ['rep_code' => 'P321', 'name' => 'Lucy Wanjiru Munene', 'email' => 'lucy.kac@kimfay.com'],
+    ['rep_code' => 'P345', 'name' => 'Dan Kaberia Mutiga', 'email' => 'consumersales.msa@kimfay.com'],
+    ['rep_code' => 'P380', 'name' => 'Nicholas Muriuki', 'email' => 'nicholas.muriuki@kimfay.com'],
+    ['rep_code' => 'P395', 'name' => 'Johnson Muthiga Mbatia', 'email' => 'asm.lake@kimfay.com'],
+    ['rep_code' => 'P400', 'name' => 'Peris Wanjiku Kariuki', 'email' => 'pharmacychannel@kimfay.com'],
+    ['rep_code' => 'P413', 'name' => 'Peter Muuo Nzuki', 'email' => null],
+    ['rep_code' => 'P415', 'name' => 'Titus Kaleli Mutiso', 'email' => 'commercialtechlead@kimfay.com'],
+    ['rep_code' => 'P427', 'name' => 'Lawrence Kipkemoi', 'email' => null],
+    ['rep_code' => 'P438', 'name' => 'Brian Basweti ChirChir', 'email' => 'brian.basweti@kimfay.com'],
+    ['rep_code' => 'P443', 'name' => 'Zipporah Wangeci Muiruri', 'email' => 'moderntrade.nrb@kimfay.com'],
+    ['rep_code' => 'P461', 'name' => 'Fredrick Juma Wesonga', 'email' => null],
+    ['rep_code' => 'P487', 'name' => 'Clement Omondi Otieno', 'email' => 'clement.otieno@kimfay.com'],
+    ['rep_code' => 'P489', 'name' => 'John Kaguai Njoroge', 'email' => 'kpconsultant@kimfay.com'],
+    ['rep_code' => 'P504', 'name' => 'DianaWendy Wangui Mwangi', 'email' => null],
+    ['rep_code' => 'P505', 'name' => 'Shirleen Chebet Kimutai', 'email' => null],
+    ['rep_code' => 'P317', 'name' => 'Yvonne Achieng Otieno', 'email' => 'salesrep.kp@kimfay.com'],
+];

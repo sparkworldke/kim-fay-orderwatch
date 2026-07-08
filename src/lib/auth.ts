@@ -5,6 +5,7 @@ export type Role =
   | "Customer Service Manager"
   | "Customer Service Agent"
   | "Sales Operations"
+  | "Sales Consultant"
   | "Executive";
 
 export interface Session {
@@ -12,6 +13,7 @@ export interface Session {
   email: string;
   name: string;
   role: Role;
+  rep_code?: string | null;
   loggedInAt: string;
   token: string; // Sanctum Bearer token
 }
@@ -77,6 +79,7 @@ export function inferRole(email: string): Role {
   if (prefix.startsWith("admin")) return "Administrator";
   if (prefix.startsWith("csm") || prefix.startsWith("manager")) return "Customer Service Manager";
   if (prefix.startsWith("agent") || prefix.startsWith("cs")) return "Customer Service Agent";
+  if (prefix.startsWith("consultant") || prefix.startsWith("rep")) return "Sales Consultant";
   if (prefix.startsWith("ops") || prefix.startsWith("sales")) return "Sales Operations";
   if (prefix.startsWith("exec") || prefix.startsWith("ceo")) return "Executive";
   return "Administrator";

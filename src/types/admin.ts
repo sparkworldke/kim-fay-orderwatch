@@ -28,10 +28,12 @@ export interface AcumaticaSyncLog {
   sync_type: string;
   started_at: string;
   ended_at: string | null;
+  heartbeat_at: string | null;
+  stop_requested_at: string | null;
   record_count: number;
   success_count: number;
   failed_count: number;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "stopped";
   error_message: string | null;
   filters: Record<string, unknown> | null;
   trigger_type: "manual" | "background" | "scheduled";
@@ -41,6 +43,26 @@ export interface AcumaticaSyncLog {
 export interface AcumaticaResponse {
   config: AcumaticaConfig;
   sync_logs: AcumaticaSyncLog[];
+}
+
+export type AcumaticaLookupType =
+  | "inventory_id"
+  | "customer_id"
+  | "rep_code"
+  | "consultant_id"
+  | "salesperson_id"
+  | "zone_id"
+  | "route_code"
+  | "route_name";
+
+export interface AcumaticaLookupResult {
+  lookup_type: AcumaticaLookupType;
+  lookup_label: string;
+  lookup_id: string;
+  entity: string;
+  field: string;
+  top_level_keys: string[];
+  raw: Record<string, unknown>;
 }
 
 export interface AcumaticaCustomerSummary {
@@ -54,13 +76,39 @@ export interface AcumaticaCustomerSummary {
   parent_acumatica_id: string | null;
 }
 
+export interface AcumaticaShippingZone {
+  acumatica_id: string;
+  description: string | null;
+  name: string | null;
+  region: string | null;
+  synced_at?: string | null;
+  customer_count?: number;
+}
+
+export interface DeliverySlaConfigRule {
+  region_key: string;
+  label: string;
+  sla_hours: number;
+  warning_hours: number | null;
+  breach_hours: number;
+  is_metro: boolean;
+  is_active?: boolean;
+  alert_min_orders: number;
+  alert_delayed_pct: number;
+  clock_start: "order_date" | "approved_at" | "ship_date";
+}
+
 export interface AcumaticaCustomer extends AcumaticaCustomerSummary {
   phone: string | null;
   payment_terms: string | null;
   tax_zone: string | null;
+  shipping_zone_id: string | null;
+  shipping_zone?: AcumaticaShippingZone | null;
   billing_address: Record<string, string> | null;
   shipping_address: Record<string, string> | null;
   synced_at: string | null;
+  branches?: AcumaticaCustomer[];
+  branch_count?: number;
 }
 
 export interface AcumaticaSalesOrderLine {
@@ -69,6 +117,19 @@ export interface AcumaticaSalesOrderLine {
   inventory_id: string | null;
   description: string | null;
   order_qty: string;
+  shipped_qty?: string | null;
+  qty_on_shipments?: string | null;
+  open_qty?: string | null;
+  cancelled_qty?: string | null;
+  qty_at_approval?: string | null;
+  backorder_qty?: string | null;
+  fill_rate_pct?: string | number | null;
+  unfilled_reason_code?: string | null;
+  line_type?: string | null;
+  completed?: boolean | null;
+  fulfillment_status?: string | null;
+  warehouse_id?: string | null;
+  uom?: string | null;
   unit_price: string;
   ext_cost: string;
   discount_amount: string;
@@ -91,11 +152,13 @@ export interface AcumaticaSalesOrder {
   order_type: string;
   customer_acumatica_id: string | null;
   customer_name: string | null;
+  customer?: AcumaticaCustomerSummary | null;
   customer_order: string | null;
   status: string | null;
   match_status: "pending" | "matched" | "matched_discrepancies" | "needs_review" | "unmatched" | "duplicate" | "escalated" | "missing";
   flag_source: "acumatica" | "email" | null;
   rejection_reason: string | null;
+  rejection_reason_code: string | null;
   on_hold_reason: string | null;
   email_subject: string | null;
   email_received_at: string | null;
@@ -113,7 +176,12 @@ export interface AcumaticaSalesOrder {
   completed_at: string | null;
   order_total: string;
   currency_id: string | null;
+  sales_consultant_rep_code: string | null;
+  sales_consultant_name: string | null;
+  description: string | null;
   lines_count?: number;
+  lines_avg_fill_rate_pct?: string | number | null;
+  lines_sum_backorder_qty?: string | number | null;
   lines?: AcumaticaSalesOrderLine[];
   synced_at: string | null;
 }
@@ -163,6 +231,7 @@ export interface TeamMember {
   email: string;
   role: string;
   phone_number: string | null;
+  rep_code: string | null;
   is_active: boolean;
   is_account_manager: boolean;
   is_super_admin: boolean;
@@ -174,7 +243,28 @@ export interface CreateTeamMemberInput {
   email: string;
   role: string;
   phone_number?: string;
+  rep_code?: string;
   is_account_manager?: boolean;
+}
+
+export interface UpdateTeamMemberInput {
+  name?: string;
+  email?: string;
+  role?: string;
+  phone_number?: string | null;
+  rep_code?: string | null;
+  is_account_manager?: boolean;
+  change_reason?: string | null;
+}
+
+export interface RepCodeHistoryEntry {
+  id: number;
+  rep_code: string | null;
+  changed_by_name: string | null;
+  changed_by: number | null;
+  change_reason: string | null;
+  changed_at: string;
+  created_at: string;
 }
 
 export interface NotificationRule {
@@ -185,6 +275,8 @@ export interface NotificationRule {
   is_enabled: boolean;
   last_evaluated_at: string | null;
   last_triggered_at: string | null;
+  recipient_emails: string[];
+  recipient_roles: string[];
 }
 
 export interface AuditLogEntry {
@@ -211,11 +303,39 @@ export interface AdminHealth {
   openai: ServiceHealth;
   anthropic: ServiceHealth;
   acumatica: ServiceHealth;
+  mail_delivery: ServiceHealth & { mailer: "smtp" | "resend" | string };
 }
 
 export interface ServiceHealth {
   status: string;
   last_checked_at: string | null;
+}
+
+export interface MailSettings {
+  mailer: "smtp" | "resend";
+  smtp_host: string | null;
+  smtp_port: number;
+  smtp_scheme: "tls" | "ssl" | string;
+  smtp_username: string | null;
+  smtp_password_configured: boolean;
+  smtp_password_preview: string | null;
+  smtp_configured: boolean;
+  resend_configured: boolean;
+  from_address: string;
+  from_name: string | null;
+  updated_at: string | null;
+}
+
+export interface MailSettingsInput {
+  mailer?: "smtp" | "resend";
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_scheme?: "tls" | "ssl";
+  smtp_username?: string;
+  smtp_password?: string;
+  from_address?: string;
+  from_name?: string;
+  resend_api_key?: string;
 }
 
 export interface CronRunLog {
@@ -290,6 +410,8 @@ export interface DailyReportConfig {
   is_enabled: boolean;
   send_time: string;
   timezone: string;
+  send_to?: string[];
+  cc?: string[];
   recipients: string[];
   reply_to: string[];
   subject_template: string;
@@ -322,12 +444,15 @@ export interface CronJob {
   last_duration_ms: number | null;
   next_run_at: string | null;
   settings: {
-    email_sync_enabled: boolean;
-    acumatica_sync_enabled: boolean;
-    matching_enabled: boolean;
-    sales_order_lookback_days: number;
-    deterministic_auto_link: boolean;
-    ai_auto_link: boolean;
+    // auto-match specific
+    email_sync_enabled?: boolean;
+    acumatica_sync_enabled?: boolean;
+    matching_enabled?: boolean;
+    sales_order_lookback_days?: number;
+    deterministic_auto_link?: boolean;
+    ai_auto_link?: boolean;
+    // other job settings (inventory filters, lookback windows, etc.)
+    [key: string]: unknown;
   };
   notes: string | null;
   command_reference: string;

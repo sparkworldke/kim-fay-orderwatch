@@ -11,6 +11,12 @@ class Email extends Model
     protected $fillable = [
         'mailbox_account_id',
         'mailbox_folder_id',
+        'email_import_config_id',
+        'matched_customer_id',
+        'matched_branch_tag',
+        'import_match_strategy',
+        'import_guardrail_status',
+        'import_guardrail_reason',
         'external_folder_id',
         'message_id',
         'subject',
@@ -81,6 +87,16 @@ class Email extends Model
     public function mailboxFolder(): BelongsTo
     {
         return $this->belongsTo(MailboxFolder::class);
+    }
+
+    public function emailImportConfig(): BelongsTo
+    {
+        return $this->belongsTo(EmailImportConfig::class);
+    }
+
+    public function matchedCustomer(): BelongsTo
+    {
+        return $this->belongsTo(AcumaticaCustomer::class, 'matched_customer_id');
     }
 
     public function attachments(): HasMany

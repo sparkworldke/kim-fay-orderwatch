@@ -35,6 +35,7 @@ class CronEngineTest extends TestCase
     public function test_overlapping_job_creates_visible_skipped_run(): void
     {
         $job = CronJob::hourlyAutoMatch();
+        $job->update(['is_enabled' => true, 'status' => 'active']);
         $lock = Cache::lock('cron-job:'.$job->job_key, 60);
         $this->assertTrue($lock->get());
         try {
@@ -49,7 +50,11 @@ class CronEngineTest extends TestCase
     public function test_successful_pipeline_correlates_mailbox_and_match_logs(): void
     {
         $job = CronJob::hourlyAutoMatch();
-        $job->update(['settings' => array_merge($job->settings, ['acumatica_sync_enabled' => false])]);
+        $job->update([
+            'is_enabled' => true,
+            'status' => 'active',
+            'settings' => array_merge($job->settings, ['acumatica_sync_enabled' => false]),
+        ]);
         MailboxAccount::create([
             'email' => 'cron@example.com', 'access_token_encrypted' => 'token',
             'refresh_token_encrypted' => 'refresh', 'status' => 'connected',
@@ -75,7 +80,11 @@ class CronEngineTest extends TestCase
     public function test_acumatica_failure_with_successful_matching_is_partial(): void
     {
         $job = CronJob::hourlyAutoMatch();
-        $job->update(['settings' => array_merge($job->settings, ['email_sync_enabled' => false])]);
+        $job->update([
+            'is_enabled' => true,
+            'status' => 'active',
+            'settings' => array_merge($job->settings, ['email_sync_enabled' => false]),
+        ]);
         $acumatica = Mockery::mock(AcumaticaSalesOrderSyncService::class);
         $acumatica->shouldReceive('syncDateRange')->once()->andReturnUsing(function ($from, $to, $user, $source, $cronId) {
             return AcumaticaSyncLog::create([

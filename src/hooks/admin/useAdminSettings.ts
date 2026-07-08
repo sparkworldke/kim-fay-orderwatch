@@ -3,6 +3,8 @@ import { toast } from "sonner";
 import { apiFetch, ApiError } from "@/lib/api";
 import type {
   AcumaticaCustomerSummary,
+  AcumaticaLookupResult,
+  AcumaticaLookupType,
   AcumaticaSalesOrder,
   AcumaticaResponse,
   AcumaticaSyncLog,
@@ -16,6 +18,8 @@ import type {
   CronRunLog,
   DailyReportConfig,
   DailyReportRun,
+  MailSettings,
+  MailSettingsInput,
   NotificationRule,
   PaginatedResponse,
   Permission,
@@ -23,6 +27,9 @@ import type {
   Role,
   TeamMember,
   CreateTeamMemberInput,
+  UpdateTeamMemberInput,
+  RepCodeHistoryEntry,
+  DeliverySlaConfigRule,
 } from "@/types/admin";
 import type { AcumaticaInput, AiKeyInput } from "@/lib/admin-schemas";
 
@@ -36,6 +43,28 @@ export function useAdminHealth() {
   return useQuery({
     queryKey: [...adminKey, "health"],
     queryFn: () => apiFetch<AdminHealth>("admin/health"),
+  });
+}
+
+export function useMailSettings() {
+  return useQuery({
+    queryKey: [...adminKey, "mail-settings"],
+    queryFn: () => apiFetch<MailSettings>("admin/mail-settings"),
+  });
+}
+
+export function useUpdateMailSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: MailSettingsInput) =>
+      apiFetch<MailSettings>("admin/mail-settings", { method: "PATCH", body: payload }),
+    onSuccess: () => {
+      toast.success("Mail settings saved");
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "mail-settings"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "health"] });
+    },
+    onError: showError,
   });
 }
 
@@ -119,7 +148,47 @@ export function useSyncLogs() {
   return useQuery({
     queryKey: [...adminKey, "sync-logs"],
     queryFn: () => apiFetch<AcumaticaSyncLog[]>("admin/acumatica/sync/logs"),
-    refetchInterval: 10_000,
+    refetchInterval: 5_000,
+  });
+}
+
+export interface SyncDiagnosis {
+  summary: string;
+  likely_causes: string[];
+  next_steps: string[];
+  ai_status: "success" | "unavailable" | "failed";
+  ai_error?: string;
+  logs_considered: number;
+}
+
+export function useDiagnoseSyncHealth() {
+  return useMutation({
+    mutationFn: () => apiFetch<SyncDiagnosis>("admin/acumatica/sync/diagnose", { method: "POST" }),
+    onError: showError,
+  });
+}
+
+export function useStopSyncLog() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ message: string; sync_run: AcumaticaSyncLog }>(`admin/acumatica/sync/logs/${id}/stop`, {
+        method: "POST",
+      }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "sync-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["operations-status"] });
+      queryClient.invalidateQueries({ queryKey: ["operations-inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["operations-inventory-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["operations-backorders"] });
+      queryClient.invalidateQueries({ queryKey: ["operations-backorders-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["operations-fill-rate"] });
+      queryClient.invalidateQueries({ queryKey: ["operations-fill-rate-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+    onError: showError,
   });
 }
 
@@ -132,6 +201,8 @@ export function useSyncCustomers() {
       const run = result.sync_run;
       if (run.status === "completed") {
         toast.success(`Customer sync complete — ${run.success_count} synced, ${run.failed_count} failed`);
+      } else if (run.status === "stopped") {
+        toast.warning(run.error_message ?? "Customer sync stopped.");
       } else {
         toast.error(`Customer sync failed: ${run.error_message ?? "Unknown error"}`);
       }
@@ -152,6 +223,8 @@ export function useSyncOrders() {
       const run = result.sync_run;
       if (run.status === "completed") {
         toast.success(`Order sync complete — ${run.success_count} synced, ${run.failed_count} failed`);
+      } else if (run.status === "stopped") {
+        toast.warning(run.error_message ?? "Order sync stopped.");
       } else {
         toast.error(`Order sync failed: ${run.error_message ?? "Unknown error"}`);
       }
@@ -172,6 +245,8 @@ export function useSyncCustomerOrders() {
       const run = result.sync_run;
       if (run.status === "completed") {
         toast.success(`Customer order sync complete — ${run.success_count} orders synced, ${run.failed_count} failed`);
+      } else if (run.status === "stopped") {
+        toast.warning(run.error_message ?? "Customer order sync stopped.");
       } else {
         toast.error(`Customer order sync failed: ${run.error_message ?? "Unknown error"}`);
       }
@@ -200,6 +275,16 @@ export function usePreviewOrder() {
         payment_details: Record<string, unknown> | null;
         raw: Record<string, unknown>;
       }>(`admin/acumatica/orders/${encodeURIComponent(orderNbr)}`),
+    onError: showError,
+  });
+}
+
+export function useAcumaticaLookup() {
+  return useMutation({
+    mutationFn: ({ type, id }: { type: AcumaticaLookupType; id: string }) =>
+      apiFetch<AcumaticaLookupResult>(
+        `admin/acumatica/lookup?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`,
+      ),
     onError: showError,
   });
 }
@@ -279,6 +364,85 @@ export function useCreateTeamMember() {
   });
 }
 
+export function useResendWelcomeEmail() {
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiFetch<{ message: string }>(`admin/users/${userId}/resend-welcome`, { method: "POST" }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+    },
+    onError: showError,
+  });
+}
+
+export function useToggleUserStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiFetch<{ message: string; is_active: boolean }>(`admin/users/${userId}/toggle-status`, { method: "PATCH" }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useDeleteUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiFetch<{ message: string }>(`admin/users/${userId}`, { method: "DELETE" }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useUpdateUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, ...payload }: UpdateTeamMemberInput & { userId: number }) =>
+      apiFetch<TeamMember>(`admin/users/${userId}`, { method: "PATCH", body: payload }),
+    onSuccess: () => {
+      toast.success("Team member updated");
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useRepCodeHistory(userId: number | null) {
+  return useQuery({
+    queryKey: [...adminKey, "rep-code-history", userId],
+    queryFn: () => apiFetch<RepCodeHistoryEntry[]>(`admin/users/${userId}/rep-code-history`),
+    enabled: userId !== null,
+  });
+}
+
+export function useRestoreRepCode() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, historyEntryId }: { userId: number; historyEntryId: number }) =>
+      apiFetch<TeamMember>(`admin/users/${userId}/rep-code-history/${historyEntryId}/restore`, { method: "POST" }),
+    onSuccess: () => {
+      toast.success("Rep code restored");
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
+    },
+    onError: showError,
+  });
+}
+
 export function usePermissions() {
   return useQuery({
     queryKey: [...adminKey, "permissions"],
@@ -308,6 +472,35 @@ export function useToggleNotificationRule() {
   });
 }
 
+export function useUpdateNotificationRuleRecipients() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, recipient_emails, recipient_roles }: { id: number; recipient_emails: string[]; recipient_roles: string[] }) =>
+      apiFetch<NotificationRule>(`admin/notification-rules/${id}`, {
+        method: "PUT",
+        body: { recipient_emails, recipient_roles },
+      }),
+    onSuccess: () => {
+      toast.success("Notification recipients saved");
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "notification-rules"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useSendNotificationRulesConfig() {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ message: string; recipient: string; rule_count: number }>("admin/notification-rules/send-config", { method: "POST" }),
+    onSuccess: (data) => {
+      toast.success(`Configuration sent to ${data.recipient}`);
+    },
+    onError: showError,
+  });
+}
+
 // -------------------------------------------------------------------------
 // Email import configs
 // -------------------------------------------------------------------------
@@ -315,20 +508,49 @@ export function useToggleNotificationRule() {
 export interface EmailImportConfig {
   id: number;
   sender_pattern: string;
+  match_mode: "exact" | "wildcard" | "regex";
   is_wildcard: boolean;
   display_name: string;
+  customer_id: number | null;
+  branch_name: string | null;
+  branch_tag_pattern: string | null;
   customer_class: string | null;
   po_patterns: string[] | null;
   po_extraction_source: "subject" | "body" | "pdf" | "all";
   ai_fallback_enabled: boolean;
   is_active: boolean;
+  approval_status: "pending" | "approved" | "rejected";
+  created_by: number | null;
+  approved_by: number | null;
+  approved_at: string | null;
+  last_matched_at: string | null;
+  last_imported_at: string | null;
+  auto_deactivated_at: string | null;
   notes: string | null;
+  customer?: { id: number; acumatica_id: string; name: string } | null;
+}
+
+export interface EmailImportMetrics {
+  imported_orders_last_24h: number;
+  unrecognized_emails_last_24h: number;
+  success_rate: number;
+  pending_approvals: number;
+  auto_deactivated_configs: number;
+  reason_counts: Array<{ reason: string | null; count: number }>;
 }
 
 export function useEmailImportConfigs() {
   return useQuery({
     queryKey: [...adminKey, "email-import-configs"],
     queryFn: () => apiFetch<EmailImportConfig[]>("admin/email-import-configs"),
+  });
+}
+
+export function useEmailImportMetrics() {
+  return useQuery({
+    queryKey: [...adminKey, "email-import-configs-metrics"],
+    queryFn: () => apiFetch<EmailImportMetrics>("admin/email-import-configs/metrics"),
+    refetchInterval: 30_000,
   });
 }
 
@@ -359,10 +581,23 @@ export function useDeleteEmailImportConfig() {
   });
 }
 
+export function useApproveEmailImportConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<{ message: string; config: EmailImportConfig }>(`admin/email-import-configs/${id}/approve`, { method: "POST" }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      qc.invalidateQueries({ queryKey: [...adminKey, "email-import-configs"] });
+      qc.invalidateQueries({ queryKey: [...adminKey, "email-import-configs-metrics"] });
+    },
+    onError: showError,
+  });
+}
+
 export function useTestSender() {
   return useMutation({
     mutationFn: (email: string) =>
-      apiFetch<{ email: string; matched: boolean; config: EmailImportConfig | null }>(
+      apiFetch<{ email: string; matched: boolean; branch_tag: string | null; config: EmailImportConfig | null }>(
         "admin/email-import-configs/test-sender",
         { method: "POST", body: { email } },
       ),
@@ -545,7 +780,7 @@ export function useDailyReportRuns() {
 export function useUpdateDailyReportConfig() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<DailyReportConfig> & { recipients?: string[]; reply_to?: string[] }) =>
+    mutationFn: (body: Partial<DailyReportConfig> & { recipients?: string[]; reply_to?: string[]; send_to?: string[]; cc?: string[] }) =>
       apiFetch<DailyReportConfig>("admin/daily-reports/config", { method: "PUT", body }),
     onSuccess: () => {
       toast.success("Daily report settings saved.");
@@ -559,10 +794,10 @@ export function useUpdateDailyReportConfig() {
 export function useTestDailyReport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (recipients?: string[]) =>
+    mutationFn: (routing?: { send_to?: string[]; cc?: string[]; recipients?: string[] }) =>
       apiFetch<{ message: string; run: DailyReportRun }>("admin/daily-reports/test-send", {
         method: "POST",
-        body: recipients ? { recipients } : {},
+        body: routing ? routing : {},
       }),
     onSuccess: (result) => {
       toast.success(result.message);
@@ -580,6 +815,32 @@ export function useResendDailyReport() {
     onSuccess: (result) => {
       toast.success(result.message);
       qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useDeliverySlaConfig() {
+  return useQuery({
+    queryKey: [...adminKey, "delivery-sla-config"],
+    queryFn: () => apiFetch<DeliverySlaConfigRule[]>("admin/delivery-sla-config"),
+  });
+}
+
+export function useUpdateDeliverySlaConfig() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (rules: DeliverySlaConfigRule[]) =>
+      apiFetch<DeliverySlaConfigRule[]>("admin/delivery-sla-config", {
+        method: "PUT",
+        body: { rules },
+      }),
+    onSuccess: () => {
+      toast.success("Delivery SLA settings saved");
+      qc.invalidateQueries({ queryKey: [...adminKey, "delivery-sla-config"] });
+      qc.invalidateQueries({ queryKey: ["operations-business-optimization"] });
+      qc.invalidateQueries({ queryKey: ["operations-fill-rate-summary"] });
     },
     onError: showError,
   });

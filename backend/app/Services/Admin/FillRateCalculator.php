@@ -8,15 +8,17 @@ class FillRateCalculator
 
     /**
      * Compute order-level fill rate from line items, rolling up duplicate SKUs first.
+     * Numerator uses QtyOnShipments (per-item quantity on shipments).
      *
-     * @param  list<array{inventory_id?: ?string, order_qty: float, shipped_qty: float, qty_at_approval?: float, unit_price?: float}>  $lines
+     * @param  list<array{inventory_id?: ?string, order_qty: float, qty_on_shipments: float, qty_at_approval?: float, unit_price?: float}>  $lines
      * @return array{
      *   fill_rate_pct: ?float,
      *   fill_rate_status: string,
      *   total_ordered_qty: float,
      *   total_shipped_qty: float,
      *   unique_item_count: int,
-     *   revenue_not_shipped: float
+     *   revenue_not_shipped: float,
+     *   out_of_stock_line_count: int
      * }
      */
     public function compute(string $status, array $lines): array
@@ -32,22 +34,27 @@ class FillRateCalculator
         }
 
         $totalOrdered = 0.0;
-        $totalShipped = 0.0;
+        $totalOnShipments = 0.0;
         $revenueNotShipped = 0.0;
+        $outOfStockLines = 0;
 
         foreach ($bySku as $rollup) {
             $approved = $rollup['qty_at_approval'];
-            $shipped = min($rollup['shipped_qty'], $approved);
+            $onShipments = min($rollup['qty_on_shipments'], $approved);
 
             if ($approved <= 0) {
                 continue;
             }
 
             $totalOrdered += $approved;
-            $totalShipped += $shipped;
+            $totalOnShipments += $onShipments;
+
+            if ($rollup['qty_on_shipments'] <= 0) {
+                $outOfStockLines++;
+            }
 
             if ($rollup['unit_price'] > 0) {
-                $revenueNotShipped += max(0, $approved - $shipped) * $rollup['unit_price'];
+                $revenueNotShipped += max(0, $approved - $onShipments) * $rollup['unit_price'];
             }
         }
 
@@ -55,24 +62,25 @@ class FillRateCalculator
             return $this->naResult();
         }
 
-        $pct = SalesOrderLineFulfillmentDeriver::safeFillRate($totalShipped, $totalOrdered);
+        $pct = SalesOrderLineFulfillmentDeriver::safeFillRate($totalOnShipments, $totalOrdered);
         if ($pct === null) {
             return $this->naResult();
         }
 
         return [
-            'fill_rate_pct'       => $pct,
-            'fill_rate_status'    => $this->thresholdStatus($pct),
-            'total_ordered_qty'   => $totalOrdered,
-            'total_shipped_qty'   => $totalShipped,
-            'unique_item_count'   => count($bySku),
-            'revenue_not_shipped' => round($revenueNotShipped, 2),
+            'fill_rate_pct'           => $pct,
+            'fill_rate_status'        => $this->thresholdStatus($pct),
+            'total_ordered_qty'       => $totalOrdered,
+            'total_shipped_qty'       => $totalOnShipments,
+            'unique_item_count'       => count($bySku),
+            'revenue_not_shipped'     => round($revenueNotShipped, 2),
+            'out_of_stock_line_count' => $outOfStockLines,
         ];
     }
 
     /**
-     * @param  list<array{inventory_id?: ?string, order_qty: float, shipped_qty: float, qty_at_approval?: float, unit_price?: float}>  $lines
-     * @return array<string, array{order_qty: float, qty_at_approval: float, shipped_qty: float, unit_price: float}>
+     * @param  list<array{inventory_id?: ?string, order_qty: float, qty_on_shipments: float, qty_at_approval?: float, unit_price?: float}>  $lines
+     * @return array<string, array{order_qty: float, qty_at_approval: float, qty_on_shipments: float, unit_price: float}>
      */
     private function rollupByInventoryId(array $lines): array
     {
@@ -95,16 +103,16 @@ class FillRateCalculator
 
             if (! isset($bySku[$sku])) {
                 $bySku[$sku] = [
-                    'order_qty'        => 0.0,
-                    'qty_at_approval'  => 0.0,
-                    'shipped_qty'      => 0.0,
-                    'unit_price'       => 0.0,
+                    'order_qty'         => 0.0,
+                    'qty_at_approval'   => 0.0,
+                    'qty_on_shipments'  => 0.0,
+                    'unit_price'        => 0.0,
                 ];
             }
 
             $bySku[$sku]['order_qty'] += $ordered;
             $bySku[$sku]['qty_at_approval'] += $approved;
-            $bySku[$sku]['shipped_qty'] += (float) ($line['shipped_qty'] ?? 0);
+            $bySku[$sku]['qty_on_shipments'] += (float) ($line['qty_on_shipments'] ?? 0);
 
             $price = (float) ($line['unit_price'] ?? 0);
             if ($price > $bySku[$sku]['unit_price']) {
@@ -118,12 +126,13 @@ class FillRateCalculator
     private function naResult(): array
     {
         return [
-            'fill_rate_pct'       => null,
-            'fill_rate_status'    => 'na',
-            'total_ordered_qty'   => 0,
-            'total_shipped_qty'   => 0,
-            'unique_item_count'   => 0,
-            'revenue_not_shipped' => 0,
+            'fill_rate_pct'           => null,
+            'fill_rate_status'        => 'na',
+            'total_ordered_qty'       => 0,
+            'total_shipped_qty'       => 0,
+            'unique_item_count'       => 0,
+            'revenue_not_shipped'     => 0,
+            'out_of_stock_line_count' => 0,
         ];
     }
 

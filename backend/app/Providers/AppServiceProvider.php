@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Admin\MailSettingsService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -22,6 +23,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->applyMailSettings();
+
         if ($this->app->environment('production', 'staging')) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
         }
@@ -58,5 +61,14 @@ class AppServiceProvider extends ServiceProvider
                     ], 429);
                 });
         });
+    }
+
+    private function applyMailSettings(): void
+    {
+        try {
+            app(MailSettingsService::class)->applyRuntimeConfig();
+        } catch (\Throwable) {
+            // During early migrations/tests the database may not be ready yet.
+        }
     }
 }

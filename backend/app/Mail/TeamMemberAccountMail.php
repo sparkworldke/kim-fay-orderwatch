@@ -14,6 +14,7 @@ class TeamMemberAccountMail extends Mailable
         private readonly string $email,
         private readonly string $role,
         private readonly string $invitedByName,
+        private readonly string $otp,
     ) {}
 
     public function envelope(): Envelope
@@ -43,6 +44,7 @@ class TeamMemberAccountMail extends Mailable
         $email = e($this->email);
         $role = e($this->role);
         $invitedBy = e($this->invitedByName);
+        $otp = e($this->otp);
         $appUrl = e(FrontendUrl::path('/app'));
         $authUrl = e(FrontendUrl::path('/auth'));
 
@@ -82,14 +84,41 @@ class TeamMemberAccountMail extends Mailable
                                             </td>
                                         </tr>
                                     </table>
-                                    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-                                        Sign in with your work email. OrderWatch will send you a one-time verification code each time you log in.
+                                    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+                                        You have two secure ways to access your account:
                                     </p>
+                                    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+                                        <tr>
+                                            <td style="padding:18px 20px;font-size:14px;color:#374151;line-height:1.7;">
+                                                <strong>Option 1: Sign in now with this one-time password</strong><br />
+                                                1. Open the sign-in page below.<br />
+                                                2. Choose <strong>Login via OTP</strong> and enter your email address.<br />
+                                                3. Enter this code when prompted. It expires in <strong>15 minutes</strong> and can be used only once.
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td align="center" style="padding:0 20px 18px;">
+                                                <span style="display:inline-block;background-color:#eef2ff;border:2px solid #4f6ef7;border-radius:8px;padding:14px 28px;font-size:34px;font-weight:700;letter-spacing:8px;color:#1a1a2e;font-family:'Courier New',Courier,monospace;">
+                                                    {$otp}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;">
+                                        <tr>
+                                            <td style="padding:18px 20px;font-size:14px;color:#374151;line-height:1.7;">
+                                                <strong>Option 2: Set up a permanent password</strong><br />
+                                                1. First sign in using the OTP above.<br />
+                                                2. Open <strong>Profile</strong> from your account menu.<br />
+                                                3. Select <strong>Update Password</strong>. OrderWatch will email a new verification code before allowing the password change.
+                                            </td>
+                                        </tr>
+                                    </table>
                                     <table width="100%" cellpadding="0" cellspacing="0">
                                         <tr>
                                             <td align="center" style="padding:8px 0 12px;">
-                                                <a href="{$appUrl}" style="display:inline-block;background:#4f6ef7;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:8px;">
-                                                    Open OrderWatch
+                                                <a href="{$authUrl}" style="display:inline-block;background:#4f6ef7;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:8px;">
+                                                    Open sign-in page
                                                 </a>
                                             </td>
                                         </tr>

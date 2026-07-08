@@ -179,11 +179,68 @@ The production-grade path is **Cloudflare DNS for `fayshop.co.ke` + Worker Custo
 
 ## Troubleshooting
 
+### Error: “DNS label must contain only a-z, A-Z, 0-9, -, and _”
+
+This means a **single label** (one part of the hostname) has invalid characters — usually a **dot** or **full URL** pasted into the wrong field.
+
+| Where you are | Wrong (causes error) | Correct |
+|---------------|----------------------|---------|
+| **cPanel → Subdomains** | `orderwatch.fayshop.co.ke` | `orderwatch` only |
+| **cPanel → Zone Editor → Name** | `orderwatch.fayshop.co.ke` | `orderwatch` only |
+| **Cloudflare → DNS → Name** | `orderwatch.fayshop.co.ke` | `orderwatch` only |
+| **Cloudflare → Worker → Custom Domain** | `https://orderwatch.fayshop.co.ke/` | `orderwatch.fayshop.co.ke` (no `https://`, no trailing `/`) |
+
+**Do not** try to create `orderwatch` as a CNAME to `orderwatchkimfay.nairobidental.workers.dev` in cPanel — that path does not work for Worker Custom Domains even if the record saves.
+
+**Current bad record (remove after Cloudflare takes over):**
+```
+orderwatch.fayshop.co.ke  CNAME  orderwatchkimfay.nairobidental.workers.dev
+```
+
+---
+
+### “No nameservers” in cPanel
+
+**Normal.** cPanel usually does **not** let you change domain nameservers. Nameservers are set at your **domain registrar** or **hosting provider DNS panel**, not inside cPanel’s subdomain screens.
+
+**Current nameservers for `fayshop.co.ke` (as of setup):**
+```
+ns1.noc254.com
+ns2.noc254.com
+rs11.rcnoc.com
+rs12.rcnoc.com
+```
+
+These are Kenyan hosting DNS (`noc254.com` / `rcnoc.com`). To use Cloudflare Workers Custom Domain you must change nameservers **where those four are configured** — typically:
+
+1. The company where you **registered** `fayshop.co.ke` (Kenya NIC reseller, Truehost, Kenya Web Experts, etc.), **or**
+2. Your hosting provider’s **client area** (separate from cPanel login), under **Domain → Nameservers**
+
+**cPanel is only for:** hosting files, email mailboxes, subdomain folders — **not** for pointing the whole domain to Cloudflare.
+
+#### What to do
+
+1. Log in to wherever you manage `fayshop.co.ke` registration (not cPanel unless it has a “Domains” / “Nameservers” section).
+2. Add `fayshop.co.ke` to Cloudflare first → Cloudflare gives you two nameservers, e.g.:
+   ```
+   ada.ns.cloudflare.com
+   bob.ns.cloudflare.com
+   ```
+3. Replace `ns1.noc254.com` / `ns2.noc254.com` / `rs11.rcnoc.com` / `rs12.rcnoc.com` with Cloudflare’s pair.
+4. In **Cloudflare DNS**, recreate records your cPanel site still needs (A record to cPanel server IP for `@` / `www`, MX for mail).
+5. Add Worker Custom Domain `orderwatch.fayshop.co.ke` in Cloudflare (Step 4 above).
+
+> **Ask your host:** “Where do I change nameservers for fayshop.co.ke?” If they say “we manage DNS,” request Cloudflare nameserver change or a ticket to delegate `orderwatch` — most shared hosts will only allow full-zone NS change.
+
+---
+
+### Other issues
+
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Custom Domain add fails | Zone not on Cloudflare | Complete Steps 1–2 |
-| Custom Domain add fails | Existing CNAME on `orderwatch` | Delete conflicting record in Cloudflare DNS |
-| SSL certificate pending | DNS not propagated | Wait; ensure record is Proxied |
+| Custom Domain add fails | Zone not on Cloudflare | Complete Steps 1–2 (nameserver change at registrar) |
+| Custom Domain add fails | Existing CNAME on `orderwatch` | Delete `orderwatch` CNAME in Cloudflare DNS after zone import |
+| SSL certificate pending | DNS not propagated | Wait up to 48h; ensure record is Proxied (orange cloud) |
 | App loads but API errors | CORS | Add custom domain to `config/cors.php` |
 | OAuth `AADSTS500113` | Redirect URI mismatch | Align Azure AD URI with backend `.env` |
 

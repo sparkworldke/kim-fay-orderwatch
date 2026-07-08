@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,7 @@ function AuthPage() {
   const [emailValidation, setEmailValidation] = useState<EmailValidation>({ status: "idle" });
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loginMode, setLoginMode] = useState<LoginMode>("otp-only");
   const [secondsLeft, setSecondsLeft] = useState(900);
   const [loading, setLoading] = useState(false);
@@ -183,7 +184,7 @@ function AuthPage() {
       try {
         const data = await apiFetch<{
           token: string;
-          user: { id: number; name: string; email: string; role: string };
+          user: { id: number; name: string; email: string; role: string; rep_code?: string | null };
         }>("auth/login", {
           method: "POST",
           body: { email: normalizedEmail, password },
@@ -194,6 +195,7 @@ function AuthPage() {
           email: data.user.email,
           name: data.user.name,
           role: data.user.role as Role,
+          rep_code: data.user.rep_code ?? null,
           loggedInAt: new Date().toISOString(),
           token: data.token,
         });
@@ -274,7 +276,7 @@ function AuthPage() {
     try {
       const data = await apiFetch<{
         token: string;
-        user: { id: number; name: string; email: string; role: string };
+        user: { id: number; name: string; email: string; role: string; rep_code?: string | null };
       }>("auth/otp/verify", {
         method: "POST",
         body: { email: email.trim().toLowerCase(), otp, login_mode: "otp-only" },
@@ -285,6 +287,7 @@ function AuthPage() {
         email: data.user.email,
         name: data.user.name,
         role: data.user.role as Role,
+        rep_code: data.user.rep_code ?? null,
         loggedInAt: new Date().toISOString(),
         token: data.token,
       });
@@ -343,8 +346,8 @@ function AuthPage() {
         <div className="pointer-events-none absolute -bottom-40 -left-20 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
       </div>
 
-      {/* Auth form */}
-      <div className="flex items-center justify-center bg-background px-6 py-12">
+      {/* Auth form — items-start on mobile so the page scrolls from the top */}
+      <div className="flex min-h-screen items-start justify-center overflow-y-auto bg-background px-6 py-8 sm:py-12 lg:items-center">
         <div className="w-full max-w-sm">
           {/* Mobile logo — shown on small screens where the brand panel is hidden */}
           <div className="mb-8 flex items-center lg:hidden">
@@ -399,7 +402,7 @@ function AuthPage() {
                     required
                     value={email}
                     onChange={(e) => handleEmailChange(e.target.value)}
-                    placeholder="firstname.lastname@kim-fay.com"
+                    placeholder="johndoe@kimfay.com"
                     className={
                       emailValidation.status === "valid"
                         ? "border-green-500 pr-9"
@@ -427,14 +430,25 @@ function AuthPage() {
               {loginMode === "otp-and-password" && (
                 <div className="space-y-1.5">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Your account password"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Your account password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               )}
 

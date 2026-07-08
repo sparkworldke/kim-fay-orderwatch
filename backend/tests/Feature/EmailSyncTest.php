@@ -219,6 +219,22 @@ class EmailSyncTest extends TestCase
                 'processed_at' => now(),
             ]);
         }
+        foreach ([
+            ['processing_failed', 'private-message-7', 'Required sender field was missing.'],
+            ['processing_failed', 'private-message-8', 'Required sender field was missing.'],
+            ['folder_sync_failed', null, 'Microsoft Graph folder sync failed with HTTP 429'],
+        ] as [$reason, $messageId, $errorMessage]) {
+            MailboxSyncItemLog::create([
+                'mailbox_sync_log_id' => $ruleRun->id,
+                'message_id' => $messageId,
+                'outcome' => 'failed',
+                'reason' => $reason,
+                'attempts' => 1,
+                'duration_ms' => 1,
+                'error_message' => $errorMessage,
+                'processed_at' => now(),
+            ]);
+        }
         $historicalRun = MailboxSyncLog::create([
             'mailbox_account_id' => $mailbox->id,
             'started_at' => now()->subMinutes(2),
@@ -248,6 +264,20 @@ class EmailSyncTest extends TestCase
             ['code' => 'filter_not_matched', 'label' => 'Does not match "Naivas PO rule"', 'count' => 3],
             ['code' => 'unchanged', 'label' => 'Already imported; no changes', 'count' => 2],
         ], $runs[$ruleRun->id]['reason_counts']);
+        $this->assertEqualsCanonicalizing([
+            [
+                'code' => 'processing_failed',
+                'label' => 'Email processing failed',
+                'count' => 2,
+                'error_summary' => 'Required sender field was missing.',
+            ],
+            [
+                'code' => 'folder_sync_failed',
+                'label' => 'Folder sync failed',
+                'count' => 1,
+                'error_summary' => 'Microsoft Graph folder sync failed with HTTP 429',
+            ],
+        ], $runs[$ruleRun->id]['failure_counts']);
         $this->assertSame('all', $runs[$historicalRun->id]['sync_scope']['type']);
         $this->assertSame('Does not match the selected email rule', $runs[$historicalRun->id]['reason_counts'][0]['label']);
         $this->assertStringNotContainsString('private-message', $response->getContent());

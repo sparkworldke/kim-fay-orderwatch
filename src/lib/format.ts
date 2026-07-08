@@ -36,6 +36,36 @@ export function formatDateTime(d: Date | string) {
   });
 }
 
+/**
+ * Formats a date string as "MMM dd, yyyy" (e.g. "Jul 08, 2026").
+ * Returns null for null/undefined/empty input.
+ */
+export function formatDate(d: Date | string | null | undefined): string | null {
+  if (!d) return null;
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-KE", {
+    timeZone: EAT,
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+/**
+ * Extracts the ISO date portion (yyyy-mm-dd) from a datetime string.
+ * Returns null for null/undefined/empty input.
+ */
+export function toIsoDate(d: Date | string | null | undefined): string | null {
+  if (!d) return null;
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (isNaN(date.getTime())) return null;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function formatRelative(d: Date | string) {
   const date = typeof d === "string" ? new Date(d) : d;
   const diff = Date.now() - date.getTime();

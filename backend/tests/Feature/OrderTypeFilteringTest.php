@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaSalesOrder;
+use App\Models\AcumaticaSalesOrderLine;
 use App\Models\Email;
 use App\Models\MailboxAccount;
 use App\Models\MailboxFolder;
@@ -46,6 +48,66 @@ class OrderTypeFilteringTest extends TestCase
             ->assertJsonPath('open', 1)
             ->assertJsonPath('open_so', 1)
             ->assertJsonMissingPath('open_qt');
+    }
+
+    public function test_dashboard_orders_by_status_returns_order_details_for_accordion(): void
+    {
+        $user = User::factory()->create();
+        $today = now()->toDateString();
+
+        $shipping = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr'   => 'SO9001',
+            'order_type'            => 'SO',
+            'customer_name'         => 'Chandara Main',
+            'order_date'            => $today,
+            'status'                => 'Shipping',
+            'order_total'           => 12500.50,
+            'currency_id'           => 'KES',
+        ]);
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $shipping->id,
+            'inventory_id'   => 'ITEM-A',
+            'order_qty'      => 40,
+        ]);
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $shipping->id,
+            'inventory_id'   => 'ITEM-B',
+            'order_qty'      => 10,
+        ]);
+
+        AcumaticaCustomer::create([
+            'acumatica_id' => 'CUST102513',
+            'name'         => 'Chandara Supermarket',
+            'synced_at'    => now(),
+        ]);
+
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr'   => 'SO9002',
+            'order_type'            => 'SO',
+            'customer_acumatica_id' => 'CUST102513',
+            'order_date'            => $today,
+            'status'                => 'Pending Approval',
+            'order_total'           => 3000,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson("/api/dashboard/orders-by-status?status=shipping&date_from={$today}&date_to={$today}")
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('orders.0.order_nbr', 'SO9001')
+            ->assertJsonPath('orders.0.customer_name', 'Chandara Main')
+            ->assertJsonPath('orders.0.amount', 12500.5)
+            ->assertJsonPath('orders.0.quantity', 50);
+
+        $this->actingAs($user)
+            ->getJson("/api/dashboard/orders-by-status?status=pending_approval&date_from={$today}&date_to={$today}")
+            ->assertOk()
+            ->assertJsonPath('orders.0.order_nbr', 'SO9002')
+            ->assertJsonPath('orders.0.customer_name', 'Chandara Supermarket');
+
+        $this->actingAs($user)
+            ->getJson("/api/dashboard/orders-by-status?status=invalid&date_from={$today}&date_to={$today}")
+            ->assertUnprocessable();
     }
 
     public function test_so_imports_stats_break_down_by_document_type(): void
@@ -153,6 +215,48 @@ class OrderTypeFilteringTest extends TestCase
             ->getJson("/api/orders?order_type=CREDIT_NOTES_MORE&date_from={$today}&date_to={$today}")
             ->assertOk()
             ->assertJsonCount(3, 'data');
+    }
+
+    public function test_orders_endpoint_can_return_all_customer_document_types(): void
+    {
+        $user = User::factory()->create();
+        $today = now()->toDateString();
+
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-CUST',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST100',
+            'order_date' => $today,
+        ]);
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'RC-CUST',
+            'order_type' => 'RC',
+            'customer_acumatica_id' => 'CUST100',
+            'order_date' => $today,
+        ]);
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'QT-CUST',
+            'order_type' => 'QT',
+            'customer_acumatica_id' => 'CUST100',
+            'order_date' => $today,
+        ]);
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-OTHER',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST999',
+            'order_date' => $today,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/orders?order_type=ALL&customer_id=CUST100&date_from={$today}&date_to={$today}");
+
+        $response->assertOk()
+            ->assertJsonCount(3, 'data');
+
+        $this->assertEqualsCanonicalizing(
+            ['SO-CUST', 'RC-CUST', 'QT-CUST'],
+            collect($response->json('data'))->pluck('acumatica_order_nbr')->all(),
+        );
     }
 
     public function test_order_match_treats_rc_only_po_as_no_match(): void

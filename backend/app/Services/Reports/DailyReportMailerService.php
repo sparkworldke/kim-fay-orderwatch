@@ -6,6 +6,7 @@ use App\Mail\DailyManagementReportMail;
 use App\Models\DailyReportConfig;
 use App\Models\DailyReportDeliveryLog;
 use App\Models\DailyReportRun;
+use App\Support\MailTransportValidator;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
@@ -18,6 +19,19 @@ class DailyReportMailerService
      */
     public function send(DailyReportRun $run, DailyReportConfig $config, array $payload, array $insights): array
     {
+        if (app()->environment('production')) {
+            try {
+                MailTransportValidator::assertConfigured();
+            } catch (Throwable $e) {
+                return [
+                    'delivery_status' => 'failed',
+                    'sent_count' => 0,
+                    'failed_count' => 0,
+                    'errors' => [$e->getMessage()],
+                ];
+            }
+        }
+
         $routing = $this->resolveRouting($config);
         if ($routing['to'] === [] && $routing['cc'] === []) {
             return [
@@ -98,7 +112,7 @@ class DailyReportMailerService
     /** @param  array<string, mixed>  $payload */
     private function buildSubject(DailyReportConfig $config, array $payload): string
     {
-        $template = $config->subject_template ?: 'OrderWatch Daily Brief – {report_date}';
+        $template = $config->subject_template ?: 'OrderWatch Executive Exceptions – {report_date}';
 
         return str_replace(
             ['{report_date}', '{date}'],

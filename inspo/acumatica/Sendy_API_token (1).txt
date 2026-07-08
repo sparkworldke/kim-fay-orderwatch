@@ -1,0 +1,7 @@
+SENDY TOKEN
+
+API Token: 3682f52a716d6c3430c13879adabbfcbxOg2ykAvpp1KWLzhj6gaLesp0gMnKuhD0IysT4xVvKWefOQf1TaTqNVkT7izKCMv
+Date Created: August 6th, 2023
+Environment: Sandbox
+Cop Id: 14599
+Cop User Id: 11579

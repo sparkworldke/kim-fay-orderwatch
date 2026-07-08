@@ -79,12 +79,22 @@ class OtpAuthTest extends TestCase
     public function test_otp_only_happy_path(): void
     {
         Mail::fake();
+        config([
+            'app.url' => 'https://api.orderwatch.test',
+            'app.frontend_url' => 'https://staging.orderwatch.test',
+        ]);
 
         $user = $this->makeUser();
 
         $this->requestOtp($user->email)->assertStatus(200);
 
-        Mail::assertSent(OtpMail::class);
+        Mail::assertSent(OtpMail::class, function (OtpMail $mail) {
+            $html = $mail->render();
+
+            return str_contains($html, 'https://staging.orderwatch.test/app')
+                && str_contains($html, 'https://staging.orderwatch.test/auth')
+                && ! str_contains($html, 'https://api.orderwatch.test');
+        });
 
         $response = $this->verifyOtp([
             'email'      => $user->email,
@@ -202,12 +212,22 @@ class OtpAuthTest extends TestCase
     public function test_otp_and_password_happy_path(): void
     {
         Mail::fake();
+        config([
+            'app.url' => 'https://api.orderwatch.test',
+            'app.frontend_url' => 'https://orderwatch.production.test',
+        ]);
 
         $user = $this->makeUser(['password' => bcrypt('correct-password')]);
 
         $this->requestOtp($user->email)->assertStatus(200);
 
-        Mail::assertSent(OtpMail::class);
+        Mail::assertSent(OtpMail::class, function (OtpMail $mail) {
+            $html = $mail->render();
+
+            return str_contains($html, 'https://orderwatch.production.test/app')
+                && str_contains($html, 'https://orderwatch.production.test/auth')
+                && ! str_contains($html, 'https://api.orderwatch.test');
+        });
 
         $response = $this->verifyOtp([
             'email'      => $user->email,
@@ -323,7 +343,7 @@ class OtpAuthTest extends TestCase
     }
 
     /** @test */
-    public function test_rate_limit_on_otp_request(): void
+    public function test_otp_request_allows_three_resends_within_window(): void
     {
         $user = $this->makeUser();
 
@@ -333,11 +353,12 @@ class OtpAuthTest extends TestCase
         Mail::fake();
 
         // Send 5 valid requests — all should succeed
-        for ($i = 0; $i < 5; $i++) {
+        for ($i = 0; $i < 4; $i++) {
             $this->requestOtp($user->email)->assertStatus(200);
         }
 
-        // 6th request should be rate-limited
-        $this->requestOtp($user->email)->assertStatus(429);
+        $this->requestOtp($user->email)
+            ->assertStatus(429)
+            ->assertJsonFragment(['code' => 'too_many_resends']);
     }
 }
