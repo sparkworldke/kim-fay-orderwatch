@@ -127,7 +127,7 @@ interface DashboardStatusOrdersResponse {
 
 interface ZoneRouteData {
   route_code: string;
-  route_name: string;
+  route_name: string | null;
   customer_zone: string | null;
   total: number;
   open: number;
@@ -726,11 +726,11 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                   (acc, row) => {
                     acc.total += row.total;
                     for (const col of STATUS_COLS) {
-                      acc[col.key] = (acc[col.key] ?? 0) + ((row as any)[col.key] as number);
+                      acc[col.key] = (acc[col.key] ?? 0) + trendDayStatusCount(row, col.key);
                     }
                     return acc;
                   },
-                  { total: 0 } as Record<string, number>
+                  { total: 0 } as Record<string, number>,
                 );
                 const totalsRow = {
                   total:     totals.total,
@@ -1112,7 +1112,7 @@ function GoodsLostInTransitPanel({
                   <OrderLink customerId={order.customer_acumatica_id} orderId={order.order_nbr} />
                 </td>
                 <td className="px-1.5 py-0.5">
-                  {order.order_date ? <DateLink date={order.order_date} /> : "—"}
+                  {order.order_date ? <DateLink value={order.order_date} /> : "—"}
                 </td>
                 <td className="px-1.5 py-0.5">{order.status ?? "—"}</td>
                 <td className="px-1.5 py-0.5 text-right font-mono tabular-nums">
@@ -1130,7 +1130,16 @@ function GoodsLostInTransitPanel({
   );
 }
 
-const ZONE_ROUTE_COLS: { key: keyof ZoneRouteData; label: string; tone: string }[] = [
+type ZoneRouteMetricKey =
+  | "open"
+  | "pending_approval"
+  | "shipping"
+  | "completed"
+  | "rejected"
+  | "on_hold"
+  | "back_order";
+
+const ZONE_ROUTE_COLS: { key: ZoneRouteMetricKey; label: string; tone: string }[] = [
   { key: "open", label: "Open", tone: "text-sky-700" },
   { key: "pending_approval", label: "Pending Approval", tone: "text-amber-700" },
   { key: "shipping", label: "In Shipment", tone: "text-purple-700" },
@@ -1139,6 +1148,10 @@ const ZONE_ROUTE_COLS: { key: keyof ZoneRouteData; label: string; tone: string }
   { key: "on_hold", label: "On Hold", tone: "text-orange-700" },
   { key: "back_order", label: "Back Order", tone: "text-pink-700" },
 ];
+
+function zoneRouteMetric(route: ZoneRouteData, key: ZoneRouteMetricKey): number {
+  return route[key] ?? 0;
+}
 
 function ZoneRoutesPanel({
   dateFrom,
@@ -1230,15 +1243,18 @@ function ZoneRoutesPanel({
                       <tr key={route.route_code} className="border-b last:border-0 hover:bg-muted/20">
                         <td className="px-1.5 py-0.5 font-mono font-medium">{route.route_code}</td>
                         <td className="px-1.5 py-0.5">{route.route_name ?? "-"}</td>
-                        {ZONE_ROUTE_COLS.map((col) => (
-                          <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
-                            {(route[col.key] as number) > 0 ? (
-                              <span className={col.tone}>{(route[col.key] as number).toLocaleString()}</span>
-                            ) : (
-                              <span className="text-muted-foreground">0</span>
-                            )}
-                          </td>
-                        ))}
+                        {ZONE_ROUTE_COLS.map((col) => {
+                          const value = zoneRouteMetric(route, col.key);
+                          return (
+                            <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
+                              {value > 0 ? (
+                                <span className={col.tone}>{value.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
+                              )}
+                            </td>
+                          );
+                        })}
                         <td className="px-1.5 py-0.5 text-right font-semibold tabular-nums">
                           {route.total.toLocaleString()}
                         </td>
@@ -1249,7 +1265,10 @@ function ZoneRoutesPanel({
                         {zone.shipping_zone_id} Total
                       </td>
                       {ZONE_ROUTE_COLS.map((col) => {
-                        const sum = zone.routes.reduce((acc, r) => acc + (r[col.key] as number), 0);
+                        const sum = zone.routes.reduce(
+                          (acc, r) => acc + zoneRouteMetric(r, col.key),
+                          0,
+                        );
                         return (
                           <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
                             {sum > 0 ? (
@@ -1290,12 +1309,15 @@ function DashboardPage() {
   const orderStatusRefresh = useRefreshOrderStatuses();
 
   function goToOrders(statusFilter?: string) {
-    const params: Record<string, string> = {
-      date_from: dateFrom,
-      date_to:   dateTo,
-    };
-    if (statusFilter) params.status = statusFilter;
-    navigate({ to: "/app/orders", search: params as any });
+    navigate({
+      to: "/app/orders",
+      search: {
+        status: statusFilter,
+        order_type: undefined,
+        date_from: dateFrom,
+        date_to: dateTo,
+      },
+    });
   }
 
   function toggleStat(key: StatKey) {
