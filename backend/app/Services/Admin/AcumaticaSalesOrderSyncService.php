@@ -3,12 +3,16 @@
 namespace App\Services\Admin;
 
 use App\Exceptions\AcumaticaSyncStoppedException;
+use App\Models\AcumaticaBackorderLine;
 use App\Models\AcumaticaDeadLetter;
+use App\Models\AcumaticaFillRateSnapshot;
 use App\Models\AcumaticaSalesOrder;
 use App\Models\AcumaticaSalesOrderLine;
 use App\Models\AcumaticaSyncLog;
 use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
+use App\Services\Operations\SalesOrderReasonCatalog;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class AcumaticaSalesOrderSyncService
@@ -26,6 +30,7 @@ class AcumaticaSalesOrderSyncService
 
     public function __construct(
         private readonly AcumaticaClient $client,
+        private readonly SalesOrderReasonCatalog $reasonCatalog,
     ) {
     }
 
@@ -36,7 +41,7 @@ class AcumaticaSalesOrderSyncService
     public function syncDateRange(string $dateFrom, string $dateTo, ?int $triggeredByUserId = null, string $triggerType = 'manual', ?int $cronRunLogId = null): AcumaticaSyncLog
     {
         $this->assertNoActiveSync(
-            ['sales_orders', 'customer_orders', 'credit_notes_and_more'],
+            ['sales_orders', 'customer_orders', 'credit_notes_and_more', 'sales_order_status_updates', 'sales_order_prune_missing'],
             'An order sync is already running. Wait for it to finish or stop it first.',
         );
 
@@ -62,11 +67,15 @@ class AcumaticaSalesOrderSyncService
         try {
             $orders = $this->client->fetchAllSalesOrdersByDateRange($dateFrom, $dateTo, fn () => $this->touchSyncRun($run));
             $run    = $this->processOrders($orders, $run);
+            // After import (manual or scheduled): recheck local SOs in range and delete any
+            // no longer returned by Acumatica, then refresh statuses for those that remain.
             $run    = $this->reconcileStatuses(
                 $run,
                 fn (Builder $query) => $query
                     ->where('order_type', 'SO')
                     ->whereBetween('order_date', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59']),
+                $this->orderNumbersFromPayload($orders),
+                'missing_from_acumatica_sales_order_sync',
             );
         } catch (AcumaticaSyncStoppedException $e) {
             $run = $this->stopSyncRun($run, $e->getMessage());
@@ -121,6 +130,8 @@ class AcumaticaSalesOrderSyncService
                 fn (Builder $query) => $query
                     ->whereIn('order_type', $documentTypes ?: ['QT', 'RC', 'CM', 'PL'])
                     ->whereBetween('order_date', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59']),
+                $this->orderNumbersFromPayload($orders),
+                'missing_from_acumatica_credit_notes_sync',
             );
         } catch (AcumaticaSyncStoppedException $e) {
             $run = $this->stopSyncRun($run, $e->getMessage());
@@ -139,7 +150,7 @@ class AcumaticaSalesOrderSyncService
     public function syncStatusUpdates(int $lookbackDays = 14, int $maxOrders = 1500, ?int $triggeredByUserId = null, string $triggerType = 'manual', ?int $cronRunLogId = null): AcumaticaSyncLog
     {
         $this->assertNoActiveSync(
-            ['sales_orders', 'customer_orders', 'credit_notes_and_more', 'sales_order_status_updates'],
+            ['sales_orders', 'customer_orders', 'credit_notes_and_more', 'sales_order_status_updates', 'sales_order_prune_missing'],
             'A sales order sync is already running. Wait for it to finish or stop it first.',
         );
 
@@ -186,6 +197,8 @@ class AcumaticaSalesOrderSyncService
 
             $sourceLookups = 0;
             $statusUpdates = 0;
+            $deletedCount = 0;
+            $deletedSamples = [];
             $comparisonCount = $localOrders->count();
 
             foreach ($localOrders->chunk(100) as $chunk) {
@@ -208,6 +221,12 @@ class AcumaticaSalesOrderSyncService
                     $this->touchSyncRun($run);
                     $raw = $sourceByOrderNbr->get($localOrder->acumatica_order_nbr);
                     if (! is_array($raw)) {
+                        // Order no longer exists in Acumatica — remove local copy.
+                        $this->purgeLocalSalesOrder($localOrder, $run->id, 'missing_from_acumatica_status_sync');
+                        $deletedCount++;
+                        if (count($deletedSamples) < 20) {
+                            $deletedSamples[] = $localOrder->acumatica_order_nbr;
+                        }
                         continue;
                     }
 
@@ -226,11 +245,13 @@ class AcumaticaSalesOrderSyncService
                 'heartbeat_at' => now(),
                 'status' => 'completed',
                 'record_count' => $comparisonCount,
-                'success_count' => $comparisonCount - $statusUpdates,
+                'success_count' => max(0, $comparisonCount - $statusUpdates - $deletedCount),
                 'failed_count' => 0,
                 'filters' => array_merge($run->filters ?? [], $this->reasonValidationSummary, [
                     'status_comparison_count' => $comparisonCount,
                     'status_updates' => $statusUpdates,
+                    'orders_deleted_missing_from_acumatica' => $deletedCount,
+                    'sample_deleted_orders' => $deletedSamples,
                     'source_lookups' => $sourceLookups,
                 ]),
             ]);
@@ -248,6 +269,121 @@ class AcumaticaSalesOrderSyncService
         return $run->fresh();
     }
 
+    /**
+     * Dedicated prune pass: verify local SO rows still exist in Acumatica and delete those that do not.
+     */
+    public function pruneMissingSalesOrders(
+        int $lookbackDays = 60,
+        int $maxOrders = 3000,
+        ?int $triggeredByUserId = null,
+        string $triggerType = 'manual',
+        ?int $cronRunLogId = null,
+    ): AcumaticaSyncLog {
+        $this->assertNoActiveSync(
+            ['sales_orders', 'customer_orders', 'credit_notes_and_more', 'sales_order_status_updates', 'sales_order_prune_missing'],
+            'A sales order sync is already running. Wait for it to finish or stop it first.',
+        );
+
+        $lookbackDays = max(1, min(180, $lookbackDays));
+        $maxOrders = max(50, min(10000, $maxOrders));
+
+        $run = $this->createSyncRun([
+            'sync_type' => 'sales_order_prune_missing',
+            'cron_run_log_id' => $cronRunLogId,
+            'started_at' => now(),
+            'status' => 'running',
+            'record_count' => 0,
+            'success_count' => 0,
+            'failed_count' => 0,
+            'trigger_type' => $triggerType,
+            'triggered_by_user_id' => $triggeredByUserId,
+            'filters' => ['lookback_days' => $lookbackDays, 'max_orders' => $maxOrders],
+        ]);
+
+        try {
+            $localOrders = AcumaticaSalesOrder::query()
+                ->where('order_type', 'SO')
+                ->where('order_date', '>=', now()->subDays($lookbackDays))
+                ->orderByDesc('order_date')
+                ->limit($maxOrders)
+                ->get(['id', 'acumatica_order_nbr', 'status']);
+
+            $checked = $localOrders->count();
+            $deletedCount = 0;
+            $deletedSamples = [];
+            $sourceLookups = 0;
+
+            foreach ($localOrders->chunk(100) as $chunk) {
+                $this->touchSyncRun($run);
+
+                $sourceOrders = $this->client->fetchSalesOrdersByNumbers(
+                    $chunk->pluck('acumatica_order_nbr')->all(),
+                    fn () => $this->touchSyncRun($run),
+                );
+                $sourceLookups++;
+
+                $sourceByOrderNbr = collect($sourceOrders)
+                    ->filter(fn (mixed $raw) => is_array($raw))
+                    ->mapWithKeys(function (array $raw) {
+                        $orderNbr = $this->str($raw['OrderNbr'] ?? null);
+
+                        return $orderNbr ? [$orderNbr => $raw] : [];
+                    });
+
+                foreach ($chunk as $localOrder) {
+                    $this->touchSyncRun($run);
+                    if ($sourceByOrderNbr->has($localOrder->acumatica_order_nbr)) {
+                        continue;
+                    }
+
+                    $this->purgeLocalSalesOrder($localOrder, $run->id, 'missing_from_acumatica_prune');
+                    $deletedCount++;
+                    if (count($deletedSamples) < 30) {
+                        $deletedSamples[] = $localOrder->acumatica_order_nbr;
+                    }
+                }
+            }
+
+            $run->update([
+                'ended_at' => now(),
+                'heartbeat_at' => now(),
+                'status' => 'completed',
+                'record_count' => $checked,
+                'success_count' => $checked - $deletedCount,
+                'failed_count' => 0,
+                'filters' => array_merge($run->filters ?? [], [
+                    'orders_checked' => $checked,
+                    'orders_deleted_missing_from_acumatica' => $deletedCount,
+                    'sample_deleted_orders' => $deletedSamples,
+                    'source_lookups' => $sourceLookups,
+                ]),
+            ]);
+
+            StructuredLogger::write('info', 'acumatica', 'sales_order_prune_missing_completed', [
+                'sync_run_id' => $run->id,
+                'checked' => $checked,
+                'deleted' => $deletedCount,
+                'sample_deleted_orders' => $deletedSamples,
+            ]);
+        } catch (AcumaticaSyncStoppedException $e) {
+            $run = $this->stopSyncRun($run, $e->getMessage());
+        } catch (Throwable $e) {
+            $run->update([
+                'ended_at' => now(),
+                'heartbeat_at' => now(),
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+            ]);
+
+            StructuredLogger::write('error', 'acumatica', 'sales_order_prune_missing_failed', [
+                'sync_run_id' => $run->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $run->fresh();
+    }
+
     public function syncStatusUpdatesForDateRange(
         string $dateFrom,
         string $dateTo,
@@ -257,7 +393,7 @@ class AcumaticaSalesOrderSyncService
         ?int $cronRunLogId = null,
     ): AcumaticaSyncLog {
         $this->assertNoActiveSync(
-            ['sales_orders', 'customer_orders', 'credit_notes_and_more', 'sales_order_status_updates'],
+            ['sales_orders', 'customer_orders', 'credit_notes_and_more', 'sales_order_status_updates', 'sales_order_prune_missing'],
             'A sales order sync is already running. Wait for it to finish or stop it first.',
         );
 
@@ -303,6 +439,8 @@ class AcumaticaSalesOrderSyncService
 
             $sourceLookups = 0;
             $statusUpdates = 0;
+            $deletedCount = 0;
+            $deletedSamples = [];
             $comparisonCount = $localOrders->count();
 
             foreach ($localOrders->chunk(100) as $chunk) {
@@ -325,6 +463,11 @@ class AcumaticaSalesOrderSyncService
                     $this->touchSyncRun($run);
                     $raw = $sourceByOrderNbr->get($localOrder->acumatica_order_nbr);
                     if (! is_array($raw)) {
+                        $this->purgeLocalSalesOrder($localOrder, $run->id, 'missing_from_acumatica_status_sync');
+                        $deletedCount++;
+                        if (count($deletedSamples) < 20) {
+                            $deletedSamples[] = $localOrder->acumatica_order_nbr;
+                        }
                         continue;
                     }
 
@@ -343,11 +486,13 @@ class AcumaticaSalesOrderSyncService
                 'heartbeat_at' => now(),
                 'status' => 'completed',
                 'record_count' => $comparisonCount,
-                'success_count' => $comparisonCount - $statusUpdates,
+                'success_count' => max(0, $comparisonCount - $statusUpdates - $deletedCount),
                 'failed_count' => 0,
                 'filters' => array_merge($run->filters ?? [], $this->reasonValidationSummary, [
                     'status_comparison_count' => $comparisonCount,
                     'status_updates' => $statusUpdates,
+                    'orders_deleted_missing_from_acumatica' => $deletedCount,
+                    'sample_deleted_orders' => $deletedSamples,
                     'source_lookups' => $sourceLookups,
                 ]),
             ]);
@@ -402,9 +547,15 @@ class AcumaticaSalesOrderSyncService
             }
 
             $run = $this->processOrders($orders, $run);
+            // Customer SO pull is SO-only from Acumatica — purge local SO rows for those
+            // customers that are no longer present after the recheck.
             $run = $this->reconcileStatuses(
                 $run,
-                fn (Builder $query) => $query->whereIn('customer_acumatica_id', $customerAcumaticaIds),
+                fn (Builder $query) => $query
+                    ->where('order_type', 'SO')
+                    ->whereIn('customer_acumatica_id', $customerAcumaticaIds),
+                $this->orderNumbersFromPayload($orders),
+                'missing_from_acumatica_customer_order_sync',
             );
         } catch (AcumaticaSyncStoppedException $e) {
             $run = $this->stopSyncRun($run, $e->getMessage());
@@ -503,16 +654,83 @@ class AcumaticaSalesOrderSyncService
         return $run;
     }
 
-    private function reconcileStatuses(AcumaticaSyncLog $run, callable $scope): AcumaticaSyncLog
-    {
+    /**
+     * Recheck local orders against Acumatica and:
+     * 1) delete local rows that no longer exist (missing from payload and/or number lookup)
+     * 2) refresh status for remaining rows
+     *
+     * Used by automated cron and manual admin sync after every import.
+     *
+     * @param  list<string>|null  $presentOrderNbrs  Order numbers returned by the current Acumatica fetch
+     *                                                (complete set for the sync scope when provided)
+     */
+    private function reconcileStatuses(
+        AcumaticaSyncLog $run,
+        callable $scope,
+        ?array $presentOrderNbrs = null,
+        string $deleteReason = 'missing_from_acumatica_reconcile',
+    ): AcumaticaSyncLog {
         $localOrders = AcumaticaSalesOrder::query()
             ->tap($scope)
-            ->get(['acumatica_order_nbr', 'status']);
+            ->get(['id', 'acumatica_order_nbr', 'status']);
 
         if ($localOrders->isEmpty()) {
-            return $run;
+            $run->update([
+                'filters' => array_merge($run->filters ?? [], $this->reasonValidationSummary, [
+                    'status_comparison_count' => 0,
+                    'status_updates' => 0,
+                    'orders_deleted_missing_from_acumatica' => 0,
+                    'sample_deleted_orders' => [],
+                ]),
+            ]);
+
+            return $run->fresh();
         }
 
+        $statusUpdates = 0;
+        $deletedCount = 0;
+        $deletedSamples = [];
+        $presentSet = null;
+
+        // Phase 1 — when the current sync payload is a complete scope snapshot, purge
+        // local orders that Acumatica no longer returned (no extra API call needed).
+        if ($presentOrderNbrs !== null) {
+            $presentSet = array_fill_keys($presentOrderNbrs, true);
+            foreach ($localOrders as $localOrder) {
+                $this->touchSyncRun($run);
+                $nbr = (string) $localOrder->acumatica_order_nbr;
+                if ($nbr === '' || isset($presentSet[$nbr])) {
+                    continue;
+                }
+
+                $this->purgeLocalSalesOrder($localOrder, $run->id, $deleteReason);
+                $deletedCount++;
+                if (count($deletedSamples) < 20) {
+                    $deletedSamples[] = $nbr;
+                }
+            }
+
+            // Reload survivors for status recheck.
+            $localOrders = AcumaticaSalesOrder::query()
+                ->tap($scope)
+                ->get(['id', 'acumatica_order_nbr', 'status']);
+        }
+
+        if ($localOrders->isEmpty()) {
+            $run->update([
+                'filters' => array_merge($run->filters ?? [], $this->reasonValidationSummary, [
+                    'status_comparison_count' => 0,
+                    'status_updates' => 0,
+                    'orders_deleted_missing_from_acumatica' => $deletedCount,
+                    'sample_deleted_orders' => $deletedSamples,
+                ]),
+            ]);
+
+            return $run->fresh();
+        }
+
+        // Phase 2 — recheck remaining orders by number (catches deletes missed by payload
+        // scope + refreshes status for workflow progression).
         $sourceOrders = $this->client->fetchSalesOrdersByNumbers(
             $localOrders->pluck('acumatica_order_nbr')->all(),
             fn () => $this->touchSyncRun($run),
@@ -526,13 +744,16 @@ class AcumaticaSalesOrderSyncService
                 return $orderNbr ? [$orderNbr => $raw] : [];
             });
 
-        $statusUpdates = 0;
-
         foreach ($localOrders as $localOrder) {
             $this->touchSyncRun($run);
 
             $sourceOrder = $sourceByOrderNbr->get($localOrder->acumatica_order_nbr);
             if (! is_array($sourceOrder)) {
+                $this->purgeLocalSalesOrder($localOrder, $run->id, $deleteReason.'_recheck');
+                $deletedCount++;
+                if (count($deletedSamples) < 20) {
+                    $deletedSamples[] = $localOrder->acumatica_order_nbr;
+                }
                 continue;
             }
 
@@ -550,10 +771,69 @@ class AcumaticaSalesOrderSyncService
             'filters' => array_merge($run->filters ?? [], $this->reasonValidationSummary, [
                 'status_comparison_count' => $localOrders->count(),
                 'status_updates'          => $statusUpdates,
+                'orders_deleted_missing_from_acumatica' => $deletedCount,
+                'sample_deleted_orders' => $deletedSamples,
             ]),
         ]);
 
+        StructuredLogger::write('info', 'acumatica', 'sales_order_reconcile_completed', [
+            'sync_run_id' => $run->id,
+            'compared' => $localOrders->count(),
+            'status_updates' => $statusUpdates,
+            'deleted' => $deletedCount,
+            'sample_deleted_orders' => $deletedSamples,
+            'delete_reason' => $deleteReason,
+        ]);
+
         return $run->fresh();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $orders
+     * @return list<string>
+     */
+    private function orderNumbersFromPayload(array $orders): array
+    {
+        $nbrs = [];
+        foreach ($orders as $raw) {
+            if (! is_array($raw)) {
+                continue;
+            }
+            $nbr = $this->str($raw['OrderNbr'] ?? null);
+            if ($nbr !== null && $nbr !== '') {
+                $nbrs[$nbr] = true;
+            }
+        }
+
+        return array_keys($nbrs);
+    }
+
+    /**
+     * Remove a local SO that no longer exists in Acumatica, plus dependent ops rows.
+     */
+    private function purgeLocalSalesOrder(AcumaticaSalesOrder $order, ?int $runId, string $reason): void
+    {
+        $orderNbr = (string) $order->acumatica_order_nbr;
+        $orderId = (int) $order->id;
+
+        DB::transaction(function () use ($order, $orderNbr, $orderId): void {
+            AcumaticaBackorderLine::query()->where('order_nbr', $orderNbr)->delete();
+            AcumaticaFillRateSnapshot::query()
+                ->where('order_nbr', $orderNbr)
+                ->orWhere('sales_order_id', $orderId)
+                ->delete();
+
+            // Lines cascade via FK; emails.matched_order_id is nullOnDelete.
+            AcumaticaSalesOrderLine::query()->where('sales_order_id', $orderId)->delete();
+            $order->delete();
+        });
+
+        StructuredLogger::write('info', 'acumatica', 'sales_order_deleted_missing_from_acumatica', [
+            'sync_run_id' => $runId,
+            'order_nbr' => $orderNbr,
+            'order_id' => $orderId,
+            'reason' => $reason,
+        ]);
     }
 
     private function updateOrderStatusOnly(AcumaticaSalesOrder $order, array $raw, int $runId): void
@@ -585,8 +865,9 @@ class AcumaticaSalesOrderSyncService
         $rejectionReasonCode = $this->extractRejectionReasonCode($raw, $status);
         $rejectionReason = $this->extractRejectionReason($raw, $status);
         $holdReason = $this->extractOnHoldReason($raw, $status);
+        $workflow = $this->resolveWorkflowReason($raw, $status, $rejectionReasonCode, $rejectionReason, $holdReason);
 
-        $this->recordRejectionReasonValidation($order->acumatica_order_nbr, $status, $rejectionReasonCode, $rejectionReason);
+        $this->recordRejectionReasonValidation($order->acumatica_order_nbr, $status, $workflow['sub_reason_code'] ?? $rejectionReasonCode, $rejectionReason);
 
         $updates = [
             'status' => $status,
@@ -611,6 +892,8 @@ class AcumaticaSalesOrderSyncService
             $updates['on_hold_reason'] = $holdReason;
         }
 
+        $updates = array_merge($updates, $this->workflowReasonAttributes($workflow));
+
         $order->update($updates);
     }
 
@@ -627,6 +910,7 @@ class AcumaticaSalesOrderSyncService
         $rejectionReasonCode = $this->extractRejectionReasonCode($raw, $status);
         $rejectionReason = $this->extractRejectionReason($raw, $status);
         $holdReason = $this->extractOnHoldReason($raw, $status);
+        $workflow = $this->resolveWorkflowReason($raw, $status, $rejectionReasonCode, $rejectionReason, $holdReason);
 
         $approvedAt = $this->datetime(
             $raw['ApprovedDateTime'] ??
@@ -674,9 +958,11 @@ class AcumaticaSalesOrderSyncService
             'raw_payload'            => $raw,
         ];
 
-        $this->recordRejectionReasonValidation($orderNbr, $status, $rejectionReasonCode, $rejectionReason);
+        $this->recordRejectionReasonValidation($orderNbr, $status, $workflow['sub_reason_code'] ?? $rejectionReasonCode, $rejectionReason);
 
-        if ($rejectionReasonCode !== null) {
+        if ($workflow['sub_reason_code'] !== null) {
+            $orderData['rejection_reason_code'] = $workflow['sub_reason_code'];
+        } elseif ($rejectionReasonCode !== null) {
             $orderData['rejection_reason_code'] = $rejectionReasonCode;
         }
 
@@ -687,6 +973,8 @@ class AcumaticaSalesOrderSyncService
         if ($holdReason !== null) {
             $orderData['on_hold_reason'] = $holdReason;
         }
+
+        $orderData = array_merge($orderData, $this->workflowReasonAttributes($workflow));
 
         $order = AcumaticaSalesOrder::updateOrCreate(
             ['acumatica_order_nbr' => $orderNbr],
@@ -804,6 +1092,16 @@ class AcumaticaSalesOrderSyncService
             return null;
         }
 
+        $fromRejectedReasons = $this->firstRejectedReasonFromPayload($raw);
+        if ($fromRejectedReasons !== null) {
+            return $fromRejectedReasons;
+        }
+
+        $fromLines = $this->firstLineReasonFromPayload($raw);
+        if ($fromLines !== null) {
+            return $fromLines;
+        }
+
         return $this->firstWorkflowReason($raw, [
             'RejectionReasonCode',
             'RejectReasonCode',
@@ -812,6 +1110,108 @@ class AcumaticaSalesOrderSyncService
             'ReasonID',
             'ReasonCD',
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $raw
+     * @return array{parent_reason_code: ?string, sub_reason_code: ?string, workflow_reason_label: ?string, issue: string}
+     */
+    private function resolveWorkflowReason(
+        array $raw,
+        ?string $status,
+        ?string $rejectionReasonCode,
+        ?string $rejectionReason,
+        ?string $holdReason,
+    ): array {
+        $parent = $this->reasonCatalog->parentForStatus($status);
+        if ($parent === null) {
+            return [
+                'parent_reason_code' => null,
+                'sub_reason_code' => null,
+                'workflow_reason_label' => null,
+                'issue' => SalesOrderReasonCatalog::ISSUE_MISSING,
+            ];
+        }
+
+        $rawReason = $rejectionReasonCode
+            ?? $this->firstRejectedReasonFromPayload($raw)
+            ?? $this->firstLineReasonFromPayload($raw)
+            ?? $holdReason
+            ?? $rejectionReason;
+
+        $classified = $this->reasonCatalog->classify($parent, $rawReason);
+
+        return [
+            'parent_reason_code' => $classified['parent_reason_code'],
+            'sub_reason_code' => $classified['sub_reason_code'],
+            'workflow_reason_label' => $classified['hierarchical_label'],
+            'issue' => $classified['issue'],
+        ];
+    }
+
+    /**
+     * @param  array{parent_reason_code: ?string, sub_reason_code: ?string, workflow_reason_label: ?string}  $workflow
+     * @return array<string, ?string>
+     */
+    private function workflowReasonAttributes(array $workflow): array
+    {
+        if ($workflow['parent_reason_code'] === null) {
+            return [
+                'workflow_parent_reason' => null,
+                'workflow_sub_reason_code' => null,
+                'workflow_reason_label' => null,
+            ];
+        }
+
+        return [
+            'workflow_parent_reason' => $workflow['parent_reason_code'],
+            'workflow_sub_reason_code' => $workflow['sub_reason_code'],
+            'workflow_reason_label' => $workflow['workflow_reason_label'],
+        ];
+    }
+
+    /** @param  array<string, mixed>  $raw */
+    private function firstRejectedReasonFromPayload(array $raw): ?string
+    {
+        $rejected = $raw['RejectedReasons'] ?? null;
+        if (! is_array($rejected) || $rejected === []) {
+            return null;
+        }
+
+        foreach ($rejected as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+            foreach (['ReasonCode', 'ReasonID', 'Reason', 'Description'] as $field) {
+                $value = $this->str($entry[$field] ?? null);
+                if ($value !== null && trim($value) !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** @param  array<string, mixed>  $raw */
+    private function firstLineReasonFromPayload(array $raw): ?string
+    {
+        $details = $raw['Details'] ?? null;
+        if (! is_array($details)) {
+            return null;
+        }
+
+        foreach ($details as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+            $value = $this->str($line['ReasonCode'] ?? null);
+            if ($value !== null && trim($value) !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /** @param  array<string, mixed>  $raw */

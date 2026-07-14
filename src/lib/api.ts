@@ -72,11 +72,24 @@ export function getApiErrorSummary(): Record<string, number> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Join base + path without doubling `/api` when base already ends with it. */
+function resolveApiUrl(path: string): string {
+  let clean = path.replace(/^\/+/, "");
+  // Callers sometimes pass "api/..." while VITE_API_BASE_URL is already ".../api"
+  if (API_BASE_URL.endsWith("/api") && (clean === "api" || clean.startsWith("api/"))) {
+    clean = clean.replace(/^api\/?/, "");
+  }
+  if (!clean) {
+    return API_BASE_URL;
+  }
+  return `${API_BASE_URL}/${clean}`;
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   { body, token, headers, timeoutMs = 120_000, ...rest }: RequestOptions = {},
 ): Promise<T> {
-  const url = `${API_BASE_URL}/${path.replace(/^\/+/, "")}`;
+  const url = resolveApiUrl(path);
   const method = (rest.method ?? "GET").toUpperCase();
 
   // Auto-attach stored token when caller does not supply one explicitly
@@ -166,7 +179,7 @@ export async function downloadApiFile(
   filename: string,
   { token, timeoutMs = 120_000 }: { token?: string | null; timeoutMs?: number } = {},
 ): Promise<void> {
-  const url = `${API_BASE_URL}/${path.replace(/^\/+/, "")}`;
+  const url = resolveApiUrl(path);
   const resolvedToken =
     token !== undefined
       ? token

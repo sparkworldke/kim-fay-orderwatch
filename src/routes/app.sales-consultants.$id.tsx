@@ -1,5 +1,5 @@
 import { Link, createFileRoute, useParams } from "@tanstack/react-router";
-import { CustomerLink } from "@/components/entity-links";
+import { CustomerLink, DateWithActions } from "@/components/entity-links";
 import {
   ArrowDown,
   ArrowLeft,
@@ -8,18 +8,11 @@ import {
   BriefcaseBusiness,
   Calendar,
   DollarSign,
+  Search,
   UserCheck,
   Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import {
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type ColumnDef,
-  type SortingState,
-} from "@tanstack/react-table";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,9 +30,18 @@ import {
 import {
   useConsultantCustomers,
   useConsultantDetail,
-  type ConsultantCustomerRow,
+  type SalesConsultantProfile,
+  type ConsultantCustomerFilters,
 } from "@/hooks/useSalesConsultants";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { useSalesManagementPrompts } from "@/hooks/useSalesManagement";
 import { ApiError } from "@/lib/api";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  promptSeverityClass,
+  SALES_PROMPT_TYPE_LABEL,
+  shortDate,
+} from "@/lib/sales-management";
 
 export const Route = createFileRoute("/app/sales-consultants/$id")({
   head: () => ({ meta: [{ title: "Sales Consultant — Kim-Fay OrderWatch" }] }),
@@ -57,12 +59,27 @@ function startOfMonth() {
 
 function SalesConsultantDetailPage() {
   const { id } = useParams({ from: "/app/sales-consultants/$id" });
-  const consultantId = Number(id);
+  const consultantIdentifier = id.trim();
   const [dateFrom, setDateFrom] = useState(startOfMonth);
   const [dateTo, setDateTo] = useState(today);
-  const [sorting, setSorting] = useState<SortingState>([{ id: "total_order_value", desc: true }]);
+  // Customer table state — search (debounced), sorting (server-side), pagination
+  const [searchInput, setSearchInput] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
+  const [sort, setSort] = useState("total_order_value");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const filters = useMemo(
+  // Debounce the search input (350ms) to avoid excessive API calls
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setSearchDebounced(searchInput.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  const dateFilters = useMemo(
     () => ({
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
@@ -70,98 +87,56 @@ function SalesConsultantDetailPage() {
     [dateFrom, dateTo],
   );
 
-  const detail = useConsultantDetail(consultantId, filters);
-  const customers = useConsultantCustomers(consultantId, filters);
+  const customerFilters = useMemo<ConsultantCustomerFilters>(
+    () => ({
+      ...dateFilters,
+      q: searchDebounced || undefined,
+      page,
+      per_page: perPage,
+      sort,
+      sort_dir: sortDir,
+    }),
+    [dateFilters, searchDebounced, page, perPage, sort, sortDir],
+  );
+
+  const detail = useConsultantDetail(consultantIdentifier, dateFilters);
+  const customers = useConsultantCustomers(consultantIdentifier, customerFilters);
+  const capabilities = useCapabilities();
+  const canViewSalesPrompts = capabilities.permissions.includes("sales.management.view");
   const consultant = detail.data?.consultant;
   const summary = detail.data?.summary ?? customers.data?.summary;
   const rows = customers.data?.customers ?? [];
+  const pagination = customers.data?.pagination;
 
-  const columns = useMemo<ColumnDef<ConsultantCustomerRow>[]>(
-    () => [
-      {
-        id: "customer_name",
-        accessorFn: (row) => row.customer_name ?? row.customer_id,
-        header: "Customer",
-        cell: ({ row }) => (
-          <div>
-            <CustomerLink
-              customerId={row.original.customer_id}
-              className="font-medium"
-            >
-              {row.original.customer_name ?? "-"}
-            </CustomerLink>
-            <div className="text-xs text-muted-foreground">
-              {row.original.customer_id}
-              {row.original.customer_class ? ` · ${row.original.customer_class}` : ""}
-            </div>
-          </div>
-        ),
-      },
-      {
-        accessorKey: "order_count",
-        header: "Orders",
-        cell: ({ getValue }) => (
-          <span className="tabular-nums">{Number(getValue()).toLocaleString("en-KE")}</span>
-        ),
-      },
-      {
-        accessorKey: "orders_per_month",
-        header: "Frequency",
-        cell: ({ row }) => (
-          <span className="tabular-nums text-muted-foreground">
-            {formatFrequency(row.original.orders_per_month, row.original.order_count)}
-          </span>
-        ),
-        sortingFn: (a, b) =>
-          (a.original.orders_per_month ?? a.original.order_count) -
-          (b.original.orders_per_month ?? b.original.order_count),
-      },
-      {
-        accessorKey: "active_orders",
-        header: "Active",
-        cell: ({ getValue }) => (
-          <span className="tabular-nums">{Number(getValue()).toLocaleString("en-KE")}</span>
-        ),
-      },
-      {
-        accessorKey: "completed_orders",
-        header: "Completed",
-        cell: ({ getValue }) => (
-          <span className="tabular-nums">{Number(getValue()).toLocaleString("en-KE")}</span>
-        ),
-      },
-      {
-        accessorKey: "total_order_value",
-        header: "Sales",
-        cell: ({ getValue }) => (
-          <span className="tabular-nums">{formatMoney(Number(getValue()))}</span>
-        ),
-      },
-      {
-        accessorKey: "last_order_date",
-        header: "Last Order",
-        cell: ({ getValue }) => formatDate(getValue() as string | null),
-        sortingFn: (a, b) =>
-          dateSortValue(a.original.last_order_date) - dateSortValue(b.original.last_order_date),
-      },
-    ],
-    [],
-  );
+  // Column definitions are used for header click-to-sort (server-side).
+  // The actual sort is driven by `sort` / `sortDir` state, not client-side table sorting.
+  const sortableColumns: { key: string; label: string; align?: "right" }[] = [
+    { key: "customer_name", label: "Customer" },
+    { key: "order_count", label: "Orders", align: "right" },
+    { key: "orders_per_month", label: "Frequency", align: "right" },
+    { key: "active_orders", label: "Active", align: "right" },
+    { key: "completed_orders", label: "Completed", align: "right" },
+    { key: "total_order_value", label: "Sales", align: "right" },
+    { key: "fill_rate_pct", label: "Fill Rate", align: "right" },
+    { key: "revenue_lost", label: "Rev. Lost", align: "right" },
+    { key: "last_order_date", label: "Last Order", align: "right" },
+  ];
 
-  const table = useReactTable({
-    data: rows,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
+  function handleSort(columnKey: string) {
+    if (sort === columnKey) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSort(columnKey);
+      setSortDir("desc");
+    }
+    setPage(1);
+  }
 
-  if (!Number.isFinite(consultantId) || consultantId <= 0) {
+  if (!consultantIdentifier) {
     return (
       <div className="flex flex-col gap-4 p-6">
         <BackLink />
-        <ErrorBlock message="Invalid consultant id." />
+        <ErrorBlock message="Invalid consultant identifier." />
       </div>
     );
   }
@@ -277,9 +252,20 @@ function SalesConsultantDetailPage() {
         />
       </div>
 
+      {consultant && canViewSalesPrompts && <ConsultantPromptPanel consultant={consultant} />}
+
       <Card className="rounded-lg shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Customers &amp; order activity</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+          <CardTitle className="text-base">Customers & order activity</CardTitle>
+          <div className="relative w-full max-w-xs">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search customers…"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              className="pl-9"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {customers.isLoading ? (
@@ -291,50 +277,97 @@ function SalesConsultantDetailPage() {
             />
           ) : rows.length === 0 ? (
             <div className="rounded border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-              No customers found for this consultant in the selected date range.
+              {searchDebounced
+                ? "No customers match your search."
+                : "No customers found for this consultant in the selected date range."}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {sortableColumns.map((col) => (
                       <TableHead
-                        key={header.id}
-                        className={header.column.id !== "customer_name" ? "text-right" : undefined}
+                        key={col.key}
+                        className={col.align === "right" ? "text-right" : undefined}
                       >
-                        {header.isPlaceholder ? null : (
-                          <button
-                            type="button"
-                            className={`inline-flex items-center gap-1 ${header.column.id !== "customer_name" ? "ml-auto" : ""}`}
-                            onClick={header.column.getToggleSortingHandler()}
-                          >
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                            {header.column.getIsSorted() === "asc" && <ArrowUp className="h-3 w-3" />}
-                            {header.column.getIsSorted() === "desc" && <ArrowDown className="h-3 w-3" />}
-                            {!header.column.getIsSorted() && <ArrowUpDown className="h-3 w-3 opacity-40" />}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          className={`inline-flex items-center gap-1 ${col.align === "right" ? "ml-auto" : ""}`}
+                          onClick={() => handleSort(col.key)}
+                        >
+                          {col.label}
+                          {sort === col.key && sortDir === "asc" && <ArrowUp className="h-3 w-3" />}
+                          {sort === col.key && sortDir === "desc" && <ArrowDown className="h-3 w-3" />}
+                          {sort !== col.key && <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                        </button>
                       </TableHead>
                     ))}
                   </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.original.customer_id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell
-                        key={cell.id}
-                        className={cell.column.id !== "customer_name" ? "text-right" : undefined}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={row.customer_id}>
+                      <TableCell>
+                        <div>
+                          <CustomerLink
+                            customerId={row.customer_id}
+                            className="font-medium"
+                          >
+                            {row.customer_name ?? "-"}
+                          </CustomerLink>
+                          <div className="text-xs text-muted-foreground">
+                            {row.customer_id}
+                            {row.customer_class ? ` · ${row.customer_class}` : ""}
+                          </div>
+                        </div>
                       </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <TableCell className="text-right tabular-nums">
+                        {row.order_count.toLocaleString("en-KE")}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {formatFrequency(row.orders_per_month, row.order_count)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.active_orders.toLocaleString("en-KE")}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.completed_orders.toLocaleString("en-KE")}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMoney(row.total_order_value)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.fill_rate_pct != null ? formatPercent(row.fill_rate_pct) : "-"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.revenue_lost != null && row.revenue_lost > 0
+                          ? formatMoney(row.revenue_lost)
+                          : "-"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <DateWithActions value={row.last_order_date} emptyText="-" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {pagination && (
+                <div className="mt-4">
+                  <PaginationControls
+                    currentPage={pagination.current_page}
+                    lastPage={pagination.last_page}
+                    total={pagination.total}
+                    perPage={pagination.per_page}
+                    onPageChange={setPage}
+                    onPerPageChange={(size) => {
+                      setPerPage(size);
+                      setPage(1);
+                    }}
+                  />
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -350,6 +383,78 @@ function BackLink() {
         Sales Consultants
       </Link>
     </Button>
+  );
+}
+
+function ConsultantPromptPanel({ consultant }: { consultant: SalesConsultantProfile }) {
+  const prompts = useSalesManagementPrompts({
+    consultant_user_id: consultant.id,
+    view: "due",
+    per_page: 5,
+  });
+  const rows = prompts.data?.data ?? [];
+  const total = prompts.data?.total ?? 0;
+  const overdue = rows.filter((prompt) => prompt.severity === "overdue").length;
+
+  return (
+    <Card className="rounded-lg shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+        <div>
+          <CardTitle className="text-base">Sales management prompts</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            {total.toLocaleString("en-KE")} due prompt{total === 1 ? "" : "s"}
+            {overdue > 0 ? `, ${overdue.toLocaleString("en-KE")} overdue in preview` : ""}
+          </p>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/app/sales-management">View all</Link>
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {prompts.isLoading ? (
+          <SkeletonRows />
+        ) : prompts.isError ? (
+          <ErrorBlock
+            message={prompts.error instanceof Error ? prompts.error.message : "Unable to load prompts."}
+            onRetry={() => prompts.refetch()}
+          />
+        ) : rows.length === 0 ? (
+          <div className="rounded border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+            No due sales management prompts for this consultant.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Prompt</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead className="text-right">Due</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((prompt) => (
+                  <TableRow key={prompt.id}>
+                    <TableCell>
+                      <Badge variant="outline" className={promptSeverityClass(prompt.severity)}>
+                        {prompt.severity}
+                      </Badge>
+                      <div className="mt-1 font-medium">{SALES_PROMPT_TYPE_LABEL[prompt.prompt_type]}</div>
+                      <div className="max-w-xl text-xs text-muted-foreground">{prompt.reason}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{prompt.customer_name ?? prompt.customer_acumatica_id}</div>
+                      <div className="font-mono text-[11px] text-muted-foreground">{prompt.customer_acumatica_id}</div>
+                    </TableCell>
+                    <TableCell className="text-right text-xs">{shortDate(prompt.due_date)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -419,10 +524,9 @@ function formatDate(value: string | null | undefined) {
   return date.toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" });
 }
 
-function dateSortValue(value: string | null) {
-  if (!value) return 0;
-  const time = new Date(value).getTime();
-  return Number.isNaN(time) ? 0 : time;
+function formatPercent(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return `${value.toFixed(1)}%`;
 }
 
 function formatFrequency(ordersPerMonth: number | null, orderCount: number) {

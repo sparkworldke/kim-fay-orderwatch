@@ -204,3 +204,31 @@ export function formatCost(value: number | null | undefined): string {
   });
   return `KES ${formatted}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Brand / Sub Trading Group display formatter
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Formats a two-line display for Brand and Sub Trading Group.
+ *
+ * Line 1: Brand name (bold)
+ * Line 2: "- [Sub Trading Group]" (muted)
+ *
+ * If Brand is null/empty, only the Sub Trading Group line is shown (or "—"
+ * if both are missing).
+ *
+ * @returns An object with `brandLine` and `subGroupLine` for rendering.
+ */
+export function formatBrandDisplay(
+  brand: string | null | undefined,
+  subTradingGroup: string | null | undefined,
+): { brandLine: string | null; subGroupLine: string | null } {
+  const brandLine = brand && brand.trim() !== "" ? brand.trim() : null;
+  const subGroupLine =
+    subTradingGroup && subTradingGroup.trim() !== ""
+      ? `- ${subTradingGroup.trim()}`
+      : null;
+
+  return { brandLine, subGroupLine };
+}

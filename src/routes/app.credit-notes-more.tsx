@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { CustomerLink, OrderLink } from "@/components/entity-links";
 import { FileText, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -279,11 +280,22 @@ function CreditNotesMorePage() {
             <tbody>
               {items.map((order) => (
                 <tr key={order.id} className="border-b last:border-0">
-                  <td className="px-3 py-2 font-mono text-xs">{order.acumatica_order_nbr}</td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    <OrderLink
+                      customerId={order.customer_acumatica_id}
+                      orderId={order.acumatica_order_nbr}
+                    />
+                  </td>
                   <td className="px-3 py-2">
                     <Badge variant={typeBadgeVariant(order.order_type)}>{order.order_type}</Badge>
                   </td>
-                  <td className="px-3 py-2">{order.customer_name ?? order.customer_acumatica_id ?? "—"}</td>
+                  <td className="px-3 py-2">
+                    <CustomerLink
+                      customerId={order.customer_acumatica_id}
+                      customerName={order.customer_name}
+                      showId
+                    />
+                  </td>
                   <td className="px-3 py-2">{order.status ?? "—"}</td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {order.order_date ? new Date(order.order_date).toLocaleDateString("en-KE") : "—"}

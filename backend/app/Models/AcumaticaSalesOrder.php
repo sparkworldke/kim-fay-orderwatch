@@ -26,15 +26,41 @@ class AcumaticaSalesOrder extends Model
         self::TYPE_PICK_LIST,
     ];
 
+    /** @deprecated Use SalesOrderReasonCatalog::SUB_REASONS for the approved taxonomy. */
     public const REJECTION_REASON_CODES = [
-        'out_of_stock',
-        'customer_request',
-        'invalid_payment',
-        'address_error',
-        'pricing_dispute',
-        'credit_limit',
-        'duplicate_order',
-        'fraud_screen',
+        'out_of_stock_procurement',
+        'out_of_stock_production',
+        'delay_in_delivery',
+        'promo_product',
+        'transfer_delays',
+        'short_expiry',
+        'out_of_stock_msa',
+        'raw_material_stockout',
+        'discontinued',
+        'pb_discontinued',
+        'delayed_communication',
+        'truck_full',
+        'price_difference',
+        'invoicing_error',
+        'stock_variance',
+        'isolation_error',
+        'non_focus',
+        'wrong_moq',
+        'order_to_make',
+        'kebs_stickers',
+        'wrong_product_description',
+        'system_error',
+        'conversion_delays',
+        'wrong_code',
+        'price_variance',
+        'delayed_supplier_payment',
+        'lpo_error',
+        'batch_sequence',
+        'conversion_issues',
+        'price_overcharge',
+        'npd',
+        'did_not_pick_on_shipment',
+        'production_stockout',
     ];
 
     /** @var list<string> */
@@ -56,6 +82,7 @@ class AcumaticaSalesOrder extends Model
         'currency_id',
         'sales_consultant_rep_code',
         'sales_consultant_name',
+        'consultant_user_id',
         'import_source',
         'sync_run_id',
         'raw_payload',
@@ -69,6 +96,9 @@ class AcumaticaSalesOrder extends Model
         'rejection_reason',
         'rejection_reason_code',
         'on_hold_reason',
+        'workflow_parent_reason',
+        'workflow_sub_reason_code',
+        'workflow_reason_label',
         'email_subject',
         'email_received_at',
     ];
@@ -123,6 +153,11 @@ class AcumaticaSalesOrder extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(AcumaticaCustomer::class, 'customer_acumatica_id', 'acumatica_id');
+    }
+
+    public function consultantUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'consultant_user_id');
     }
 
     public function matchedEmails(): HasMany

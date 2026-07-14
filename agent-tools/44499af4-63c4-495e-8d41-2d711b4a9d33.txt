@@ -1,0 +1,280 @@
+
+   PASS  Tests\Unit\FillRateCalculatorTest
+  ✓ computes line level rollup from qty on shipments                                                                                       0.01s  
+  ✓ returns na for on hold
+  ✓ skips zero quantity lines
+  ✓ uses qty at approval as denominator
+  ✓ returns na when all lines have zero approval qty
+  ✓ counts out of stock lines when qty on shipments is zero
+  ✓ threshold status boundaries
+  ✓ rolls up duplicate inventory ids before computing fill rate
+
+   PASS  Tests\Unit\FrontendUrlTest
+  ✓ base returns configured frontend url without trailing slash                                                                            0.44s  
+  ✓ path builds absolute frontend urls                                                                                                     0.02s  
+  ✓ path appends query parameters for frontend routes                                                                                      0.03s  
+  ✓ base falls back to services frontend url when app value is blank                                                                       0.03s  
+﻿﻿﻿﻿
+   FAIL  Tests\Feature\AcumaticaOperationsSyncTest
+  ✓ inventory sync upserts and logs run rate                                                                                               1.42s  
+  ✓ inventory sync skips inactive items without counting as failed                                                                         0.67s  
+  ✓ backorder sync upserts by order and inventory                                                                                          0.08s  
+  ✓ fill rate sync computes snapshot from qty on shipments                                                                                 0.06s  
+  ✓ fill rate sync marks out of stock lines and guardrails                                                                                 0.05s  
+  ✓ operations endpoints require auth                                                                                                      0.24s  
+  ✓ operations status returns last sync timestamps                                                                                         0.20s  
+  ⨯ business optimization returns insight sections                                                                                         0.13s  
+  ✓ operations inventory list returns synced items                                                                                         0.12s  
+  ✓ backorders list enriches product and customer names                                                                                    0.10s  
+  ✓ inventory stocks only updates existing items                                                                                           0.74s  
+  ✓ inventory sync ignores stale running lock and stops when requested                                                                     0.07s  
+  ✓ backorder sync imports reason codes and notes from acumatica                                                                           0.08s  
+  ⨯ backorders analytics and reason updates support operational workflows                                                                  0.09s  
+  ✓ fill rate list enriches customer and product names                                                                                     0.11s  
+
+   PASS  Tests\Feature\AcumaticaSalesOrderSyncTest
+  ✓ sales order sync upserts order lines and customer po                                                                                   0.15s  
+  ✓ sales order sync imports rejection and on hold reasons                                                                                 0.17s  
+  ✓ sales order sync tracks missing rejection reason codes in validation summary                                                           0.23s  
+  ✓ sales order sync reconciles mismatched local statuses                                                                                  0.29s  
+
+   PASS  Tests\Feature\CronEngineTest
+  ✓ disabled job creates visible skipped run                                                                                               0.41s  
+  ✓ overlapping job creates visible skipped run                                                                                            0.10s  
+  ✓ successful pipeline correlates mailbox and match logs                                                                                  0.13s  
+  ✓ acumatica failure with successful matching is partial                                                                                  0.10s  
+  ✓ cron api is admin only and never exposes secrets                                                                                       0.12s  
+
+   PASS  Tests\Feature\DailyReportFixedScheduleTest
+  ✓ daily report is scheduled for 730 tuesday through saturday                                                                             0.11s  
+
+   PASS  Tests\Feature\EmailImportConfigControllerTest
+  ✓ exact branch sender requires dual admin approval                                                                                       0.14s  
+  ✓ unsafe regex patterns are rejected                                                                                                     0.08s  
+  ✓ metrics endpoint reports import health                                                                                                 0.16s  
+
+   FAIL  Tests\Feature\OrderControllerTest
+  ⨯ rejected orders require a reason code                                                                                                  0.09s  
+  ⨯ rejected orders can store reason code and notes                                                                                        0.09s  
+
+   PASS  Tests\Feature\RbacAccessTest
+  ✓ customer service can access mail and admin non sensitive modules                                                                       0.13s  
+  ✓ customer service cannot access acumatica or ai keys or roles modules                                                                   0.10s  
+  ✓ non admin non customer service is view only and has modules hidden                                                                     0.10s  
+
+   PASS  Tests\Feature\SyncMonitorAlertsCommandTest
+  ✓ sync monitor sends alert on successful sync and guardrail failure                                                                      0.16s  
+
+   PASS  Tests\Feature\TeamMemberAccountTest
+  ✓ admin can create team member and send welcome email                                                                                    0.21s  
+  ✓ non admin cannot create team member                                                                                                    0.28s  
+  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Feature\AcumaticaOperationsSyncTest > business optimization returns insight sections                                             
+  Expected response status code [200] but received 500.
+Failed asserting that 500 is identical to 200.
+
+The following exception occurred during the last request:
+
+PDOException: SQLSTATE[HY000]: General error: 1 no such function: GREATEST in C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Connection.php:421
+Stack trace:
+#0 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Connection.php(421): PDO->prepare('select COALESCE...')
+#1 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Connection.php(832): Illuminate\Database\Connection->Illuminate\Database\{closure}('select COALESCE...', Array)
+#2 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Connection.php(799): Illuminate\Database\Connection->runQueryCallback('select COALESCE...', Array, Object(Closure))
+#3 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Connection.php(412): Illuminate\Database\Connection->run('select COALESCE...', Array, Object(Closure))
+#4 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Query\Builder.php(3573): Illuminate\Database\Connection->select('select COALESCE...', Array, true, Array)
+#5 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Query\Builder.php(3557): Illuminate\Database\Query\Builder->runSelect()
+#6 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Eloquent\Builder.php(908): Illuminate\Database\Query\Builder->get(Array)
+#7 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Eloquent\Builder.php(890): Illuminate\Database\Eloquent\Builder->getModels(Array)
+#8 C:\laragon\www\kim-fay-orderwatch\backend\app\Services\Operations\BusinessOptimizationService.php(303): Illuminate\Database\Eloquent\Builder->get()
+#9 C:\laragon\www\kim-fay-orderwatch\backend\app\Services\Operations\BusinessOptimizationService.php(75): App\Services\Operations\BusinessOptimizationService->fillRateUnfilledReasons('2026-06-01', '2026-06-26')
+#10 C:\laragon\www\kim-fay-orderwatch\backend\app\Http\Controllers\Api\OperationsController.php(40): App\Services\Operations\BusinessOptimizationService->dashboard('2026-06-01', '2026-06-26')
+#11 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\ControllerDispatcher.php(46): App\Http\Controllers\Api\OperationsController->businessOptimization(Object(Illuminate\Http\Request))
+#12 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Route.php(275): Illuminate\Routing\ControllerDispatcher->dispatch(Object(Illuminate\Routing\Route), Object(App\Http\Controllers\Api\OperationsController), 'businessOptimiz...')
+#13 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Route.php(215): Illuminate\Routing\Route->runController()
+#14 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(822): Illuminate\Routing\Route->run()
+#15 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(180): Illuminate\Routing\Router->Illuminate\Routing\{closure}(Object(Illuminate\Http\Request))
+#16 C:\laragon\www\kim-fay-orderwatch\backend\app\Http\Middleware\ViewOnlyUnlessPrivileged.php(32): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#17 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): App\Http\Middleware\ViewOnlyUnlessPrivileged->handle(Object(Illuminate\Http\Request), Object(Closure))
+#18 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Middleware\SubstituteBindings.php(52): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#19 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Routing\Middleware\SubstituteBindings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#20 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Auth\Middleware\Authenticate.php(63): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#21 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Auth\Middleware\Authenticate->handle(Object(Illuminate\Http\Request), Object(Closure), 'sanctum')
+#22 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(137): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#23 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(821): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#24 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(800): Illuminate\Routing\Router->runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#25 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(764): Illuminate\Routing\Router->runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#26 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(753): Illuminate\Routing\Router->dispatchToRoute(Object(Illuminate\Http\Request))
+#27 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Kernel.php(200): Illuminate\Routing\Router->dispatch(Object(Illuminate\Http\Request))
+#28 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(180): Illuminate\Foundation\Http\Kernel->Illuminate\Foundation\Http\{closure}(Object(Illuminate\Http\Request))
+#29 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#30 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#31 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull->handle(Object(Illuminate\Http\Request), Object(Closure))
+#32 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#33 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#34 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Foundation\Http\Middleware\TrimStrings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#35 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Http\Middleware\ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#36 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Http\Middleware\ValidatePostSize->handle(Object(Illuminate\Http\Request), Object(Closure))
+#37 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance.php(109): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#38 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance->handle(Object(Illuminate\Http\Request), Object(Closure))
+#39 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Http\Middleware\HandleCors.php(74): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#40 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Http\Middleware\HandleCors->handle(Object(Illuminate\Http\Request), Object(Closure))
+#41 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Http\Middleware\TrustProxies.php(58): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#42 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Http\Middleware\TrustProxies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#43 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#44 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks->handle(Object(Illuminate\Http\Request), Object(Closure))
+#45 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Http\Middleware\ValidatePathEncoding.php(28): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#46 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Http\Middleware\ValidatePathEncoding->handle(Object(Illuminate\Http\Request), Object(Closure))
+#47 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(137): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#48 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Kernel.php(175): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#49 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Kernel.php(144): Illuminate\Foundation\Http\Kernel->sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#50 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Testing\Concerns\MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel->handle(Object(Illuminate\Http\Request))
+#51 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Testing\Concerns\MakesHttpRequests.php(573): Illuminate\Foundation\Testing\TestCase->call('GET', '/api/operations...', Array, Array, Array, Array, '[]')
+#52 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Testing\Concerns\MakesHttpRequests.php(381): Illuminate\Foundation\Testing\TestCase->json('GET', '/api/operations...', Array, Array, 0)
+#53 C:\laragon\www\kim-fay-orderwatch\backend\tests\Feature\AcumaticaOperationsSyncTest.php(309): Illuminate\Foundation\Testing\TestCase->getJson('/api/operations...')
+#54 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestCase.php(1318): Tests\Feature\AcumaticaOperationsSyncTest->test_business_optimization_returns_insight_sections()
+#55 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestCase.php(1355): PHPUnit\Framework\TestCase->invokeTestMethod('test_business_o...', Array)
+#56 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestCase.php(521): PHPUnit\Framework\TestCase->runTest()
+#57 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestRunner\TestRunner.php(99): PHPUnit\Framework\TestCase->runBare()
+#58 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestCase.php(361): PHPUnit\Framework\TestRunner->run(Object(Tests\Feature\AcumaticaOperationsSyncTest))
+#59 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestSuite.php(374): PHPUnit\Framework\TestCase->run()
+#60 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestSuite.php(374): PHPUnit\Framework\TestSuite->run()
+#61 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestSuite.php(374): PHPUnit\Framework\TestSuite->run()
+#62 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\TextUI\TestRunner.php(64): PHPUnit\Framework\TestSuite->run()
+#63 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\TextUI\Application.php(229): PHPUnit\TextUI\TestRunner->run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#64 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\phpunit(104): PHPUnit\TextUI\Application->run(Array)
+#65 {main}
+
+Next Illuminate\Database\QueryException: SQLSTATE[HY000]: General error: 1 no such function: GREATEST (Connection: sqlite, Database: :memory:, SQL: select COALESCE(acumatica_sales_order_lines.unfilled_reason_code, 'inventory_shortage') as reason_code, COUNT(*) as line_count, SUM(GREATEST(acumatica_sales_order_lines.qty_at_approval, acumatica_sales_order_lines.order_qty)) as total_demand_qty, SUM(GREATEST(acumatica_sales_order_lines.qty_at_approval, acumatica_sales_order_lines.order_qty) * acumatica_sales_order_lines.unit_price) as revenue_at_risk from "acumatica_sales_order_lines" inner join "acumatica_sales_orders" on "acumatica_sales_orders"."id" = "acumatica_sales_order_lines"."sales_order_id" where "acumatica_sales_order_lines"."qty_on_shipments" <= 0 and ("acumatica_sales_order_lines"."qty_at_approval" > 0 or "acumatica_sales_order_lines"."order_qty" > 0) and "acumatica_sales_orders"."order_date" between 2026-06-01 and 2026-06-26 group by "reason_code" order by "revenue_at_risk" desc) in C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Connection.php:843
+Stack trace:
+#0 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Connection.php(799): Illuminate\Database\Connection->runQueryCallback('select COALESCE...', Array, Object(Closure))
+#1 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Connection.php(412): Illuminate\Database\Connection->run('select COALESCE...', Array, Object(Closure))
+#2 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Query\Builder.php(3573): Illuminate\Database\Connection->select('select COALESCE...', Array, true, Array)
+#3 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Query\Builder.php(3557): Illuminate\Database\Query\Builder->runSelect()
+#4 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Eloquent\Builder.php(908): Illuminate\Database\Query\Builder->get(Array)
+#5 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Database\Eloquent\Builder.php(890): Illuminate\Database\Eloquent\Builder->getModels(Array)
+#6 C:\laragon\www\kim-fay-orderwatch\backend\app\Services\Operations\BusinessOptimizationService.php(303): Illuminate\Database\Eloquent\Builder->get()
+#7 C:\laragon\www\kim-fay-orderwatch\backend\app\Services\Operations\BusinessOptimizationService.php(75): App\Services\Operations\BusinessOptimizationService->fillRateUnfilledReasons('2026-06-01', '2026-06-26')
+#8 C:\laragon\www\kim-fay-orderwatch\backend\app\Http\Controllers\Api\OperationsController.php(40): App\Services\Operations\BusinessOptimizationService->dashboard('2026-06-01', '2026-06-26')
+#9 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\ControllerDispatcher.php(46): App\Http\Controllers\Api\OperationsController->businessOptimization(Object(Illuminate\Http\Request))
+#10 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Route.php(275): Illuminate\Routing\ControllerDispatcher->dispatch(Object(Illuminate\Routing\Route), Object(App\Http\Controllers\Api\OperationsController), 'businessOptimiz...')
+#11 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Route.php(215): Illuminate\Routing\Route->runController()
+#12 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(822): Illuminate\Routing\Route->run()
+#13 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(180): Illuminate\Routing\Router->Illuminate\Routing\{closure}(Object(Illuminate\Http\Request))
+#14 C:\laragon\www\kim-fay-orderwatch\backend\app\Http\Middleware\ViewOnlyUnlessPrivileged.php(32): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#15 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): App\Http\Middleware\ViewOnlyUnlessPrivileged->handle(Object(Illuminate\Http\Request), Object(Closure))
+#16 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Middleware\SubstituteBindings.php(52): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#17 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Routing\Middleware\SubstituteBindings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#18 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Auth\Middleware\Authenticate.php(63): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#19 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Auth\Middleware\Authenticate->handle(Object(Illuminate\Http\Request), Object(Closure), 'sanctum')
+#20 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(137): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#21 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(821): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#22 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(800): Illuminate\Routing\Router->runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#23 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(764): Illuminate\Routing\Router->runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#24 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(753): Illuminate\Routing\Router->dispatchToRoute(Object(Illuminate\Http\Request))
+#25 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Kernel.php(200): Illuminate\Routing\Router->dispatch(Object(Illuminate\Http\Request))
+#26 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(180): Illuminate\Foundation\Http\Kernel->Illuminate\Foundation\Http\{closure}(Object(Illuminate\Http\Request))
+#27 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#28 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#29 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull->handle(Object(Illuminate\Http\Request), Object(Closure))
+#30 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\TransformsRequest.php(21): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#31 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest->handle(Object(Illuminate\Http\Request), Object(Closure))
+#32 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Foundation\Http\Middleware\TrimStrings->handle(Object(Illuminate\Http\Request), Object(Closure))
+#33 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Http\Middleware\ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#34 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Http\Middleware\ValidatePostSize->handle(Object(Illuminate\Http\Request), Object(Closure))
+#35 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance.php(109): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#36 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance->handle(Object(Illuminate\Http\Request), Object(Closure))
+#37 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Http\Middleware\HandleCors.php(74): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#38 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Http\Middleware\HandleCors->handle(Object(Illuminate\Http\Request), Object(Closure))
+#39 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Http\Middleware\TrustProxies.php(58): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#40 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Http\Middleware\TrustProxies->handle(Object(Illuminate\Http\Request), Object(Closure))
+#41 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#42 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks->handle(Object(Illuminate\Http\Request), Object(Closure))
+#43 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Http\Middleware\ValidatePathEncoding.php(28): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#44 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(219): Illuminate\Http\Middleware\ValidatePathEncoding->handle(Object(Illuminate\Http\Request), Object(Closure))
+#45 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Pipeline\Pipeline.php(137): Illuminate\Pipeline\Pipeline->Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#46 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Kernel.php(175): Illuminate\Pipeline\Pipeline->then(Object(Closure))
+#47 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Http\Kernel.php(144): Illuminate\Foundation\Http\Kernel->sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#48 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Testing\Concerns\MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel->handle(Object(Illuminate\Http\Request))
+#49 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Testing\Concerns\MakesHttpRequests.php(573): Illuminate\Foundation\Testing\TestCase->call('GET', '/api/operations...', Array, Array, Array, Array, '[]')
+#50 C:\laragon\www\kim-fay-orderwatch\backend\vendor\laravel\framework\src\Illuminate\Foundation\Testing\Concerns\MakesHttpRequests.php(381): Illuminate\Foundation\Testing\TestCase->json('GET', '/api/operations...', Array, Array, 0)
+#51 C:\laragon\www\kim-fay-orderwatch\backend\tests\Feature\AcumaticaOperationsSyncTest.php(309): Illuminate\Foundation\Testing\TestCase->getJson('/api/operations...')
+#52 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestCase.php(1318): Tests\Feature\AcumaticaOperationsSyncTest->test_business_optimization_returns_insight_sections()
+#53 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestCase.php(1355): PHPUnit\Framework\TestCase->invokeTestMethod('test_business_o...', Array)
+#54 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestCase.php(521): PHPUnit\Framework\TestCase->runTest()
+#55 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestRunner\TestRunner.php(99): PHPUnit\Framework\TestCase->runBare()
+#56 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestCase.php(361): PHPUnit\Framework\TestRunner->run(Object(Tests\Feature\AcumaticaOperationsSyncTest))
+#57 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestSuite.php(374): PHPUnit\Framework\TestCase->run()
+#58 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestSuite.php(374): PHPUnit\Framework\TestSuite->run()
+#59 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\Framework\TestSuite.php(374): PHPUnit\Framework\TestSuite->run()
+#60 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\TextUI\TestRunner.php(64): PHPUnit\Framework\TestSuite->run()
+#61 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\src\TextUI\Application.php(229): PHPUnit\TextUI\TestRunner->run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#62 C:\laragon\www\kim-fay-orderwatch\backend\vendor\phpunit\phpunit\phpunit(104): PHPUnit\TextUI\Application->run(Array)
+#63 {main}
+
+----------------------------------------------------------------------------------
+
+SQLSTATE[HY000]: General error: 1 no such function: GREATEST (Connection: sqlite, Database: :memory:, SQL: select COALESCE(acumatica_sales_order_lines.unfilled_reason_code, 'inventory_shortage') as reason_code, COUNT(*) as line_count, SUM(GREATEST(acumatica_sales_order_lines.qty_at_approval, acumatica_sales_order_lines.order_qty)) as total_demand_qty, SUM(GREATEST(acumatica_sales_order_lines.qty_at_approval, acumatica_sales_order_lines.order_qty) * acumatica_sales_order_lines.unit_price) as revenue_at_risk from "acumatica_sales_order_lines" inner join "acumatica_sales_orders" on "acumatica_sales_orders"."id" = "acumatica_sales_order_lines"."sales_order_id" where "acumatica_sales_order_lines"."qty_on_shipments" <= 0 and ("acumatica_sales_order_lines"."qty_at_approval" > 0 or "acumatica_sales_order_lines"."order_qty" > 0) and "acumatica_sales_orders"."order_date" between 2026-06-01 and 2026-06-26 group by "reason_code" order by "revenue_at_risk" desc)
+
+  at tests\Feature\AcumaticaOperationsSyncTest.php:310
+    306▕         $to   = now()->toDateString();
+    307▕ 
+    308▕         $this->actingAs($user)
+    309▕             ->getJson("/api/operations/business-optimization?date_from={$from}&date_to={$to}")
+  ➜ 310▕             ->assertOk()
+    311▕             ->assertJsonStructure([
+    312▕                 'customer_focus',
+    313▕                 'product_focus',
+    314▕                 'production_forecast',
+
+  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Feature\AcumaticaOperationsSyncTest > backorders analytics and reason updates support operational workflows                      
+  Expected response status code [200] but received 403.
+Failed asserting that 403 is identical to 200.
+
+  at tests\Feature\AcumaticaOperationsSyncTest.php:560
+    556▕             ->patchJson('/api/operations/backorders/'.$line->id, [
+    557▕                 'reason_code' => 'logistics_disruption',
+    558▕                 'reason_notes' => 'Cross-dock delay at the main warehouse.',
+    559▕             ])
+  ➜ 560▕             ->assertOk()
+    561▕             ->assertJsonPath('reason_code', 'logistics_disruption')
+    562▕             ->assertJsonPath('reason_notes', 'Cross-dock delay at the main warehouse.');
+    563▕ 
+    564▕         $this->assertDatabaseHas('acumatica_backorder_lines', [
+
+  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Feature\OrderControllerTest > rejected orders require a reason code                                                              
+  Expected response status code [422] but received 403.
+Failed asserting that 403 is identical to 422.
+
+  at tests\Feature\OrderControllerTest.php:32
+     28▕         $this->actingAs($user)
+     29▕             ->patchJson('/api/orders/'.$order->id, [
+     30▕                 'status' => 'Rejected',
+     31▕             ])
+  ➜  32▕             ->assertUnprocessable()
+     33▕             ->assertJsonValidationErrors(['rejection_reason_code']);
+     34▕     }
+     35▕ 
+     36▕     public function test_rejected_orders_can_store_reason_code_and_notes(): void
+
+  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Feature\OrderControllerTest > rejected orders can store reason code and notes                                                    
+  Expected response status code [200] but received 403.
+Failed asserting that 403 is identical to 200.
+
+  at tests\Feature\OrderControllerTest.php:56
+     52▕                 'status' => 'Rejected',
+     53▕                 'rejection_reason_code' => 'out_of_stock',
+     54▕                 'rejection_reason' => 'Customer requested immediate delivery but stock is unavailable.',
+     55▕             ])
+  ➜  56▕             ->assertOk()
+     57▕             ->assertJsonPath('status', 'Rejected')
+     58▕             ->assertJsonPath('rejection_reason_code', 'out_of_stock')
+     59▕             ->assertJsonPath('rejection_reason', 'Customer requested immediate delivery but stock is unavailable.');
+     60▕ 
+
+
+  Tests:    4 failed, 44 passed (199 assertions)
+  Duration: 8.83s
+

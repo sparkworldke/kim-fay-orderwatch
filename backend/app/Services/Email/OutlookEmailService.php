@@ -123,17 +123,18 @@ class OutlookEmailService implements EmailProviderInterface
         ?string $syncTo = null,
     ): int {
         $accessToken = $this->getValidAccessToken($account);
-        if (! $account->folders()->exists()) $this->discoverFolders($account, $accessToken);
-        $senderConfigs = EmailImportConfig::where('is_active', true)->get();
-        $activeRules = $emailFilterId ? EmailFilter::whereKey($emailFilterId)->get() : collect();
+        if (! $account->folders()->exists()) {
+            $this->discoverFolders($account, $accessToken);
+        }
         $folders = $account->folders()->where('is_active', true)->where('is_sync_enabled', true)
             ->orderBy('sync_priority')->orderBy('display_name')->get();
         $count = 0;
         $successes = 0;
+        $manualRange = $syncFrom !== null && $syncFrom !== '' && $syncTo !== null && $syncTo !== '';
 
-        if ($syncFrom && $syncTo) {
-            $from = \Carbon\Carbon::parse($syncFrom)->startOfDay();
-            $to = \Carbon\Carbon::parse($syncTo)->endOfDay();
+        if ($manualRange) {
+            $from = Carbon::parse($syncFrom)->startOfDay();
+            $to = Carbon::parse($syncTo)->endOfDay();
 
             foreach ($folders as $folder) {
                 try {
@@ -150,10 +151,54 @@ class OutlookEmailService implements EmailProviderInterface
                 }
             }
         } else {
+            // Scheduled / automatic sync: same calendar day only.
+            // Resume from last successful check within that day (never re-scan full history
+            // or even the full day when a later watermark exists).
+            $dayLogged = false;
             foreach ($folders as $folder) {
                 try {
-                    $count += $this->syncFolder($account, $folder, $accessToken, $senderConfigs, $activeRules, $syncLog);
+                    $window = $this->sameDaySyncWindow($folder->last_synced_at);
+                    if (! $dayLogged && $syncLog) {
+                        $syncLog->update([
+                            'sync_from' => $window['day'],
+                            'sync_to' => $window['day'],
+                        ]);
+                        $dayLogged = true;
+                    }
+
+                    Log::channel('mailbox_sync')->info('scheduled_same_day_window', [
+                        'sync_run_id' => $syncLog?->id,
+                        'mailbox_id' => $account->id,
+                        'folder_id' => $folder->id,
+                        'folder' => $folder->display_name,
+                        'day' => $window['day'],
+                        'from' => $window['from']->toIso8601String(),
+                        'to' => $window['to']->toIso8601String(),
+                        'last_check_at' => $window['last_check_at'],
+                        'resumed_from_watermark' => $window['resumed_from_watermark'],
+                    ]);
+
+                    $result = $this->syncFolderDateRange(
+                        $account,
+                        $folder,
+                        $window['from'],
+                        $window['to'],
+                        $syncLog,
+                    );
+                    $count += $result['fetched'];
                     $successes++;
+
+                    Log::channel('mailbox_sync')->info('scheduled_same_day_check_complete', [
+                        'sync_run_id' => $syncLog?->id,
+                        'mailbox_id' => $account->id,
+                        'folder_id' => $folder->id,
+                        'folder' => $folder->display_name,
+                        'day' => $window['day'],
+                        'emails_fetched' => $result['fetched'],
+                        'emails_created' => $result['created'],
+                        'emails_updated' => $result['updated'],
+                        'last_check_at' => now()->toIso8601String(),
+                    ]);
                 } catch (Throwable $exception) {
                     $folder->update(['last_sync_error' => mb_substr($exception->getMessage(), 0, 2000)]);
                     $this->recordDatabaseOutcome($syncLog, null, 'failed', 'folder_sync_failed', 1, 0, $exception->getMessage(), $folder);
@@ -165,9 +210,57 @@ class OutlookEmailService implements EmailProviderInterface
             }
         }
 
-        if ($folders->isNotEmpty() && $successes === 0) throw new RuntimeException('Every enabled mailbox folder failed to sync.');
+        if ($folders->isNotEmpty() && $successes === 0) {
+            throw new RuntimeException('Every enabled mailbox folder failed to sync.');
+        }
         $account->update(['last_synced_at' => now(), 'status' => 'connected']);
+
         return $count;
+    }
+
+    /**
+     * Build the incremental sync window for a scheduled run.
+     *
+     * Guardrails:
+     * - Only the current calendar day (app/cron timezone) is eligible.
+     * - If last_check is still on that day, resume from it (with a small overlap).
+     * - Never falls back to mailbox history or "created" timestamps.
+     *
+     * @return array{
+     *   from: Carbon,
+     *   to: Carbon,
+     *   day: string,
+     *   last_check_at: ?string,
+     *   resumed_from_watermark: bool
+     * }
+     */
+    public function sameDaySyncWindow(?Carbon $lastCheckAt = null, ?Carbon $now = null): array
+    {
+        $tz = (string) config('cron.timezone', config('app.timezone', 'Africa/Nairobi'));
+        $now = ($now ?? Carbon::now($tz))->copy()->timezone($tz);
+        $dayStart = $now->copy()->startOfDay();
+        $from = $dayStart->copy();
+        $resumed = false;
+
+        if ($lastCheckAt !== null) {
+            $last = $lastCheckAt->copy()->timezone($tz);
+            if ($last->isSameDay($now) && $last->greaterThan($dayStart)) {
+                // Small overlap so messages arriving at the watermark boundary are not missed.
+                $from = $last->copy()->subMinutes(2);
+                if ($from->lessThan($dayStart)) {
+                    $from = $dayStart->copy();
+                }
+                $resumed = true;
+            }
+        }
+
+        return [
+            'from' => $from,
+            'to' => $now->copy(),
+            'day' => $dayStart->toDateString(),
+            'last_check_at' => $lastCheckAt?->copy()->timezone($tz)->toIso8601String(),
+            'resumed_from_watermark' => $resumed,
+        ];
     }
 
     /**

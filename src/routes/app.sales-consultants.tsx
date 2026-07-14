@@ -1,8 +1,8 @@
 import { ConsultantLink, DateLink } from "@/components/entity-links";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
-import { BriefcaseBusiness, Download, Eye, UserCheck, Users } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { BriefcaseBusiness, Download, Eye, Search, UserCheck, Users } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MaskedKES } from "@/components/MaskedCurrency";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -32,7 +33,8 @@ type SalesConsultant = {
   name: string;
   email: string;
   role: string;
-  rep_code: string;
+  rep_code: string | null;
+  employee_number: string | null;
   is_active: boolean;
   assigned_orders: number;
   active_orders: number;
@@ -70,10 +72,13 @@ type ConsultantImportResult = {
   }>;
 };
 
-function useSalesConsultants() {
+function useSalesConsultants(search: string) {
   return useQuery({
-    queryKey: ["operations", "sales-consultants"],
-    queryFn: () => apiFetch<SalesConsultantsResponse>("operations/sales-consultants"),
+    queryKey: ["operations", "sales-consultants", { q: search }],
+    queryFn: () => {
+      const qs = search.trim() ? `?q=${encodeURIComponent(search.trim())}` : "";
+      return apiFetch<SalesConsultantsResponse>(`operations/sales-consultants${qs}`);
+    },
   });
 }
 
@@ -88,9 +93,28 @@ function SalesConsultantsPage() {
 
 function SalesConsultantsIndex() {
   const { session } = useAuth();
-  const { data, isLoading, error } = useSalesConsultants();
+  const [searchInput, setSearchInput] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchDebounced(searchInput), 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const { data, isLoading, error } = useSalesConsultants(searchDebounced);
   const items = data?.items ?? [];
-  const totals = items.reduce(
+  const filteredItems = useMemo(() => {
+    const q = searchDebounced.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (item) =>
+        item.name.toLowerCase().includes(q) ||
+        (item.rep_code ?? "").toLowerCase().includes(q) ||
+        (item.employee_number ?? "").toLowerCase().includes(q),
+    );
+  }, [items, searchDebounced]);
+  const displayItems = searchDebounced.trim() ? filteredItems : items;
+  const totals = displayItems.reduce(
     (acc, item) => ({
       assignedOrders: acc.assignedOrders + item.assigned_orders,
       activeOrders: acc.activeOrders + item.active_orders,
@@ -127,19 +151,31 @@ function SalesConsultantsIndex() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label={ownProfile ? "Profiles shown" : "Consultants"} value={items.length} loading={isLoading} icon={Users} />
+        <MetricCard label={ownProfile ? "Profiles shown" : "Consultants"} value={displayItems.length} loading={isLoading} icon={Users} />
         <MetricCard label="Assigned orders" value={totals.assignedOrders} loading={isLoading} icon={BriefcaseBusiness} />
         <MetricCard label="Active orders" value={totals.activeOrders} loading={isLoading} icon={UserCheck} />
-        <MetricCard label="Assigned revenue" value={formatMoney(totals.assignedRevenue)} loading={isLoading} text />
+        <MetricCard label="Assigned revenue" value={<MaskedKES value={totals.assignedRevenue} />} loading={isLoading} text />
       </div>
 
       {canImport && <ConsultantImportPanel />}
 
       <Card className="rounded-lg shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">
-            {ownProfile ? "Profile" : "Consultant Directory"}
-          </CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-base">
+              {ownProfile ? "Profile" : "Consultant Directory"}
+            </CardTitle>
+            <div className="relative w-full max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search name, rep code, or employee number..."
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -148,9 +184,9 @@ function SalesConsultantsIndex() {
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
             </div>
-          ) : items.length === 0 ? (
+          ) : displayItems.length === 0 ? (
             <div className="rounded border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-              {data?.message ?? "No sales consultant profiles found."}
+              {searchDebounced.trim() ? "No consultants match your search." : (data?.message ?? "No sales consultant profiles found.")}
             </div>
           ) : (
             <Table>
@@ -158,6 +194,7 @@ function SalesConsultantsIndex() {
                 <TableRow>
                   <TableHead>Consultant</TableHead>
                   <TableHead>Rep Code</TableHead>
+                  <TableHead>Emp. No.</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Assigned</TableHead>
                   <TableHead className="text-right">Active</TableHead>
@@ -168,15 +205,26 @@ function SalesConsultantsIndex() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item) => (
-                  <TableRow key={`${item.id}-${item.rep_code}`}>
+                {displayItems.map((item) => (
+                  <TableRow key={`${item.id}-${item.rep_code ?? "no-rep"}`}>
                     <TableCell>
                       <ConsultantLink consultantId={String(item.id)} repCode={item.rep_code} consultantName={item.name} className="font-medium">
                         <div className="font-medium">{item.name}</div>
                       </ConsultantLink>
                       <div className="text-xs text-muted-foreground">{item.email}</div>
                     </TableCell>
-                    <TableCell className="font-mono">{item.rep_code}</TableCell>
+                    <TableCell className="font-mono">
+                      <ConsultantLink consultantId={String(item.id)} repCode={item.rep_code} />
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {item.employee_number ? (
+                        <ConsultantLink consultantId={String(item.id)} repCode={item.rep_code}>
+                          {item.employee_number}
+                        </ConsultantLink>
+                      ) : (
+                        "-"
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={item.is_active ? "default" : "secondary"}>
                         {item.is_active ? "Active" : "Inactive"}
@@ -185,7 +233,7 @@ function SalesConsultantsIndex() {
                     <TableCell className="text-right tabular-nums">{item.assigned_orders.toLocaleString("en-KE")}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.active_orders.toLocaleString("en-KE")}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.completed_orders.toLocaleString("en-KE")}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatMoney(item.assigned_revenue)}</TableCell>
+                    <TableCell className="text-right tabular-nums"><MaskedKES value={item.assigned_revenue} /></TableCell>
                     <TableCell>
                       <DateLink value={item.last_order_date} emptyText="-">{formatDate(item.last_order_date)}</DateLink>
                     </TableCell>
@@ -194,7 +242,7 @@ function SalesConsultantsIndex() {
                         <Button asChild variant="ghost" size="sm">
                           <Link
                             to="/app/sales-consultants/$id"
-                            params={{ id: String(item.id) }}
+                            params={{ id: item.rep_code ?? String(item.id) }}
                           >
                             <Eye className="mr-1.5 h-3.5 w-3.5" />
                             View
@@ -344,7 +392,7 @@ function MetricCard({
   text = false,
 }: {
   label: string;
-  value: number | string;
+  value: number | string | ReactNode;
   loading: boolean;
   icon?: typeof Users;
   text?: boolean;

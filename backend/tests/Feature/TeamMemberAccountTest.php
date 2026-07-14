@@ -76,8 +76,19 @@ class TeamMemberAccountTest extends TestCase
         $this->assertSame(0, $otpRecord->resend_attempts);
         $this->assertDatabaseMissing('otps', ['otp_hash' => self::KNOWN_OTP]);
 
-        Mail::assertSent(TeamMemberAccountMail::class, function (TeamMemberAccountMail $mail) {
+        Mail::assertSent(TeamMemberAccountMail::class, function (TeamMemberAccountMail $mail) use ($createdUser) {
             $html = $mail->render();
+
+            // Extract the suggested password from the mail HTML (courier block after recommended option).
+            preg_match(
+                '/Option 1 \(recommended\): Sign in with password.*?font-family:\'Courier New\'[^>]*>([^<]+)</s',
+                $html,
+                $passwordMatch,
+            );
+            $suggestedPassword = trim($passwordMatch[1] ?? '');
+
+            $passwordWorks = $suggestedPassword !== ''
+                && Hash::check($suggestedPassword, (string) $createdUser->fresh()->password);
 
             return $mail->hasTo('agent@kimfay.test')
                 && str_contains($html, 'https://orderwatch.test/app')
@@ -85,9 +96,13 @@ class TeamMemberAccountTest extends TestCase
                 && ! str_contains($html, 'https://orderwatch.test/login')
                 && str_contains($html, 'Customer Service Agent')
                 && str_contains($html, self::KNOWN_OTP)
-                && str_contains($html, 'expires in <strong>15 minutes</strong>')
-                && str_contains($html, 'Option 1: Sign in now with this one-time password')
-                && str_contains($html, 'Option 2: Set up a permanent password')
+                && str_contains($html, 'Option 1 (recommended): Sign in with password')
+                && str_contains($html, 'Option 2: Sign in with one-time code (OTP)')
+                && str_contains($html, 'Verification dates')
+                && str_contains($html, 'Account verified:')
+                && str_contains($html, 'OTP valid until:')
+                && str_contains($html, 'EAT')
+                && $passwordWorks
                 && ! str_contains($html, 'api.orderwatch.test');
         });
 
@@ -110,6 +125,158 @@ class TeamMemberAccountTest extends TestCase
             'otp' => self::KNOWN_OTP,
             'login_mode' => 'otp-only',
         ])->assertStatus(422);
+    }
+
+    public function test_admin_can_resend_welcome_email_with_new_password_and_otp(): void
+    {
+        Mail::fake();
+        config([
+            'app.url' => 'https://api.orderwatch.test',
+            'app.frontend_url' => 'https://orderwatch.test',
+        ]);
+
+        $admin = User::factory()->create([
+            'role' => 'Administrator',
+            'is_super_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $member = User::factory()->create([
+            'name' => 'Existing Agent',
+            'email' => 'existing.agent@kimfay.test',
+            'role' => 'Customer Service Agent',
+            'password' => Hash::make('OldPassword123'),
+            'email_verified_at' => now()->subDay(),
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/admin/users/{$member->id}/resend-welcome")
+            ->assertOk()
+            ->assertJsonPath('message', 'Welcome email sent successfully with a new temporary password.');
+
+        $otpRecord = Otp::where('email', 'existing.agent@kimfay.test')->where('purpose', 'login')->first();
+        $this->assertNotNull($otpRecord);
+        $this->assertTrue(Hash::check(self::KNOWN_OTP, $otpRecord->otp_hash));
+
+        Mail::assertSent(TeamMemberAccountMail::class, function (TeamMemberAccountMail $mail) use ($member) {
+            $html = $mail->render();
+
+            preg_match(
+                '/Option 1 \(recommended\): Sign in with password.*?font-family:\'Courier New\'[^>]*>([^<]+)</s',
+                $html,
+                $passwordMatch,
+            );
+            $suggestedPassword = trim($passwordMatch[1] ?? '');
+
+            return $mail->hasTo('existing.agent@kimfay.test')
+                && str_contains($html, 'resent your OrderWatch sign-in details')
+                && str_contains($html, self::KNOWN_OTP)
+                && str_contains($html, 'Verification dates')
+                && $suggestedPassword !== ''
+                && Hash::check($suggestedPassword, (string) $member->fresh()->password)
+                && ! Hash::check('OldPassword123', (string) $member->fresh()->password);
+        });
+    }
+
+    public function test_admin_can_update_password_auto_generate_and_email(): void
+    {
+        Mail::fake();
+
+        $admin = User::factory()->create([
+            'role' => 'Administrator',
+            'is_super_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $member = User::factory()->create([
+            'name' => 'Password Target',
+            'email' => 'password.target@kimfay.test',
+            'role' => 'Customer Service Agent',
+            'password' => Hash::make('OldPassword123'),
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/admin/users/{$member->id}/password", [
+                'auto_generate' => true,
+                'email_user' => true,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('auto_generate', true)
+            ->assertJsonPath('emailed', true)
+            ->assertJsonStructure(['message', 'password']);
+
+        $generated = $response->json('password');
+        $this->assertIsString($generated);
+        $this->assertGreaterThanOrEqual(8, strlen($generated));
+        $this->assertTrue(Hash::check($generated, (string) $member->fresh()->password));
+        $this->assertFalse(Hash::check('OldPassword123', (string) $member->fresh()->password));
+
+        Mail::assertSent(TeamMemberAccountMail::class, function (TeamMemberAccountMail $mail) use ($generated) {
+            $html = $mail->render();
+
+            return $mail->hasTo('password.target@kimfay.test')
+                && str_contains($html, $generated)
+                && str_contains($html, self::KNOWN_OTP);
+        });
+    }
+
+    public function test_admin_can_update_password_manual_without_email(): void
+    {
+        Mail::fake();
+
+        $admin = User::factory()->create([
+            'role' => 'Administrator',
+            'is_super_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $member = User::factory()->create([
+            'email' => 'manual.password@kimfay.test',
+            'role' => 'Customer Service Agent',
+            'password' => Hash::make('OldPassword123'),
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/admin/users/{$member->id}/password", [
+                'auto_generate' => false,
+                'password' => 'ManualPass99',
+                'email_user' => false,
+            ])
+            ->assertOk()
+            ->assertJsonPath('emailed', false)
+            ->assertJsonPath('password', null);
+
+        $this->assertTrue(Hash::check('ManualPass99', (string) $member->fresh()->password));
+        Mail::assertNothingSent();
+    }
+
+    public function test_manual_password_update_requires_password_value(): void
+    {
+        Mail::fake();
+
+        $admin = User::factory()->create([
+            'role' => 'Administrator',
+            'is_super_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $member = User::factory()->create([
+            'role' => 'Customer Service Agent',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/admin/users/{$member->id}/password", [
+                'auto_generate' => false,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['password']);
+
+        Mail::assertNothingSent();
     }
 
     public function test_non_admin_cannot_create_team_member(): void

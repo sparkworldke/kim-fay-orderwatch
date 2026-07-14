@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from "@/lib/api";
 export interface SalesConsultantOption {
   rep_code: string;
   name: string;
+  employee_number: string | null;
 }
 
 /** Lightweight consultant picker list — for the full directory with stats, see app.sales-consultants.tsx. */
@@ -32,15 +33,27 @@ export interface ConsultantCustomerRow {
   active_orders: number;
   completed_orders: number;
   total_order_value: number;
+  fill_rate_pct: number | null;
+  revenue_lost: number | null;
   first_order_date: string | null;
   last_order_date: string | null;
   orders_per_month: number | null;
 }
 
+export interface ConsultantCustomersPagination {
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+  from: number;
+  to: number;
+}
+
 export interface ConsultantCustomersResponse {
-  rep_code: string;
+  rep_code: string | null;
   summary: ConsultantCustomerSummary;
   customers: ConsultantCustomerRow[];
+  pagination?: ConsultantCustomersPagination;
 }
 
 export interface SalesConsultantProfile {
@@ -48,7 +61,8 @@ export interface SalesConsultantProfile {
   name: string;
   email: string;
   role: string;
-  rep_code: string;
+  rep_code: string | null;
+  employee_number: string | null;
   is_active: boolean;
   assigned_orders: number;
   active_orders: number;
@@ -67,6 +81,14 @@ export type ConsultantDateFilters = {
   date_to?: string;
 };
 
+export type ConsultantCustomerFilters = ConsultantDateFilters & {
+  q?: string;
+  page?: number;
+  per_page?: number;
+  sort?: string;
+  sort_dir?: "asc" | "desc";
+};
+
 function buildDateQuery(filters: ConsultantDateFilters) {
   const params = new URLSearchParams();
   if (filters.date_from) params.set("date_from", filters.date_from);
@@ -75,13 +97,40 @@ function buildDateQuery(filters: ConsultantDateFilters) {
   return qs ? `?${qs}` : "";
 }
 
+function buildCustomerQuery(filters: ConsultantCustomerFilters) {
+  const params = new URLSearchParams();
+  if (filters.date_from) params.set("date_from", filters.date_from);
+  if (filters.date_to) params.set("date_to", filters.date_to);
+  if (filters.q) params.set("q", filters.q);
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.per_page) params.set("per_page", String(filters.per_page));
+  if (filters.sort) params.set("sort", filters.sort);
+  if (filters.sort_dir) params.set("sort_dir", filters.sort_dir);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 function shouldFallbackToRepCode(error: unknown) {
   return error instanceof ApiError && [404, 405].includes(error.status);
 }
 
-async function fetchConsultantFromList(consultantId: number) {
+function normalizeConsultantIdentifier(identifier: string | number) {
+  return String(identifier).trim();
+}
+
+function isNumericIdentifier(identifier: string) {
+  return /^\d+$/.test(identifier);
+}
+
+async function fetchConsultantFromList(identifier: string | number) {
+  const normalized = normalizeConsultantIdentifier(identifier);
   const list = await apiFetch<{ items: SalesConsultantProfile[] }>("operations/sales-consultants");
-  const consultant = list.items.find((item) => item.id === consultantId);
+  const consultant = list.items.find((item) => {
+    const repCode = item.rep_code?.trim().toUpperCase();
+
+    return String(item.id) === normalized || (repCode !== undefined && repCode === normalized.toUpperCase());
+  });
+
   if (!consultant?.rep_code) {
     throw new ApiError("Sales consultant not found.", 404, null);
   }
@@ -94,21 +143,29 @@ async function fetchCustomersByRepCode(repCode: string, filters: ConsultantDateF
   );
 }
 
+async function fetchCustomersWithFilters(repCode: string, filters: ConsultantCustomerFilters) {
+  return apiFetch<ConsultantCustomersResponse>(
+    `operations/sales-consultants/${encodeURIComponent(repCode)}/customers${buildCustomerQuery(filters)}`,
+  );
+}
+
 export function useConsultantDetail(
-  consultantId: number,
+  consultantIdentifier: string | number,
   filters: ConsultantDateFilters = {},
 ) {
+  const identifier = normalizeConsultantIdentifier(consultantIdentifier);
+
   return useQuery({
-    queryKey: ["operations", "sales-consultants", consultantId, "detail", filters],
+    queryKey: ["operations", "sales-consultants", identifier, "detail", filters],
     queryFn: async () => {
       try {
         return await apiFetch<ConsultantDetailResponse>(
-          `operations/sales-consultants/${consultantId}${buildDateQuery(filters)}`,
+          `operations/sales-consultants/${encodeURIComponent(identifier)}${buildDateQuery(filters)}`,
         );
       } catch (error) {
         if (!shouldFallbackToRepCode(error)) throw error;
 
-        const consultant = await fetchConsultantFromList(consultantId);
+        const consultant = await fetchConsultantFromList(identifier);
         const customers = await fetchCustomersByRepCode(consultant.rep_code, filters);
         const summary = customers.summary ?? {
           total_order_value: consultant.assigned_revenue,
@@ -122,29 +179,33 @@ export function useConsultantDetail(
         return { consultant, summary };
       }
     },
-    enabled: Number.isFinite(consultantId) && consultantId > 0,
+    enabled: identifier !== "",
   });
 }
 
 export function useConsultantCustomers(
-  consultantId: number,
-  filters: ConsultantDateFilters = {},
+  consultantIdentifier: string | number,
+  filters: ConsultantCustomerFilters = {},
 ) {
+  const identifier = normalizeConsultantIdentifier(consultantIdentifier);
+
   return useQuery({
-    queryKey: ["operations", "sales-consultants", consultantId, "customers", filters],
+    queryKey: ["operations", "sales-consultants", identifier, "customers", filters],
     queryFn: async () => {
       try {
         return await apiFetch<ConsultantCustomersResponse>(
-          `operations/sales-consultants/${consultantId}/customers${buildDateQuery(filters)}`,
+          `operations/sales-consultants/${encodeURIComponent(identifier)}/customers${buildCustomerQuery(filters)}`,
         );
       } catch (error) {
         if (!shouldFallbackToRepCode(error)) throw error;
 
-        const consultant = await fetchConsultantFromList(consultantId);
-        return fetchCustomersByRepCode(consultant.rep_code, filters);
+        if (!isNumericIdentifier(identifier)) throw error;
+
+        const consultant = await fetchConsultantFromList(identifier);
+        return fetchCustomersWithFilters(consultant.rep_code, filters);
       }
     },
-    enabled: Number.isFinite(consultantId) && consultantId > 0,
+    enabled: identifier !== "",
   });
 }
 

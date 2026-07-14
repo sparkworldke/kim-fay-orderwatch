@@ -46,6 +46,23 @@ interface SignInLogsResponse {
   total: number;
 }
 
+interface UserSessionEntry {
+  id: number;
+  login_at: string;
+  logout_at: string | null;
+  logout_reason: string | null;
+  duration_seconds: number | null;
+  ip_address: string | null;
+  login_mode: string;
+}
+
+interface UserSessionsResponse {
+  data: UserSessionEntry[];
+  current_page: number;
+  last_page: number;
+  total: number;
+}
+
 interface ProfileErrors {
   name?: string[];
   phone_number?: string[];
@@ -67,6 +84,24 @@ function formatLoginMode(mode: string): string {
 
 function truncateUserAgent(ua: string): string {
   return ua.length > 40 ? ua.slice(0, 40) + "…" : ua;
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const rem = seconds % 60;
+  if (mins < 60) return rem > 0 ? `${mins}m ${rem}s` : `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+}
+
+function formatLogoutReason(reason: string | null): string {
+  if (!reason) return "—";
+  if (reason === "idle") return "Idle timeout";
+  if (reason === "manual") return "Manual logout";
+  return reason;
 }
 
 // ── Loading skeleton for sign-in logs ───────────────────────────────────────
@@ -220,10 +255,16 @@ function ProfilePage() {
 
   // ── Sign-in logs query ──────────────────────────────────────────────────
   const [page, setPage] = useState(1);
+  const [sessionsPage, setSessionsPage] = useState(1);
 
   const { data: logsData, isLoading: logsLoading } = useQuery({
     queryKey: ["sign-in-logs", page],
     queryFn: () => apiFetch<SignInLogsResponse>(`profile/sign-in-logs?page=${page}`),
+  });
+
+  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
+    queryKey: ["user-sessions", sessionsPage],
+    queryFn: () => apiFetch<UserSessionsResponse>(`profile/sessions?page=${sessionsPage}`),
   });
 
   const passwordMatches =
@@ -561,6 +602,81 @@ function ProfilePage() {
                       size="sm"
                       onClick={() => setPage((p) => p + 1)}
                       disabled={logsData.current_page >= logsData.last_page}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Session Activity ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Session Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {sessionsLoading ? (
+            <LogSkeleton />
+          ) : !sessionsData || sessionsData.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No sessions recorded yet.</p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/30 text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">Login</th>
+                      <th className="px-3 py-2 text-left font-semibold">Logout</th>
+                      <th className="px-3 py-2 text-left font-semibold">Duration</th>
+                      <th className="px-3 py-2 text-left font-semibold">IP</th>
+                      <th className="px-3 py-2 text-left font-semibold">Mode</th>
+                      <th className="px-3 py-2 text-left font-semibold">End reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessionsData.data.map((entry) => (
+                      <tr key={entry.id} className="border-t">
+                        <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
+                          {new Date(entry.login_at).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}
+                        </td>
+                        <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
+                          {entry.logout_at
+                            ? new Date(entry.logout_at).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })
+                            : <Badge variant="outline" className="text-[10px]">Active</Badge>}
+                        </td>
+                        <td className="px-3 py-2 text-xs">{formatDuration(entry.duration_seconds)}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{entry.ip_address ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs">{formatLoginMode(entry.login_mode)}</td>
+                        <td className="px-3 py-2 text-xs">{formatLogoutReason(entry.logout_reason)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {sessionsData.last_page > 1 && (
+                <div className="mt-4 flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Page {sessionsData.current_page} of {sessionsData.last_page}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSessionsPage((p) => Math.max(1, p - 1))}
+                      disabled={sessionsData.current_page <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSessionsPage((p) => p + 1)}
+                      disabled={sessionsData.current_page >= sessionsData.last_page}
                     >
                       Next
                     </Button>

@@ -1,0 +1,8 @@
+﻿﻿﻿﻿
+  [30;42;1m PASS [39;49;22m[39m Tests\Feature\TeamManagementTest[39m
+  [32;1m✓[39;22m[90m [39m[90mcustomer assignment upload accepts excel defined rep codes and reports row errors[39m[90m                           [39m [90m2.15s[39m  
+  [32;1m✓[39;22m[90m [39m[90mcustomer assignment upload is idempotent when same mapping is applied again[39m[90m                                 [39m [90m0.15s[39m  
+
+  [90mTests:[39m    [32;1m2 passed[39;22m[90m (27 assertions)[39m
+  [90mDuration:[39m [39m4.84s[39m
+

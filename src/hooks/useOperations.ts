@@ -17,6 +17,105 @@ export type ContributionRow = {
   [key: string]: string | number | null | undefined;
 };
 
+/** Metrics for a single KP/CS segment bucket. */
+export type FillRateSegmentBucket = {
+  fill_rate_pct: number | null;
+  status: string;
+  order_count: number;
+  total_ordered_qty: number;
+  total_shipped_qty: number;
+  revenue_not_shipped: number;
+  healthy_count: number;
+  at_risk_count: number;
+  critical_count: number;
+};
+
+/** KP / CS segment split as returned by fillRateSummary(). */
+export type FillRateSegmentSplit = {
+  KP: FillRateSegmentBucket;
+  CS: FillRateSegmentBucket;
+};
+
+/** Per-segment summary row used in the Excel export (by_segment). */
+export type FillRateSegmentRow = {
+  segment: string;
+  label: string;
+  order_count: number;
+  total_ordered_qty: number;
+  total_shipped_qty: number;
+  fill_rate_pct: number | null;
+  status: string;
+  revenue_not_shipped: number;
+  healthy_count: number;
+  at_risk_count: number;
+  critical_count: number;
+};
+
+/** Per-segment root-cause row used in the Excel export (by_segment_reason). */
+export type FillRateSegmentReasonRow = {
+  segment: string;
+  reason: string;
+  undershipped_value: number;
+  contribution_pct: number;
+};
+
+export type FillRateBusinessCategoryRow = {
+  business_category: string;
+  label: string;
+  line_count: number;
+  order_count: number;
+  ordered_qty: number;
+  shipped_qty: number;
+  undershipped_value: number;
+  fill_rate_pct: number | null;
+};
+
+export type FillRateReasonCaptureSummary = {
+  total_shortfall_lines: number;
+  total_shortfall_orders: number;
+  valid_reason_lines: number;
+  missing_reason_lines: number;
+  unclassified_reason_lines: number;
+  capture_rate_pct: number | null;
+};
+
+export type FillRateReasonBreakdownRow = {
+  business_category: string;
+  parent_reason: string;
+  parent_reason_code: string | null;
+  sub_reason: string;
+  sub_reason_label: string;
+  line_count: number;
+  order_count: number;
+  undershipped_value: number;
+};
+
+export type FillRateFlaggedRecord = {
+  order_nbr: string;
+  customer_acumatica_id?: string | null;
+  inventory_id: string;
+  reason_code: string | null;
+  issue: "missing" | "unclassified";
+  business_category: string;
+  undershipped_value: number;
+};
+
+export type FillRateReasonCaptureReport = {
+  summary: FillRateReasonCaptureSummary;
+  by_business_category: Record<string, {
+    business_category: string;
+    label: string;
+    line_count: number;
+    order_count: number;
+    undershipped_value: number;
+    valid_reason_lines: number;
+    missing_reason_lines: number;
+    unclassified_reason_lines: number;
+  }>;
+  breakdown: FillRateReasonBreakdownRow[];
+  flagged_records: FillRateFlaggedRecord[];
+};
+
 export type FillRateExcelSummary = {
   totals: {
     actual_qty: number;
@@ -32,6 +131,19 @@ export type FillRateExcelSummary = {
   by_customer_group: ContributionRow[];
   top_customers: ContributionRow[];
   top_products: ContributionRow[];
+  by_segment: FillRateSegmentRow[];
+  by_segment_reason: FillRateSegmentReasonRow[];
+  by_business_category: FillRateBusinessCategoryRow[];
+  reason_capture_report: FillRateReasonCaptureReport;
+};
+
+export type BackorderBusinessCategoryRow = {
+  business_category: string;
+  label: string;
+  line_count: number;
+  order_count: number;
+  open_qty: number;
+  back_order_value: number;
 };
 
 export type BackordersExcelSummary = {
@@ -46,6 +158,42 @@ export type BackordersExcelSummary = {
   by_customer_group: ContributionRow[];
   top_customers: ContributionRow[];
   top_products: ContributionRow[];
+  by_business_category?: BackorderBusinessCategoryRow[];
+};
+
+export type BusinessCategorySkuRow = {
+  inventory_id: string;
+  product_name: string | null;
+  brand: string | null;
+  posting_class: string | null;
+  sub_trading_group: string | null;
+  supplier: string | null;
+  business_category: string;
+  business_category_label: string;
+  line_count: number;
+  order_count: number;
+  ordered_qty?: number;
+  shipped_qty?: number;
+  undershipped_qty?: number;
+  undershipped_value?: number;
+  fill_rate_pct?: number | null;
+  open_qty?: number;
+  back_order_value?: number;
+};
+
+export type BusinessCategorySkuBreakdown = {
+  business_category: string;
+  label: string;
+  date_from?: string;
+  date_to?: string;
+  sku_count: number;
+  line_count: number;
+  order_count: number;
+  undershipped_value?: number;
+  fill_rate_pct?: number | null;
+  open_qty?: number;
+  back_order_value?: number;
+  skus: BusinessCategorySkuRow[];
 };
 
 export type InventoryPrediction = {
@@ -61,8 +209,16 @@ export type InventoryItem = {
   inventory_id: string;
   description: string | null;
   item_class: string | null;
+  posting_class: string | null;
   brand: string | null;
   product_type: "manufactured" | "trading";
+  item_group: string | null;
+  sub_item_group: string | null;
+  trading_group: string | null;
+  sub_trading_group: string | null;
+  conversion_factor: number | null;
+  profit_margin_target: string | null;
+  supplier: string | null;
   default_uom: string | null;
   default_warehouse_id: string | null;
   qty_on_hand: string;
@@ -77,6 +233,10 @@ export type BackorderLine = {
   order_nbr: string;
   inventory_id: string;
   product_name: string | null;
+  brand?: string | null;
+  posting_class?: string | null;
+  sub_trading_group?: string | null;
+  supplier?: string | null;
   product_line: string | null;
   uom: string | null;
   qty_on_hand: string | null;
@@ -152,6 +312,10 @@ export type BackordersAnalytics = {
 export type FillRateProduct = {
   inventory_id: string;
   product_name: string | null;
+  brand?: string | null;
+  posting_class?: string | null;
+  sub_trading_group?: string | null;
+  supplier?: string | null;
   order_qty: string;
   shipped_qty: string;
   qty_on_shipments: string;
@@ -168,6 +332,7 @@ export type DeliverySlaStatus = "ok" | "warning" | "breach" | "unknown";
 export type FillRateSnapshot = {
   id: number;
   order_nbr: string;
+  order_description?: string | null;
   customer_acumatica_id: string | null;
   customer_name: string | null;
   status: string | null;
@@ -187,8 +352,28 @@ export type FillRateSnapshot = {
   shipping_zone_description?: string | null;
   is_metro_zone?: boolean;
   products?: FillRateProduct[];
-  order?: { id: number; acumatica_order_nbr: string; customer_name: string | null; order_date: string | null };
+  order?: {
+    id: number;
+    acumatica_order_nbr: string;
+    customer_acumatica_id?: string | null;
+    customer_name: string | null;
+    order_date: string | null;
+  };
 };
+
+export type InventoryWarehouseOption = {
+  warehouse_id: string;
+  label?: string;
+  sku_count: number;
+  configured?: boolean;
+};
+
+/** Stockout prediction tab filter values (backend stockout_filter). */
+export type InventoryStockoutFilter =
+  | "critical_or_oos"
+  | "critical"
+  | "out_of_stock"
+  | "at_risk";
 
 export function useInventorySummary() {
   return useQuery({
@@ -197,8 +382,12 @@ export function useInventorySummary() {
       total_items: number;
       low_stock_count: number;
       at_risk_count: number;
+      out_of_stock_count?: number;
+      critical_stockout_count?: number;
       last_synced_at: string | null;
       warehouse_ids: string[];
+      warehouse_counts: InventoryWarehouseOption[];
+      warehouses?: InventoryWarehouseOption[];
       brands: string[];
       manufactured_count: number;
       trading_count: number;
@@ -211,7 +400,12 @@ export function useInventory(params: {
   low_stock?: boolean;
   warehouse_id?: string[];
   prediction_status?: string;
+  /** Stockout risk tab: critical prediction and/or zero stock. */
+  stockout_filter?: InventoryStockoutFilter;
   product_type?: string;
+  partner_brand?: string;
+  brand?: string;
+  category?: string;
   page?: number;
   per_page?: number;
 }) {
@@ -220,7 +414,11 @@ export function useInventory(params: {
   if (params.low_stock) qs.set("low_stock", "1");
   for (const warehouse of params.warehouse_id ?? []) qs.append("warehouse_id[]", warehouse);
   if (params.prediction_status) qs.set("prediction_status", params.prediction_status);
+  if (params.stockout_filter) qs.set("stockout_filter", params.stockout_filter);
   if (params.product_type) qs.set("product_type", params.product_type);
+  if (params.partner_brand) qs.set("partner_brand", params.partner_brand);
+  if (params.brand) qs.set("brand", params.brand);
+  if (params.category) qs.set("category", params.category);
   qs.set("page", String(params.page ?? 1));
   qs.set("per_page", String(params.per_page ?? 50));
 
@@ -252,6 +450,9 @@ export function useBackorders(params: {
   product_line?: string;
   warehouse_id?: string;
   reason_code?: string;
+  partner_brand?: string;
+  brand?: string;
+  category?: string;
   page?: number;
   per_page?: number;
 }) {
@@ -264,6 +465,9 @@ export function useBackorders(params: {
   if (params.product_line) qs.set("product_line", params.product_line);
   if (params.warehouse_id) qs.set("warehouse_id", params.warehouse_id);
   if (params.reason_code) qs.set("reason_code", params.reason_code);
+  if (params.partner_brand) qs.set("partner_brand", params.partner_brand);
+  if (params.brand) qs.set("brand", params.brand);
+  if (params.category) qs.set("category", params.category);
   qs.set("page", String(params.page ?? 1));
   qs.set("per_page", String(params.per_page ?? 50));
 
@@ -280,6 +484,9 @@ export function useBackordersAnalytics(params: {
   customer_group?: string;
   warehouse_id?: string;
   reason_code?: string;
+  partner_brand?: string;
+  brand?: string;
+  category?: string;
 }) {
   const qs = new URLSearchParams();
   if (params.date_from) qs.set("date_from", params.date_from);
@@ -288,6 +495,9 @@ export function useBackordersAnalytics(params: {
   if (params.customer_group) qs.set("customer_group", params.customer_group);
   if (params.warehouse_id) qs.set("warehouse_id", params.warehouse_id);
   if (params.reason_code) qs.set("reason_code", params.reason_code);
+  if (params.partner_brand) qs.set("partner_brand", params.partner_brand);
+  if (params.brand) qs.set("brand", params.brand);
+  if (params.category) qs.set("category", params.category);
 
   return useQuery({
     queryKey: ["operations-backorders-analytics", params],
@@ -306,6 +516,80 @@ export function useBackordersByAccount(top = 10) {
       revenue_at_risk: string;
       total_open_qty: string;
     }> }>(`operations/backorders/by-account?top=${top}`),
+  });
+}
+
+export function useBusinessCategorySkuBreakdown(
+  module: "fill-rate" | "backorders",
+  businessCategory: "manufactured" | "trading",
+  filters: Record<string, string | undefined> = {},
+  enabled = true,
+) {
+  const qs = new URLSearchParams();
+  qs.set("business_category", businessCategory);
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value != null && value !== "") qs.set(key, value);
+  });
+
+  return useQuery({
+    queryKey: ["operations-business-category-skus", module, businessCategory, filters],
+    queryFn: () =>
+      apiFetch<BusinessCategorySkuBreakdown>(
+        `operations/${module}/sku-breakdown?${qs}`,
+      ),
+    enabled,
+  });
+}
+
+export function useFillRateOutOfStockReport(
+  params: {
+    date_from?: string;
+    date_to?: string;
+    brand?: string;
+    business_category?: string;
+    partner_brand?: string;
+    customer_group?: string;
+    segment?: string;
+    shipping_zone_id?: string;
+  },
+  enabled = true,
+) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && value !== "") qs.set(key, value);
+  });
+
+  return useQuery({
+    queryKey: ["operations-fill-rate-oos", params],
+    queryFn: () =>
+      apiFetch<FillRateOutOfStockReport>(`operations/fill-rate/out-of-stock?${qs}`),
+    enabled,
+  });
+}
+
+export type ReasonTaxonomySubReason = {
+  code: string;
+  label: string;
+  hierarchical_label: string;
+};
+
+export type ReasonTaxonomyParent = {
+  code: string;
+  label: string;
+  sub_reasons: ReasonTaxonomySubReason[];
+};
+
+export type ReasonTaxonomy = {
+  parents: ReasonTaxonomyParent[];
+  sub_reasons: { code: string; label: string }[];
+  source: "database" | "catalog_constants" | string;
+};
+
+export function useReasonTaxonomy() {
+  return useQuery({
+    queryKey: ["operations-reason-taxonomy"],
+    queryFn: () => apiFetch<ReasonTaxonomy>("operations/reason-taxonomy"),
+    staleTime: 1000 * 60 * 60,
   });
 }
 
@@ -577,6 +861,57 @@ export type FillRateSummaryFilters = {
   product_line?: string;
   reason_code?: string;
   status?: string;
+  partner_brand?: string;
+  brand?: string;
+  category?: string;
+  /** KP/CS segment filter: "KP", "CS", or undefined for combined view. */
+  segment?: "KP" | "CS";
+  /** When false (default), fill rate excludes out-of-stock shortfall lines. */
+  include_out_of_stock?: boolean;
+};
+
+export type FillRateOutOfStockCategoryRow = {
+  business_category: string;
+  label: string;
+  line_count: number;
+  order_count: number;
+  sku_count: number;
+  undershipped_qty: number;
+  undershipped_value: number;
+};
+
+export type FillRateOutOfStockSkuRow = {
+  inventory_id: string;
+  product_name: string | null;
+  brand: string | null;
+  posting_class?: string | null;
+  sub_trading_group?: string | null;
+  supplier?: string | null;
+  business_category: string;
+  business_category_label: string;
+  reason_code: string;
+  reason_label: string;
+  line_count: number;
+  order_count: number;
+  undershipped_qty: number;
+  undershipped_value: number;
+};
+
+export type FillRateOutOfStockReport = {
+  date_from: string;
+  date_to: string;
+  brand: string | null;
+  business_category: string | null;
+  totals: {
+    line_count: number;
+    order_count: number;
+    sku_count: number;
+    undershipped_qty: number;
+    undershipped_value: number;
+  };
+  by_business_category: FillRateOutOfStockCategoryRow[];
+  brands: string[];
+  skus: FillRateOutOfStockSkuRow[];
 };
 
 export function useFillRateSummary(dateFrom: string, dateTo: string, filters: FillRateSummaryFilters = {}) {
@@ -588,20 +923,30 @@ export function useFillRateSummary(dateFrom: string, dateTo: string, filters: Fi
   if (filters.product_line) qs.set("product_line", filters.product_line);
   if (filters.reason_code) qs.set("reason_code", filters.reason_code);
   if (filters.status) qs.set("status", filters.status);
+  if (filters.segment) qs.set("segment", filters.segment);
+  if (filters.partner_brand) qs.set("partner_brand", filters.partner_brand);
+  if (filters.brand) qs.set("brand", filters.brand);
+  if (filters.category) qs.set("category", filters.category);
+  if (filters.include_out_of_stock != null) {
+    qs.set("include_out_of_stock", filters.include_out_of_stock ? "1" : "0");
+  }
 
   return useQuery({
     queryKey: ["operations-fill-rate-summary", dateFrom, dateTo, filters],
     queryFn: () => apiFetch<{
       date_from: string;
       date_to: string;
+      include_out_of_stock?: boolean;
       overall_fill_rate: number | null;
       overall_status: string;
+      segment_split: FillRateSegmentSplit;
       revenue_not_shipped: number;
       order_count: number;
       healthy_count: number;
       at_risk_count: number;
       critical_count: number;
       na_count: number;
+      out_of_stock_line_count?: number;
       delivery_sla_breach_count: number;
       delivery_sla_warning_count: number;
       delivery_sla_rules: {
@@ -635,6 +980,12 @@ export function useFillRate(params: {
   reason_code?: string;
   shipping_zone_id?: string;
   delivery_sla?: "breach" | "warning";
+  partner_brand?: string;
+  brand?: string;
+  category?: string;
+  /** KP/CS segment filter: "KP", "CS", or undefined for combined view. */
+  segment?: "KP" | "CS";
+  include_out_of_stock?: boolean;
   sort?: FillRateSort;
   page?: number;
   per_page?: number;
@@ -649,6 +1000,13 @@ export function useFillRate(params: {
   if (params.product_line) qs.set("product_line", params.product_line);
   if (params.reason_code) qs.set("reason_code", params.reason_code);
   if (params.shipping_zone_id) qs.set("shipping_zone_id", params.shipping_zone_id);
+  if (params.partner_brand) qs.set("partner_brand", params.partner_brand);
+  if (params.brand) qs.set("brand", params.brand);
+  if (params.category) qs.set("category", params.category);
+  if (params.segment) qs.set("segment", params.segment);
+  if (params.include_out_of_stock != null) {
+    qs.set("include_out_of_stock", params.include_out_of_stock ? "1" : "0");
+  }
   if (params.sort) qs.set("sort", params.sort);
   qs.set("page", String(params.page ?? 1));
   qs.set("per_page", String(params.per_page ?? 50));

@@ -21,6 +21,8 @@ class RunSystemHealthCheck extends Command
     private const CRITICAL_JOB_KEYS = [
         'email-sync-3h',
         'sales-order-sync-3h',
+        // Per-warehouse stock syncs (inventory-sync-dtc, inventory-sync-fgs, …)
+        // are matched by prefix in perform(); keep legacy key for compatibility.
         'inventory-sync-5h',
         'backorders-daily-4pm',
         'fill-rate-nightly',

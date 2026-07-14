@@ -6,7 +6,16 @@ export type Role =
   | "Customer Service Agent"
   | "Sales Operations"
   | "Sales Consultant"
-  | "Executive";
+  | "Executive"
+  | "Technician Manager"
+  | "Technician";
+
+export interface ImpersonatorInfo {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+}
 
 export interface Session {
   id: number; // user ID from the API
@@ -16,6 +25,9 @@ export interface Session {
   rep_code?: string | null;
   loggedInAt: string;
   token: string; // Sanctum Bearer token
+  /** True when an admin is viewing the app as another user. */
+  is_impersonating?: boolean;
+  impersonator?: ImpersonatorInfo | null;
 }
 
 const KEY = "kf_session";
@@ -74,6 +86,66 @@ export function clearToken() {
   clearTokenCookie();
 }
 
+export type AuthUserPayload = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  rep_code?: string | null;
+};
+
+export type ImpersonationPayload = {
+  active: boolean;
+  impersonator: ImpersonatorInfo | null;
+  expires_in_hours?: number;
+};
+
+/** Apply token + session after login or impersonation start/stop. */
+export function applyAuthResponse(data: {
+  token: string;
+  user: AuthUserPayload;
+  impersonation?: ImpersonationPayload | null;
+}) {
+  setToken(data.token);
+  setSession({
+    id: data.user.id,
+    email: data.user.email,
+    name: data.user.name,
+    role: data.user.role as Role,
+    rep_code: data.user.rep_code ?? null,
+    loggedInAt: new Date().toISOString(),
+    token: data.token,
+    is_impersonating: data.impersonation?.active ?? false,
+    impersonator: data.impersonation?.impersonator ?? null,
+  });
+}
+
+/** Sync impersonation flags from GET auth/me without changing the token. */
+export function syncSessionFromMe(me: {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  rep_code?: string | null;
+  impersonation?: ImpersonationPayload | null;
+}) {
+  const existing = getSession();
+  const token = getToken() ?? existing?.token ?? "";
+  if (!token) return;
+
+  setSession({
+    id: me.id,
+    email: me.email,
+    name: me.name,
+    role: me.role as Role,
+    rep_code: me.rep_code ?? null,
+    loggedInAt: existing?.loggedInAt ?? new Date().toISOString(),
+    token,
+    is_impersonating: me.impersonation?.active ?? false,
+    impersonator: me.impersonation?.impersonator ?? null,
+  });
+}
+
 export function inferRole(email: string): Role {
   const prefix = email.split("@")[0]?.toLowerCase() ?? "";
   if (prefix.startsWith("admin")) return "Administrator";
@@ -109,6 +181,7 @@ export function useAuth() {
     session,
     isAuthenticated: !!session,
     token: getToken(),
+    isImpersonating: !!session?.is_impersonating,
     logout: () => {
       clearSession();
       clearToken();

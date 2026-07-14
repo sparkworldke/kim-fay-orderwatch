@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\CustomerFeed\CustomerFeedService;
+use App\Support\DataScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -26,7 +27,12 @@ class CustomerFeedController extends Controller
         $dateTo   = $validated['date_to'] ?? now()->toDateString();
 
         return response()->json(
-            $this->feed->listGroups($dateFrom, $dateTo, $validated['q'] ?? null),
+            $this->feed->listGroups(
+                $dateFrom,
+                $dateTo,
+                $validated['q'] ?? null,
+                DataScope::scopedCustomerAcumaticaIds($request->user()),
+            ),
         );
     }
 
@@ -41,7 +47,12 @@ class CustomerFeedController extends Controller
         $dateTo   = $validated['date_to'] ?? now()->toDateString();
 
         return response()->json(
-            $this->feed->insights($groupKey, $dateFrom, $dateTo),
+            $this->feed->insights(
+                $groupKey,
+                $dateFrom,
+                $dateTo,
+                DataScope::scopedCustomerAcumaticaIds($request->user()),
+            ),
         );
     }
 }

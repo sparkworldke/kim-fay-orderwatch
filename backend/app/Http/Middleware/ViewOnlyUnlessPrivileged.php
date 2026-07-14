@@ -18,7 +18,7 @@ class ViewOnlyUnlessPrivileged
         if (! $isPrivileged && ! in_array($request->method(), self::SAFE_METHODS, true)) {
             $path = $request->path();
 
-            if (in_array($path, ['api/auth/logout'], true)) {
+            if (in_array($path, ['api/auth/logout', 'api/auth/impersonate/stop'], true)) {
                 return $next($request);
             }
 
@@ -36,6 +36,17 @@ class ViewOnlyUnlessPrivileged
             }
 
             if (preg_match('#^api/orders/\d+$#', $path) && in_array($request->method(), ['PATCH', 'PUT'], true)) {
+                return $next($request);
+            }
+
+            // KP FOL workflow actions (consultant submit, tech resolve, manager assign) — controller enforces permissions.
+            if (str_starts_with($path, 'api/kp/fol') && in_array($request->method(), ['POST', 'PATCH', 'PUT'], true)) {
+                return $next($request);
+            }
+
+            // Price Change Requests (consultant create/submit; manager decide; ops mark ERP) — controller enforces permissions.
+            if (str_starts_with($path, 'api/operations/price-change-requests')
+                && in_array($request->method(), ['POST', 'PATCH', 'PUT'], true)) {
                 return $next($request);
             }
 

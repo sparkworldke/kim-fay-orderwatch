@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CustomerLink, InventoryLink, OrderLink } from "@/components/entity-links";
-import { useMemo, useState } from "react";
+import { CustomerLink, OrderLink } from "@/components/entity-links";
+import { ProductListingCell } from "@/components/inventory/ProductListingCell";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   BarChart3,
@@ -26,6 +27,8 @@ import {
   YAxis,
 } from "recharts";
 import { toast } from "sonner";
+import { BrandFilterCascade, type BrandFilterValue } from "@/components/filters/BrandFilterCascade";
+import { MaskedCurrency, useMaskedKESFormatter } from "@/components/MaskedCurrency";
 import { OperationsSyncStatus } from "@/components/operations-sync-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +53,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  type BackorderBusinessCategoryRow,
   type BackorderLine,
   type ContributionRow,
   formatOpsSyncToast,
@@ -61,8 +65,12 @@ import {
   useSyncInventoryStocks,
   useUpdateBackorderReason,
 } from "@/hooks/useOperations";
-import { formatDateTime, formatKES, formatNumber } from "@/lib/format";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
+import {
+  BusinessCategorySkuSheet,
+  type BusinessCategoryKey,
+} from "@/components/operations/BusinessCategorySkuSheet";
 import { downloadApiFile } from "@/lib/api";
 import { DATE_PRESETS, type DatePresetId, resolveDatePreset } from "@/lib/date-presets";
 
@@ -70,10 +78,6 @@ export const Route = createFileRoute("/app/backorders")({
   head: () => ({ meta: [{ title: "Backorders — Kim-Fay OrderWatch" }] }),
   component: BackordersPage,
 });
-
-function formatKes(n: number | string) {
-  return `KES ${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
 
 function qtyWithUom(qty: string | number, uom: string | null | undefined) {
   const n = Number(qty).toLocaleString();
@@ -133,6 +137,7 @@ function topCategoriesWithOther(
 }
 
 function BackordersPage() {
+  const kes = useMaskedKESFormatter();
   const { session } = useAuth();
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -148,6 +153,11 @@ function BackordersPage() {
   const [reasonDraftCode, setReasonDraftCode] = useState("none");
   const [reasonDraftNotes, setReasonDraftNotes] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [brandFilter, setBrandFilter] = useState<BrandFilterValue>({
+    partner_brand: "",
+    brand: "",
+    category: "",
+  });
 
   const summary = useBackordersSummary();
   const accounts = useBackordersByAccount(10);
@@ -158,6 +168,9 @@ function BackordersPage() {
     customer_group: customerGroup !== "all" ? customerGroup : undefined,
     warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
     reason_code: reasonCode !== "all" ? reasonCode : undefined,
+    partner_brand: brandFilter.partner_brand || undefined,
+    brand: brandFilter.brand || undefined,
+    category: brandFilter.category || undefined,
   });
   const { data, isLoading, refetch } = useBackorders({
     q: q || undefined,
@@ -167,6 +180,9 @@ function BackordersPage() {
     customer_group: customerGroup !== "all" ? customerGroup : undefined,
     warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
     reason_code: reasonCode !== "all" ? reasonCode : undefined,
+    partner_brand: brandFilter.partner_brand || undefined,
+    brand: brandFilter.brand || undefined,
+    category: brandFilter.category || undefined,
     page,
     per_page: perPage,
   });
@@ -281,6 +297,9 @@ function BackordersPage() {
     if (customerGroup !== "all") qs.set("customer_group", customerGroup);
     if (warehouseId !== "all") qs.set("warehouse_id", warehouseId);
     if (reasonCode !== "all") qs.set("reason_code", reasonCode);
+    if (brandFilter.partner_brand) qs.set("partner_brand", brandFilter.partner_brand);
+    if (brandFilter.brand) qs.set("brand", brandFilter.brand);
+    if (brandFilter.category) qs.set("category", brandFilter.category);
 
     setIsDownloading(true);
     try {
@@ -329,6 +348,14 @@ function BackordersPage() {
       </div>
 
       <OperationsSyncStatus />
+
+      <BrandFilterCascade
+        value={brandFilter}
+        onChange={(next) => {
+          setBrandFilter(next);
+          setPage(1);
+        }}
+      />
 
       <div className="rounded-lg border bg-card p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -447,7 +474,11 @@ function BackordersPage() {
         <Kpi label="Open orders" value={filteredSummary?.open_orders} loading={analytics.isLoading} icon={AlertTriangle} />
         <Kpi
           label="Revenue at risk"
-          value={filteredSummary ? formatKes(filteredSummary.revenue_at_risk) : undefined}
+          value={
+            filteredSummary ? (
+              <MaskedCurrency value={filteredSummary.revenue_at_risk} className="text-2xl font-semibold" />
+            ) : undefined
+          }
           loading={analytics.isLoading}
           warn={(filteredSummary?.revenue_at_risk ?? 0) > 500_000}
           text
@@ -461,7 +492,20 @@ function BackordersPage() {
       </div>
 
       {analytics.data?.excel_summary && (
-        <BackordersExcelSummaryPanel summary={analytics.data.excel_summary} />
+        <BackordersExcelSummaryPanel
+          summary={analytics.data.excel_summary}
+          filters={{
+            date_from: dateFrom,
+            date_to: dateTo,
+            product_line: productLine !== "all" ? productLine : undefined,
+            customer_group: customerGroup !== "all" ? customerGroup : undefined,
+            warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
+            reason_code: reasonCode !== "all" ? reasonCode : undefined,
+            partner_brand: brandFilter.partner_brand || undefined,
+            brand: brandFilter.brand || undefined,
+            category: brandFilter.category || undefined,
+          }}
+        />
       )}
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -485,8 +529,8 @@ function BackordersPage() {
                 <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} minTickGap={18} />
-                  <YAxis tick={AXIS_STYLE} width={32} tickFormatter={(value) => formatKES(Number(value), { compact: true })} />
-                  <Tooltip formatter={(value: number) => formatKES(value)} labelFormatter={(value) => `Date: ${value}`} />
+                  <YAxis tick={AXIS_STYLE} width={32} tickFormatter={(value) => kes(Number(value), { compact: true })} />
+                  <Tooltip formatter={(value: number) => kes(value)} labelFormatter={(value) => `Date: ${value}`} />
                   <Line type="monotone" dataKey="revenue_at_risk" stroke={REVENUE_COLOR} strokeWidth={2} dot={false} name="Revenue at risk" />
                 </LineChart>
               </ResponsiveContainer>
@@ -502,7 +546,7 @@ function BackordersPage() {
               <YAxis tick={AXIS_STYLE} />
               <Tooltip
                 formatter={(value: number, name: string) => (
-                  name === "revenue_at_risk" ? formatKES(value) : formatNumber(value)
+                  name === "revenue_at_risk" ? kes(value) : formatNumber(value)
                 )}
               />
               <Legend />
@@ -519,9 +563,9 @@ function BackordersPage() {
             <ResponsiveContainer width="100%" height={Math.max(categoryRows.length * 34, 100)}>
               <BarChart data={categoryRows} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} className="stroke-muted" />
-                <XAxis type="number" tick={AXIS_STYLE} tickFormatter={(value) => formatKES(Number(value), { compact: true })} axisLine={false} tickLine={false} />
+                <XAxis type="number" tick={AXIS_STYLE} tickFormatter={(value) => kes(Number(value), { compact: true })} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" width={110} tick={AXIS_STYLE} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => formatKES(value)} cursor={{ fill: "var(--color-muted)" }} />
+                <Tooltip formatter={(value: number) => kes(value)} cursor={{ fill: "var(--color-muted)" }} />
                 <Bar dataKey="value" fill={CATEGORY_RANK_COLOR} radius={[0, 4, 4, 0]} maxBarSize={20} />
               </BarChart>
             </ResponsiveContainer>
@@ -561,7 +605,7 @@ function BackordersPage() {
                 <td className="px-4 py-2 text-right">{a.order_count}</td>
                 <td className="px-4 py-2 text-right">{a.open_lines}</td>
                 <td className="px-4 py-2 text-right font-mono">{Number(a.total_open_qty).toLocaleString()}</td>
-                <td className="px-4 py-2 text-right font-medium">{formatKes(a.revenue_at_risk)}</td>
+                <td className="px-4 py-2 text-right font-medium">{kes(a.revenue_at_risk)}</td>
               </tr>
             ))}
             {!accounts.isLoading && (accounts.data?.accounts ?? []).length === 0 && (
@@ -587,7 +631,7 @@ function BackordersPage() {
                   <div className="font-medium">{reasonLabel(item.reason_code)}</div>
                   <div className="text-xs text-muted-foreground">{formatNumber(Number(item.line_count))} lines</div>
                 </div>
-                <div className="font-medium">{formatKES(Number(item.revenue_at_risk))}</div>
+                <div className="font-medium">{kes(Number(item.revenue_at_risk))}</div>
               </div>
             ))}
           </div>
@@ -648,9 +692,7 @@ function BackordersPage() {
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <InventoryLink inventoryId={row.inventory_id} description={row.product_name} className="block">
-                    <div className="font-medium">{row.product_name ?? row.inventory_id}</div>
-                  </InventoryLink>
+                  <ProductListingCell product={row} />
                 </td>
                 <td className="px-4 py-3 text-xs">{row.product_line ?? "Unclassified"}</td>
                 <td className="px-4 py-3">
@@ -690,8 +732,8 @@ function BackordersPage() {
                 <td className="px-4 py-3 text-right font-mono">{qtyWithUom(row.order_qty, row.uom)}</td>
                 <td className="px-4 py-3 text-right font-mono">{qtyWithUom(row.shipped_qty, row.uom)}</td>
                 <td className="px-4 py-3 text-right font-mono">{qtyWithUom(row.open_qty, row.uom)}</td>
-                <td className="px-4 py-3 text-right font-mono">{formatKes(row.unit_price)}</td>
-                <td className="px-4 py-3 text-right font-medium">{formatKes(row.revenue_at_risk)}</td>
+                <td className="px-4 py-3 text-right font-mono">{kes(row.unit_price)}</td>
+                <td className="px-4 py-3 text-right font-medium">{kes(row.revenue_at_risk)}</td>
                 <td className="px-4 py-3">
                   <div className="space-y-1">
                     <Badge variant={row.reason_code ? "default" : "secondary"}>{reasonLabel(row.reason_code)}</Badge>
@@ -803,6 +845,7 @@ function ChartPanel({
 
 function BackordersExcelSummaryPanel({
   summary,
+  filters,
 }: {
   summary: {
     totals: {
@@ -814,8 +857,24 @@ function BackordersExcelSummaryPanel({
     by_reason: ContributionRow[];
     by_customer_group: ContributionRow[];
     top_products: ContributionRow[];
+    by_business_category?: BackorderBusinessCategoryRow[];
+  };
+  filters?: {
+    date_from?: string;
+    date_to?: string;
+    product_line?: string;
+    customer_group?: string;
+    warehouse_id?: string;
+    reason_code?: string;
+    partner_brand?: string;
+    brand?: string;
+    category?: string;
   };
 }) {
+  const kes = useMaskedKESFormatter();
+  const [skuCategory, setSkuCategory] = useState<BusinessCategoryKey | null>(null);
+  const categoryRows = summary.by_business_category ?? [];
+
   return (
     <div className="rounded-lg border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
@@ -824,7 +883,7 @@ function BackordersExcelSummaryPanel({
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryTile label="Back Order Qty" value={formatNumber(summary.totals.back_order_qty)} tone="amber" />
-        <SummaryTile label="Back Ordered Value" value={formatKES(summary.totals.back_order_value)} tone="red" />
+        <SummaryTile label="Back Ordered Value" value={kes(summary.totals.back_order_value)} tone="red" />
         <SummaryTile label="Orders" value={formatNumber(summary.totals.order_count)} tone="blue" />
         <SummaryTile label="Lines" value={formatNumber(summary.totals.line_count)} tone="cyan" />
       </div>
@@ -833,6 +892,79 @@ function BackordersExcelSummaryPanel({
         <SummaryContributionList title="Customer group contribution" rows={summary.by_customer_group} labelKey="customer_group" valueKey="back_order_value" tone="cyan" />
         <SummaryContributionList title="Top product contribution" rows={summary.top_products} labelKey="product_name" valueKey="back_order_value" tone="blue" />
       </div>
+
+      {categoryRows.length > 0 && (
+        <div className="mt-4 rounded-md border p-3">
+          <h3 className="text-sm font-medium">Manufactured vs Trading (Partners)</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Click a category to open the SKU breakdown and download Excel.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="py-2 pr-4 font-medium">Category</th>
+                  <th className="py-2 pr-4 font-medium text-right">Lines</th>
+                  <th className="py-2 pr-4 font-medium text-right">Orders</th>
+                  <th className="py-2 pr-4 font-medium text-right">Open qty</th>
+                  <th className="py-2 pr-4 font-medium text-right">Value (KES)</th>
+                  <th className="py-2 pr-4 font-medium text-right">SKUs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoryRows.map((row) => {
+                  const category =
+                    row.business_category === "manufactured" || row.business_category === "trading"
+                      ? row.business_category
+                      : null;
+                  return (
+                    <tr
+                      key={row.business_category}
+                      className={`border-b last:border-0 ${category ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                      onClick={() => category && setSkuCategory(category)}
+                    >
+                      <td className="py-2 pr-4 font-medium text-primary underline-offset-2 hover:underline">
+                        {row.label}
+                      </td>
+                      <td className="py-2 pr-4 text-right font-mono">{row.line_count}</td>
+                      <td className="py-2 pr-4 text-right font-mono">{row.order_count}</td>
+                      <td className="py-2 pr-4 text-right font-mono">{formatNumber(row.open_qty)}</td>
+                      <td className="py-2 pr-4 text-right font-mono">{Number(row.back_order_value).toLocaleString()}</td>
+                      <td className="py-2 pr-4 text-right">
+                        {category ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[11px]"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSkuCategory(category);
+                            }}
+                          >
+                            View SKUs
+                          </Button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <BusinessCategorySkuSheet
+        open={skuCategory != null}
+        onOpenChange={(open) => {
+          if (!open) setSkuCategory(null);
+        }}
+        module="backorders"
+        businessCategory={skuCategory}
+        filters={filters}
+      />
     </div>
   );
 }
@@ -868,6 +1000,7 @@ function SummaryContributionList({
   valueKey: string;
   tone: "blue" | "red" | "cyan";
 }) {
+  const kes = useMaskedKESFormatter();
   const bar = tone === "red" ? "bg-red-500" : tone === "cyan" ? "bg-cyan-500" : "bg-blue-500";
   const topRows = rows.slice(0, 5);
 
@@ -880,7 +1013,7 @@ function SummaryContributionList({
           <div key={`${String(row[labelKey])}-${index}`} className="space-y-1">
             <div className="flex items-center justify-between gap-3 text-xs">
               <span className="truncate font-medium">{reasonLabel(String(row[labelKey] ?? "Unassigned"))}</span>
-              <span className="shrink-0 font-mono">{formatKES(Number(row[valueKey] ?? 0))}</span>
+              <span className="shrink-0 font-mono">{kes(Number(row[valueKey] ?? 0))}</span>
             </div>
             <div className="h-1.5 rounded-full bg-muted">
               <div className={`h-1.5 rounded-full ${bar}`} style={{ width: `${Math.min(Number(row.contribution_pct ?? 0), 100)}%` }} />
@@ -897,7 +1030,7 @@ function Kpi({
   label, value, loading, icon: Icon, warn, text,
 }: {
   label: string;
-  value?: number | string;
+  value?: number | string | ReactNode;
   loading?: boolean;
   icon?: React.ComponentType<{ className?: string }>;
   warn?: boolean;

@@ -65,9 +65,20 @@ class RunSalesOrderSync extends Command
             ? "deep scan ({$deepScanLookbackDays} days)"
             : "rolling ({$lookbackHours}h)";
 
+        $deleted = (int) ($sync->filters['orders_deleted_missing_from_acumatica'] ?? 0);
+        $statusUpdates = (int) ($sync->filters['status_updates'] ?? 0);
+        $output = "Sales order sync completed [{$label}]";
+        if ($deleted > 0) {
+            $output .= "; deleted {$deleted} local SO(s) missing from Acumatica";
+        }
+        if ($statusUpdates > 0) {
+            $output .= "; {$statusUpdates} status update(s)";
+        }
+        $output .= $partial ? '. Some records failed.' : ($failed ? '. Failed.' : '.');
+
         return [
             'status'                 => $status,
-            'output'                 => "Sales order sync completed [{$label}]." . ($partial ? ' Some records failed.' : ($failed ? ' Failed.' : '')),
+            'output'                 => $output,
             'sales_orders_checked'   => (int) $sync->record_count,
             'sales_orders_processed' => (int) $sync->success_count,
             'error_count'            => (int) $sync->failed_count + ($failed ? 1 : 0),
@@ -83,7 +94,9 @@ class RunSalesOrderSync extends Command
                         'sales_orders_checked'   => (int) $sync->record_count,
                         'sales_orders_processed' => (int) $sync->success_count,
                         'failed_records'         => (int) $sync->failed_count,
-                        'status_updates'         => (int) ($sync->filters['status_updates'] ?? 0),
+                        'status_updates'         => $statusUpdates,
+                        'orders_deleted_missing_from_acumatica' => $deleted,
+                        'sample_deleted_orders'  => $sync->filters['sample_deleted_orders'] ?? [],
                     ],
                     'errors' => $sync->error_message ? [$this->sanitize($sync->error_message)] : [],
                 ],

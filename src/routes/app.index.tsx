@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 import {
-  CheckCircle2, Clock, Package, RefreshCw,
+  CheckCircle2, Clock, Package, PackageX, RefreshCw,
   ShoppingCart, TrendingUp, XCircle, ChevronDown, ChevronRight, BarChart2,
 } from "lucide-react";
 import {
@@ -20,10 +20,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api";
-import { formatKES } from "@/lib/format";
+import { MaskedKES } from "@/components/MaskedCurrency";
 import { useRefreshOrderStatuses } from "@/hooks/useOrders";
-import { DateLink } from "@/components/entity-links";
+import { CustomerLink, DateLink, OrderLink } from "@/components/entity-links";
 
 export const Route = createFileRoute("/app/")({
   head: () => ({ meta: [{ title: "Dashboard — Kim-Fay OrderWatch" }] }),
@@ -33,6 +35,15 @@ export const Route = createFileRoute("/app/")({
 // -------------------------------------------------------------------------
 // Types
 // -------------------------------------------------------------------------
+
+interface SoTotals {
+  all_so: number;
+  dashboard_so: number;
+  goods_lost_in_transit_so: number;
+  formula: string;
+  calculation: string;
+  excluded_customer_ids?: string[];
+}
 
 interface KpiData {
   total: number;
@@ -51,6 +62,30 @@ interface KpiData {
   open_qt: number;
   open_rc: number;
   open_other: number;
+  so_totals?: SoTotals;
+  goods_lost_in_transit?: {
+    customer_id: string;
+    label: string;
+    total: number;
+  };
+}
+
+interface GoodsLostInTransitResponse {
+  customer_id: string;
+  customer_name: string;
+  label: string;
+  date_from: string;
+  date_to: string;
+  total: number;
+  order_total_sum: number;
+  completed: number;
+  shipping: number;
+  pending_approval: number;
+  rejected: number;
+  on_hold: number;
+  open: number;
+  so_totals: SoTotals;
+  orders: DashboardStatusOrder[];
 }
 
 interface TrendDay {
@@ -75,6 +110,7 @@ interface TrendData {
 interface DashboardStatusOrder {
   id: number;
   order_nbr: string;
+  customer_acumatica_id: string | null;
   customer_name: string | null;
   amount: number;
   currency_id: string | null;
@@ -119,6 +155,17 @@ function useTrend(dateFrom: string, dateTo: string, compare: boolean) {
       apiFetch<TrendData>(
         `dashboard/trend?date_from=${dateFrom}&date_to=${dateTo}&compare=${compare ? 1 : 0}`
       ),
+  });
+}
+
+function useGoodsLostInTransit(dateFrom: string, dateTo: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["dashboard-goods-lost-in-transit", dateFrom, dateTo],
+    queryFn: () =>
+      apiFetch<GoodsLostInTransitResponse>(
+        `dashboard/goods-lost-in-transit?date_from=${dateFrom}&date_to=${dateTo}`,
+      ),
+    enabled,
   });
 }
 
@@ -232,11 +279,12 @@ const CHART_COLORS: Record<StatKey, string> = {
 const tooltipStyle = {
   background: "var(--color-popover, #fff)",
   border: "1px solid var(--color-border, #e5e7eb)",
-  borderRadius: 6,
-  fontSize: 12,
+  borderRadius: 4,
+  fontSize: 8,
+  padding: "4px 6px",
 } as const;
 
-const axisStyle = { stroke: "var(--color-muted-foreground, #9ca3af)", fontSize: 11 } as const;
+const axisStyle = { stroke: "var(--color-muted-foreground, #9ca3af)", fontSize: 8 } as const;
 
 // -------------------------------------------------------------------------
 // Open Orders per day table
@@ -252,6 +300,21 @@ const STATUS_COLS = [
 ] as const;
 
 type StatusCol = (typeof STATUS_COLS)[number]["key"];
+
+function trendDayStatusCount(row: TrendDay, key: StatusCol): number {
+  return row[key] ?? 0;
+}
+
+type ChartDayPoint = TrendDay & {
+  label: string;
+  prev_total?: number;
+  prev_completed?: number;
+  prev_pending_approval?: number;
+  prev_shipping?: number;
+  prev_rejected?: number;
+  prev_on_hold?: number;
+  prev_open?: number;
+};
 
 /** Statuses shown when expanding a day row in the daily table. */
 const DAY_EXPAND_STATUSES: StatusCol[] = ["pending_approval", "shipping"];
@@ -313,7 +376,7 @@ function CompletionRateBadge({ rate, row }: { rate: number | null; row?: RateRow
   return (
     <span
       title={row ? rateTooltip(row, pct) : undefined}
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-semibold tabular-nums ${row ? "cursor-help" : ""} ${color}`}
+      className={`inline-flex items-center rounded border px-1 py-px text-[8px] font-semibold tabular-nums ${row ? "cursor-help" : ""} ${color}`}
     >
       {pct}%
     </span>
@@ -321,11 +384,11 @@ function CompletionRateBadge({ rate, row }: { rate: number | null; row?: RateRow
 }
 
 const FILL_RATE_TOOLTIP =
-  "Fill Rate Formula:\n" +
-  "Shipped Qty ÷ Qty at Approval × 100\n" +
-  "(falls back to Order Qty when approval qty is unavailable)\n\n" +
+  "Fill Rate Formula (Completed orders only):\n" +
+  "Shipped Qty ÷ Order Qty × 100\n\n" +
+  "Only Completed sales orders are included.\n" +
   "Aggregated per day from synced fill-rate snapshots.\n" +
-  "Shows — when no eligible orders exist for that day.";
+  "Shows — when no completed orders exist for that day.";
 
 const COMPLETION_TOOLTIP =
   "Completion Rate Formula:\n" +
@@ -368,7 +431,7 @@ function FillRateBadge({ rate, row }: { rate: number | null | undefined; row?: F
   return (
     <span
       title={row ? fillRateTooltip(row, pct) : undefined}
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-semibold tabular-nums ${row ? "cursor-help" : ""} ${color}`}
+      className={`inline-flex items-center rounded border px-1 py-px text-[8px] font-semibold tabular-nums ${row ? "cursor-help" : ""} ${color}`}
     >
       {pct}%
     </span>
@@ -397,41 +460,53 @@ function StatusOrderList({
 
   if (isLoading) {
     return (
-      <div className="space-y-2 py-2">
+      <div className="space-y-1 py-1">
         {Array.from({ length: 2 }).map((_, i) => (
-          <Skeleton key={i} className="h-8 w-full" />
+          <Skeleton key={i} className="h-5 w-full" />
         ))}
       </div>
     );
   }
 
   if (isError) {
-    return <p className="py-2 text-xs text-destructive">Could not load orders.</p>;
+    return <p className="py-1 text-[8px] text-destructive">Could not load orders.</p>;
   }
 
   const orders = data?.orders ?? [];
   if (orders.length === 0) {
-    return <p className="py-2 text-xs text-muted-foreground">No orders.</p>;
+    return <p className="py-1 text-[8px] text-muted-foreground">No orders.</p>;
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border bg-background">
-      <table className="w-full text-xs">
+    <div className="overflow-x-auto rounded border bg-background">
+      <table className="w-full text-[8px]">
         <thead>
           <tr className="border-b bg-muted/40 text-left">
-            <th className="px-3 py-1.5 font-semibold text-muted-foreground">SO Number</th>
-            <th className="px-3 py-1.5 font-semibold text-muted-foreground">Customer</th>
-            <th className="px-3 py-1.5 text-right font-semibold text-muted-foreground">Amount</th>
-            <th className="px-3 py-1.5 text-right font-semibold text-muted-foreground">Quantity</th>
+            <th className="px-1.5 py-0.5 font-semibold text-muted-foreground">SO Number</th>
+            <th className="px-1.5 py-0.5 font-semibold text-muted-foreground">Customer</th>
+            <th className="px-1.5 py-0.5 text-right font-semibold text-muted-foreground">Amount</th>
+            <th className="px-1.5 py-0.5 text-right font-semibold text-muted-foreground">Quantity</th>
           </tr>
         </thead>
         <tbody>
           {orders.map((order) => (
             <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/20">
-              <td className="px-3 py-1.5 font-mono font-medium">{order.order_nbr}</td>
-              <td className="px-3 py-1.5">{order.customer_name ?? "—"}</td>
-              <td className="px-3 py-1.5 text-right font-mono tabular-nums">{formatKES(order.amount)}</td>
-              <td className="px-3 py-1.5 text-right font-mono tabular-nums">
+              <td className="px-1.5 py-0.5 font-mono font-medium">
+                <OrderLink
+                  customerId={order.customer_acumatica_id}
+                  orderId={order.order_nbr}
+                />
+              </td>
+              <td className="px-1.5 py-0.5">
+                <CustomerLink
+                  customerId={order.customer_acumatica_id}
+                  customerName={order.customer_name}
+                >
+                  {order.customer_name ?? "—"}
+                </CustomerLink>
+              </td>
+              <td className="px-1.5 py-0.5 text-right font-mono tabular-nums"><MaskedKES value={order.amount} /></td>
+              <td className="px-1.5 py-0.5 text-right font-mono tabular-nums">
                 {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </td>
             </tr>
@@ -444,32 +519,32 @@ function StatusOrderList({
 
 function DayRowOrdersPanel({ day, row }: { day: string; row: TrendDay }) {
   const [openStatus, setOpenStatus] = useState<string | undefined>();
-  const visible = DAY_EXPAND_STATUSES.filter((key) => ((row as Record<string, number>)[key] ?? 0) > 0);
+  const visible = DAY_EXPAND_STATUSES.filter((key) => trendDayStatusCount(row, key) > 0);
 
   if (visible.length === 0) return null;
 
   return (
-    <div className="py-2">
+    <div className="py-1">
       <Accordion
         type="single"
         collapsible
         value={openStatus}
         onValueChange={setOpenStatus}
-        className="rounded-md border bg-background"
+        className="rounded border bg-background"
       >
         {visible.map((statusKey) => {
-          const count = (row as Record<string, number>)[statusKey] ?? 0;
+          const count = trendDayStatusCount(row, statusKey);
           const isOpen = openStatus === statusKey;
 
           return (
-            <AccordionItem key={statusKey} value={statusKey} className="border-b px-3 last:border-b-0">
-              <AccordionTrigger className="py-2 text-xs hover:no-underline">
-                <span className="flex items-center gap-2">
+            <AccordionItem key={statusKey} value={statusKey} className="border-b px-1.5 last:border-b-0">
+              <AccordionTrigger className="py-1 text-[8px] hover:no-underline">
+                <span className="flex items-center gap-1">
                   <StatusBadge statusKey={statusKey} value={count} />
                   <span className="font-medium">{DAY_EXPAND_LABELS[statusKey]}</span>
                 </span>
               </AccordionTrigger>
-              <AccordionContent className="pb-2">
+              <AccordionContent className="pb-1">
                 <StatusOrderList statusKey={statusKey} day={day} enabled={isOpen} />
               </AccordionContent>
             </AccordionItem>
@@ -488,55 +563,55 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
   const colSpan = STATUS_COLS.length + 4;
 
   return (
-    <div className="rounded-lg border bg-card shadow-[var(--shadow-panel)]">
+    <div className="rounded border bg-card shadow-[var(--shadow-panel)]">
       {/* Table header row */}
       <button
         type="button"
         onClick={() => setCollapsed((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex w-full items-center justify-between px-2 py-1.5 text-left"
       >
         <div>
-          <h3 className="text-sm font-semibold">Open Orders by Date</h3>
-          <p className="text-xs text-muted-foreground">
-            Order status breakdown by day — click a date to expand Pending Approval and Shipping orders
+          <h3 className="text-[10px] font-semibold">Open Orders by Date</h3>
+          <p className="text-[8px] text-muted-foreground">
+            Status by day — click a date to expand Pending Approval / Shipping
           </p>
         </div>
         {collapsed ? (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
         )}
       </button>
 
       {!collapsed && (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full text-[8px]">
             <thead>
               <tr className="border-t bg-muted/40">
-                <th className="px-4 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Date</th>
-                <th className="px-3 py-2 text-right font-semibold text-muted-foreground">Total</th>
+                <th className="px-2 py-1 text-left font-semibold text-muted-foreground whitespace-nowrap">Date</th>
+                <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground">Total</th>
                 {STATUS_COLS.map((col) => (
-                  <th key={col.key} className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                  <th key={col.key} className="px-1.5 py-1 text-right font-semibold text-muted-foreground whitespace-nowrap">
                     {col.label}
                   </th>
                 ))}
-                <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1">
+                <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                  <span className="inline-flex items-center gap-0.5">
                     Fill Rate
                     <span
                       title={FILL_RATE_TOOLTIP}
-                      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
+                      className="inline-flex h-2.5 w-2.5 cursor-help items-center justify-center rounded-full bg-muted text-[7px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
                     >
                       ?
                     </span>
                   </span>
                 </th>
-                <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1">
+                <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                  <span className="inline-flex items-center gap-0.5">
                     Completion Rate
                     <span
                       title={COMPLETION_TOOLTIP}
-                      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
+                      className="inline-flex h-2.5 w-2.5 cursor-help items-center justify-center rounded-full bg-muted text-[7px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
                     >
                       ?
                     </span>
@@ -547,7 +622,7 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
             <tbody>
               {rows.map((row, i) => {
                 const canExpand = DAY_EXPAND_STATUSES.some(
-                  (key) => ((row as Record<string, number>)[key] ?? 0) > 0,
+                  (key) => trendDayStatusCount(row, key) > 0,
                 );
                 const isExpanded = expandedDay === row.day;
 
@@ -560,25 +635,25 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                         setExpandedDay((current) => (current === row.day ? null : row.day));
                       }}
                     >
-                      <td className="px-4 py-2 font-medium whitespace-nowrap">
-                        <span className="inline-flex items-center gap-2">
+                      <td className="px-2 py-0.5 font-medium whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1">
                           {canExpand ? (
                             isExpanded ? (
-                              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <ChevronDown className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
                             ) : (
-                              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <ChevronRight className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
                             )
                           ) : (
-                            <span className="inline-block w-3.5" />
+                            <span className="inline-block w-2.5" />
                           )}
                           <DateLink value={row.day}>{fmtFullDate(row.day)}</DateLink>
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{row.total.toLocaleString()}</td>
+                      <td className="px-1.5 py-0.5 text-right tabular-nums font-semibold">{row.total.toLocaleString()}</td>
                       {STATUS_COLS.map((col) => {
-                        const val = (row as Record<string, number>)[col.key] ?? 0;
+                        const val = trendDayStatusCount(row, col.key);
                         return (
-                          <td key={col.key} className="px-3 py-2 text-right tabular-nums">
+                          <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
                             {val > 0 ? (
                               <StatusBadge statusKey={col.key} value={val} />
                             ) : (
@@ -587,16 +662,16 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                           </td>
                         );
                       })}
-                      <td className="px-3 py-2 text-right tabular-nums">
+                      <td className="px-1.5 py-0.5 text-right tabular-nums">
                         <FillRateBadge rate={row.fill_rate_pct} row={row} />
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
+                      <td className="px-1.5 py-0.5 text-right tabular-nums">
                         <CompletionRateBadge rate={calcCompletionRate(row)} row={row} />
                       </td>
                     </tr>
                     {isExpanded && (
                       <tr className="border-t bg-muted/15">
-                        <td colSpan={colSpan} className="px-4 py-2">
+                        <td colSpan={colSpan} className="px-2 py-1">
                           <DayRowOrdersPanel day={row.day} row={row} />
                         </td>
                       </tr>
@@ -631,19 +706,19 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                 };
                 return (
                   <tr className="border-t bg-muted/40 font-semibold">
-                    <td className="px-4 py-2 text-muted-foreground">Totals</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{totals.total.toLocaleString()}</td>
+                    <td className="px-2 py-0.5 text-muted-foreground">Totals</td>
+                    <td className="px-1.5 py-0.5 text-right tabular-nums">{totals.total.toLocaleString()}</td>
                     {STATUS_COLS.map((col) => (
-                      <td key={col.key} className="px-3 py-2 text-right tabular-nums">
+                      <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
                         {(totals[col.key] ?? 0) > 0
                           ? (totals[col.key] ?? 0).toLocaleString()
                           : <span className="text-muted-foreground/50">—</span>}
                       </td>
                     ))}
-                    <td className="px-3 py-2 text-right tabular-nums">
+                    <td className="px-1.5 py-0.5 text-right tabular-nums">
                       <FillRateBadge rate={fillTotalsRow.fill_rate_pct} row={fillTotalsRow} />
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
+                    <td className="px-1.5 py-0.5 text-right tabular-nums">
                       <CompletionRateBadge rate={calcCompletionRate(totalsRow)} row={totalsRow} />
                     </td>
                   </tr>
@@ -653,7 +728,7 @@ function DailyOrderTable({ trendData }: { trendData: TrendDay[] }) {
           </table>
 
           {rows.length === 0 && (
-            <p className="py-8 text-center text-xs text-muted-foreground">No data for selected period.</p>
+            <p className="py-4 text-center text-[8px] text-muted-foreground">No data for selected period.</p>
           )}
         </div>
       )}
@@ -671,7 +746,7 @@ function StatusBadge({ statusKey, value }: { statusKey: StatusCol; value: number
     on_hold:          "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800",
   };
   return (
-    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 font-medium tabular-nums ${styles[statusKey]}`}>
+    <span className={`inline-flex items-center rounded border px-1 py-px text-[8px] font-medium tabular-nums ${styles[statusKey]}`}>
       {value.toLocaleString()}
     </span>
   );
@@ -736,52 +811,52 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
   );
 
   return (
-    <div className="rounded-lg border bg-card shadow-[var(--shadow-panel)]">
+    <div className="rounded border bg-card shadow-[var(--shadow-panel)]">
       <button
         type="button"
         onClick={() => setCollapsed((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex w-full items-center justify-between px-2 py-1.5 text-left"
       >
         <div>
-          <h3 className="text-sm font-semibold">Cumulative Orders by Month</h3>
-          <p className="text-xs text-muted-foreground">Monthly totals with fill rate and completion rate</p>
+          <h3 className="text-[10px] font-semibold">Cumulative Orders by Month</h3>
+          <p className="text-[8px] text-muted-foreground">Monthly totals with fill rate and completion rate</p>
         </div>
         {collapsed ? (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
         )}
       </button>
 
       {!collapsed && (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full text-[8px]">
             <thead>
               <tr className="border-t bg-muted/40">
-                <th className="px-4 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Month</th>
-                <th className="px-3 py-2 text-right font-semibold text-muted-foreground">Total</th>
+                <th className="px-2 py-1 text-left font-semibold text-muted-foreground whitespace-nowrap">Month</th>
+                <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground">Total</th>
                 {STATUS_COLS.map((col) => (
-                  <th key={col.key} className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                  <th key={col.key} className="px-1.5 py-1 text-right font-semibold text-muted-foreground whitespace-nowrap">
                     {col.label}
                   </th>
                 ))}
-                <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1">
+                <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                  <span className="inline-flex items-center gap-0.5">
                     Fill Rate
                     <span
                       title={FILL_RATE_TOOLTIP}
-                      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
+                      className="inline-flex h-2.5 w-2.5 cursor-help items-center justify-center rounded-full bg-muted text-[7px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
                     >
                       ?
                     </span>
                   </span>
                 </th>
-                <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1">
+                <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                  <span className="inline-flex items-center gap-0.5">
                     Completion Rate
                     <span
                       title={COMPLETION_TOOLTIP}
-                      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
+                      className="inline-flex h-2.5 w-2.5 cursor-help items-center justify-center rounded-full bg-muted text-[7px] font-bold text-muted-foreground ring-1 ring-muted-foreground/30 select-none"
                     >
                       ?
                     </span>
@@ -795,12 +870,12 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                   key={row.month}
                   className={`border-t transition-colors hover:bg-muted/30 ${i % 2 === 0 ? "" : "bg-muted/10"}`}
                 >
-                  <td className="px-4 py-2 font-medium whitespace-nowrap">{row.label}</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{row.total.toLocaleString()}</td>
+                  <td className="px-2 py-0.5 font-medium whitespace-nowrap">{row.label}</td>
+                  <td className="px-1.5 py-0.5 text-right tabular-nums font-semibold">{row.total.toLocaleString()}</td>
                   {STATUS_COLS.map((col) => {
                     const val = row[col.key as keyof typeof row] as number;
                     return (
-                      <td key={col.key} className="px-3 py-2 text-right tabular-nums">
+                      <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
                         {val > 0 ? (
                           <StatusBadge statusKey={col.key} value={val} />
                         ) : (
@@ -809,13 +884,13 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="px-1.5 py-0.5 text-right tabular-nums">
                     <FillRateBadge
                       rate={aggregateFillRate(row.days)}
                       row={{ fill_shipped_qty: row.fill_shipped_qty, fill_ordered_qty: row.fill_ordered_qty }}
                     />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="px-1.5 py-0.5 text-right tabular-nums">
                     <CompletionRateBadge rate={calcCompletionRate(row)} row={row} />
                   </td>
                 </tr>
@@ -830,20 +905,20 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
                 };
                 return (
                 <tr className="border-t bg-muted/40 font-semibold">
-                  <td className="px-4 py-2 text-muted-foreground">Grand Total</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{grand.total.toLocaleString()}</td>
+                  <td className="px-2 py-0.5 text-muted-foreground">Grand Total</td>
+                  <td className="px-1.5 py-0.5 text-right tabular-nums">{grand.total.toLocaleString()}</td>
                   {STATUS_COLS.map((col) => {
                     const val = grand[col.key as keyof typeof grand] as number;
                     return (
-                      <td key={col.key} className="px-3 py-2 text-right tabular-nums">
+                      <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
                         {val > 0 ? val.toLocaleString() : <span className="text-muted-foreground/50">—</span>}
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="px-1.5 py-0.5 text-right tabular-nums">
                     <FillRateBadge rate={grandFillRow.fill_rate_pct} row={grandFillRow} />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="px-1.5 py-0.5 text-right tabular-nums">
                     <CompletionRateBadge rate={calcCompletionRate(grand)} row={grand} />
                   </td>
                 </tr>
@@ -853,7 +928,7 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
           </table>
 
           {rows.length === 0 && (
-            <p className="py-8 text-center text-xs text-muted-foreground">No data for selected period.</p>
+            <p className="py-4 text-center text-[8px] text-muted-foreground">No data for selected period.</p>
           )}
         </div>
       )}
@@ -865,11 +940,162 @@ function MonthlyOrderTable({ trendData }: { trendData: TrendDay[] }) {
 // Page
 // -------------------------------------------------------------------------
 
+function SoTotalsStrip({ soTotals }: { soTotals?: SoTotals }) {
+  if (!soTotals) return null;
+
+  return (
+    <div className="rounded border bg-muted/30 px-2 py-1.5 text-[8px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="font-medium">Total SO calculation</span>
+        <Badge variant="outline" className="h-4 px-1 py-0 text-[8px] font-mono tabular-nums">
+          All SO: {soTotals.all_so.toLocaleString()}
+        </Badge>
+        <Badge variant="secondary" className="h-4 px-1 py-0 text-[8px] font-mono tabular-nums">
+          Dashboard SO: {soTotals.dashboard_so.toLocaleString()}
+        </Badge>
+        <Badge variant="outline" className="h-4 px-1 py-0 text-[8px] font-mono tabular-nums text-amber-800 border-amber-300 dark:text-amber-300">
+          Goods Lost in Transit: {soTotals.goods_lost_in_transit_so.toLocaleString()}
+        </Badge>
+      </div>
+      <p className="mt-0.5 text-[8px] leading-tight text-muted-foreground">
+        {soTotals.formula}
+        {" · "}
+        <span className="font-mono text-foreground/80">{soTotals.calculation}</span>
+        {" · "}
+        GLT customer excluded from main SO dashboard.
+      </p>
+    </div>
+  );
+}
+
+function GoodsLostInTransitPanel({
+  dateFrom,
+  dateTo,
+  enabled,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  enabled: boolean;
+}) {
+  const glt = useGoodsLostInTransit(dateFrom, dateTo, enabled);
+  const data = glt.data;
+
+  if (!enabled) return null;
+
+  if (glt.isLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (glt.isError) {
+    return <p className="text-[8px] text-destructive">Could not load Goods Lost in Transit orders.</p>;
+  }
+
+  if (!data) return null;
+
+  const statusCards = [
+    { label: "Total SO", value: data.total, tone: "text-amber-700" },
+    { label: "Open", value: data.open, tone: "text-sky-700" },
+    { label: "Pending Approval", value: data.pending_approval, tone: "text-amber-700" },
+    { label: "Shipping", value: data.shipping, tone: "text-purple-700" },
+    { label: "Completed", value: data.completed, tone: "text-green-700" },
+    { label: "Rejected", value: data.rejected, tone: "text-red-700" },
+    { label: "On Hold", value: data.on_hold, tone: "text-orange-700" },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <SoTotalsStrip soTotals={data.so_totals} />
+
+      <div className="rounded border bg-card p-2 shadow-sm">
+        <div className="mb-1.5 flex flex-wrap items-start justify-between gap-1">
+          <div>
+            <h2 className="flex items-center gap-1 text-[10px] font-semibold">
+              <PackageX className="h-3 w-3 text-amber-600" />
+              {data.label}
+            </h2>
+            <p className="text-[8px] text-muted-foreground">
+              Customer{" "}
+              <CustomerLink customerId={data.customer_id} customerName={data.customer_name}>
+                {data.customer_id}
+              </CustomerLink>
+              {" · "}
+              {data.customer_name}
+              {" · "}
+              {data.total.toLocaleString()} SO in range
+            </p>
+          </div>
+          <div className="text-right text-[8px] text-muted-foreground">
+            Order value total
+            <div className="text-[10px] font-semibold text-foreground">
+              <MaskedKES value={data.order_total_sum} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1 sm:grid-cols-4 lg:grid-cols-7">
+          {statusCards.map((card) => (
+            <div key={card.label} className="rounded border bg-muted/20 px-1.5 py-1">
+              <p className="text-[8px] leading-tight text-muted-foreground">{card.label}</p>
+              <p className={`text-[11px] font-bold tabular-nums leading-tight ${card.tone}`}>{card.value.toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded border bg-card shadow-sm">
+        <table className="w-full text-[8px]">
+          <thead>
+            <tr className="border-b bg-muted/40 text-left">
+              <th className="px-1.5 py-1 font-semibold text-muted-foreground">SO Number</th>
+              <th className="px-1.5 py-1 font-semibold text-muted-foreground">Date</th>
+              <th className="px-1.5 py-1 font-semibold text-muted-foreground">Status</th>
+              <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground">Amount</th>
+              <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground">Quantity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.orders.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-1.5 py-4 text-center text-muted-foreground">
+                  No Goods Lost in Transit sales orders in this date range.
+                </td>
+              </tr>
+            )}
+            {data.orders.map((order) => (
+              <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20">
+                <td className="px-1.5 py-0.5 font-mono font-medium">
+                  <OrderLink customerId={order.customer_acumatica_id} orderId={order.order_nbr} />
+                </td>
+                <td className="px-1.5 py-0.5">
+                  {order.order_date ? <DateLink date={order.order_date} /> : "—"}
+                </td>
+                <td className="px-1.5 py-0.5">{order.status ?? "—"}</td>
+                <td className="px-1.5 py-0.5 text-right font-mono tabular-nums">
+                  <MaskedKES value={order.amount} />
+                </td>
+                <td className="px-1.5 py-0.5 text-right font-mono tabular-nums">
+                  {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage() {
   const navigate = useNavigate();
   const [dateFrom, setDateFrom] = useState(startOfMonth);
   const [dateTo, setDateTo]     = useState(today);
   const [compare, setCompare]   = useState(false);
+  const [tab, setTab] = useState<"sales-orders" | "goods-lost">("sales-orders");
   const [activeStats, setActiveStats] = useState<StatKey[]>(
     ["total", "open", "completed", "pending_approval", "shipping", "rejected", "on_hold"]
   );
@@ -898,22 +1124,23 @@ function DashboardPage() {
   // Merge current + previous into a single array for Recharts
   const chartData = (() => {
     if (!trend.data?.current) return [];
-    const map: Record<string, Record<string, number | string>> = {};
-    for (const d of trend.data.current) {
-      map[d.day] = { day: d.day, label: fmtDay(d.day), ...d };
+    const map: Record<string, ChartDayPoint> = {};
+    for (const day of trend.data.current) {
+      map[day.day] = { ...day, label: fmtDay(day.day) };
     }
-    if (trend.data.previous) {
-      for (let i = 0; i < trend.data.previous.length; i++) {
-        const d = trend.data.previous[i];
-        const currentDay = trend.data.current[i]?.day ?? d.day;
+    const previousDays = trend.data.previous;
+    if (previousDays) {
+      for (let i = 0; i < previousDays.length; i++) {
+        const prevDay: TrendDay = previousDays[i];
+        const currentDay = trend.data.current[i]?.day ?? prevDay.day;
         if (map[currentDay]) {
-          map[currentDay].prev_total            = d.total;
-          map[currentDay].prev_completed        = d.completed;
-          map[currentDay].prev_pending_approval = d.pending_approval;
-          map[currentDay].prev_shipping         = d.shipping;
-          map[currentDay].prev_rejected         = d.rejected;
-          map[currentDay].prev_on_hold          = d.on_hold;
-          map[currentDay].prev_open             = d.open;
+          map[currentDay].prev_total            = prevDay.total;
+          map[currentDay].prev_completed        = prevDay.completed;
+          map[currentDay].prev_pending_approval = prevDay.pending_approval;
+          map[currentDay].prev_shipping         = prevDay.shipping;
+          map[currentDay].prev_rejected         = prevDay.rejected;
+          map[currentDay].prev_on_hold          = prevDay.on_hold;
+          map[currentDay].prev_open             = prevDay.open;
         }
       }
     }
@@ -923,117 +1150,148 @@ function DashboardPage() {
   })();
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-2 text-[8px]">
       {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Operations Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Sales orders (SO) only. Quotes, credit notes, credit memos, and pick lists are on Credit Notes &amp; More.</p>
+      <div className="flex flex-wrap items-end justify-between gap-1.5">
+        <div className="min-w-0">
+          <h1 className="text-[12px] font-semibold tracking-tight">Operations Dashboard</h1>
+          <p className="text-[8px] leading-tight text-muted-foreground">
+            Sales orders (SO) only. Goods Lost in Transit ({kpi?.goods_lost_in_transit?.customer_id ?? "CUST102641"}) is on its own tab and excluded from SO totals.
+          </p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="grid gap-1">
-            <Label className="text-xs">From</Label>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 w-36 text-xs" />
+        <div className="flex flex-wrap items-end gap-1">
+          <div className="grid gap-0.5">
+            <Label className="text-[8px]">From</Label>
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-6 w-[7.5rem] px-1 text-[8px]" />
           </div>
-          <div className="grid gap-1">
-            <Label className="text-xs">To</Label>
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 w-36 text-xs" />
+          <div className="grid gap-0.5">
+            <Label className="text-[8px]">To</Label>
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-6 w-[7.5rem] px-1 text-[8px]" />
           </div>
-          <Button variant="outline" size="sm" className="h-8" onClick={() => { kpis.refetch(); trend.refetch(); }}>
-            <RefreshCw className="h-3.5 w-3.5" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 w-6 px-0"
+            onClick={() => {
+              kpis.refetch();
+              trend.refetch();
+            }}
+            title="Refresh dashboard metrics"
+          >
+            <RefreshCw className="h-3 w-3" />
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="h-8"
+            className="h-6 px-1.5 text-[8px]"
             onClick={() => orderStatusRefresh.mutate({ date_from: dateFrom, date_to: dateTo })}
             disabled={orderStatusRefresh.isPending}
             title="Import today's Acumatica orders and update statuses for the selected date range through today"
           >
-            <RefreshCw className={`mr-1 h-3.5 w-3.5 ${orderStatusRefresh.isPending ? "animate-spin" : ""}`} />
-            {orderStatusRefresh.isPending ? "Updating..." : "Update order status"}
+            <RefreshCw className={`mr-0.5 h-3 w-3 ${orderStatusRefresh.isPending ? "animate-spin" : ""}`} />
+            {orderStatusRefresh.isPending ? "Updating..." : "Update status"}
           </Button>
-          <div className="flex items-center gap-2 rounded-md border px-3 h-8">
-            <Switch id="compare-toggle" checked={compare} onCheckedChange={setCompare} />
-            <Label htmlFor="compare-toggle" className="cursor-pointer text-xs select-none whitespace-nowrap">
-              Compare prev. period
+          <div className="flex h-6 items-center gap-1 rounded border px-1.5">
+            <Switch id="compare-toggle" checked={compare} onCheckedChange={setCompare} className="scale-75 origin-left" />
+            <Label htmlFor="compare-toggle" className="cursor-pointer text-[8px] select-none whitespace-nowrap">
+              Compare prev.
             </Label>
           </div>
         </div>
       </div>
 
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "sales-orders" | "goods-lost")} className="space-y-2">
+        <TabsList className="h-7 gap-0.5 p-0.5">
+          <TabsTrigger value="sales-orders" className="h-6 gap-1 px-2 text-[8px]">
+            <Package className="h-3 w-3" />
+            Sales Orders
+          </TabsTrigger>
+          <TabsTrigger value="goods-lost" className="h-6 gap-1 px-2 text-[8px]">
+            <PackageX className="h-3 w-3" />
+            Goods Lost in Transit
+            {kpi?.goods_lost_in_transit != null && (
+              <Badge variant="secondary" className="ml-0.5 h-3.5 px-1 text-[8px] tabular-nums">
+                {kpi.goods_lost_in_transit.total}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="sales-orders" className="mt-0 space-y-2">
+          <SoTotalsStrip soTotals={kpi?.so_totals} />
+
       {/* Stat cards */}
       {kpis.isLoading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+        <div className="grid grid-cols-4 gap-1 sm:grid-cols-4 lg:grid-cols-8">
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        <div className="grid grid-cols-4 gap-1 sm:grid-cols-4 lg:grid-cols-8">
           {STATS.map((s) => (
             <button
               key={s.key}
               type="button"
               onClick={() => goToOrders(s.statusFilter)}
-              className={`group rounded-lg border p-4 text-left transition-all hover:shadow-md active:scale-[0.98] ${s.bg} ${s.border}`}
+              className={`group rounded border p-1.5 text-left transition-all hover:shadow-sm active:scale-[0.98] ${s.bg} ${s.border}`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[11px] font-semibold uppercase tracking-wide ${s.color} opacity-80`}>
+              <div className="mb-0.5 flex items-center justify-between gap-0.5">
+                <span className={`truncate text-[8px] font-semibold uppercase leading-tight tracking-wide ${s.color} opacity-80`}>
                   {s.label}
                 </span>
-                <s.icon className={`h-4 w-4 ${s.color} opacity-60`} />
+                <s.icon className={`h-2.5 w-2.5 shrink-0 ${s.color} opacity-60`} />
               </div>
-              <div className={`text-2xl font-bold tabular-nums ${s.color}`}>
+              <div className={`text-[13px] font-bold leading-tight tabular-nums ${s.color}`}>
                 {kpi ? (kpi[s.key] ?? 0).toLocaleString() : "—"}
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                View orders →
+              <div className="mt-0.5 text-[7px] leading-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                View →
               </div>
             </button>
           ))}
 
           {/* Avg orders / day card */}
-          <div className="rounded-lg border p-4 bg-teal-50 border-teal-200 dark:bg-teal-950/40 dark:border-teal-800">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300 opacity-80">
+          <div className="rounded border p-1.5 bg-teal-50 border-teal-200 dark:bg-teal-950/40 dark:border-teal-800">
+            <div className="mb-0.5 flex items-center justify-between gap-0.5">
+              <span className="truncate text-[8px] font-semibold uppercase leading-tight tracking-wide text-teal-700 dark:text-teal-300 opacity-80">
                 Avg / Day
               </span>
-              <BarChart2 className="h-4 w-4 text-teal-700 dark:text-teal-300 opacity-60" />
+              <BarChart2 className="h-2.5 w-2.5 shrink-0 text-teal-700 dark:text-teal-300 opacity-60" />
             </div>
-            <div className="text-2xl font-bold tabular-nums text-teal-700 dark:text-teal-300">
+            <div className="text-[13px] font-bold leading-tight tabular-nums text-teal-700 dark:text-teal-300">
               {kpi ? kpi.avg_per_day.toLocaleString("en-KE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—"}
             </div>
-            <div className="mt-1 text-[10px] text-teal-600/70 dark:text-teal-400/70">
-              {kpi ? `${kpi.active_days} active day${kpi.active_days !== 1 ? "s" : ""} · MTD` : "orders per day"}
+            <div className="mt-0.5 text-[7px] leading-none text-teal-600/70 dark:text-teal-400/70">
+              {kpi ? `${kpi.active_days} active day${kpi.active_days !== 1 ? "s" : ""} · MTD` : "orders/day"}
             </div>
           </div>
         </div>
       )}
 
       {/* Trend chart */}
-      <div className="rounded-lg border bg-card p-4 shadow-[var(--shadow-panel)]">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded border bg-card p-2 shadow-[var(--shadow-panel)]">
+        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5">
           <div>
-            <h3 className="text-sm font-semibold">Order Volume Trend</h3>
-            <p className="text-xs text-muted-foreground">
+            <h3 className="text-[10px] font-semibold">Order Volume Trend</h3>
+            <p className="text-[8px] text-muted-foreground">
               {fmtDay(dateFrom)} — {fmtDay(dateTo)}
-              {compare && <span className="ml-2 text-muted-foreground/70">(dashed = previous period)</span>}
+              {compare && <span className="ml-1 text-muted-foreground/70">(dashed = prev.)</span>}
             </p>
           </div>
           {/* Series toggles */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-0.5">
             {STATS.map((s) => (
               <button
                 key={s.key}
                 type="button"
                 onClick={() => toggleStat(s.key)}
-                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all ${
+                className={`flex items-center gap-0.5 rounded-full border px-1.5 py-px text-[8px] font-medium transition-all ${
                   activeStats.includes(s.key)
                     ? `${s.bg} ${s.border} ${s.color}`
                     : "border-muted bg-muted/30 text-muted-foreground line-through"
                 }`}
               >
                 <span
-                  className="inline-block h-2 w-2 rounded-full"
+                  className="inline-block h-1.5 w-1.5 rounded-full"
                   style={{ background: CHART_COLORS[s.key] }}
                 />
                 {s.label}
@@ -1043,11 +1301,11 @@ function DashboardPage() {
         </div>
 
         {trend.isLoading ? (
-          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-40 w-full" />
         ) : (
-          <div className="h-64">
+          <div className="h-40 sm:h-48">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
                 <defs>
                   {STATS.map((s) => (
                     <linearGradient key={s.key} id={`grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -1057,8 +1315,8 @@ function DashboardPage() {
                   ))}
                 </defs>
                 <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" {...axisStyle} tick={{ fontSize: 10 }} />
-                <YAxis {...axisStyle} allowDecimals={false} width={32} />
+                <XAxis dataKey="label" {...axisStyle} tick={{ fontSize: 8 }} />
+                <YAxis {...axisStyle} allowDecimals={false} width={22} tick={{ fontSize: 8 }} />
                 <Tooltip contentStyle={tooltipStyle} />
                 {STATS.filter((s) => activeStats.includes(s.key)).map((s) => (
                   <Area
@@ -1068,9 +1326,9 @@ function DashboardPage() {
                     name={s.label}
                     stroke={CHART_COLORS[s.key]}
                     fill={`url(#grad-${s.key})`}
-                    strokeWidth={s.key === "total" ? 2 : 1.5}
+                    strokeWidth={s.key === "total" ? 1.5 : 1}
                     dot={false}
-                    activeDot={{ r: 3 }}
+                    activeDot={{ r: 2 }}
                   />
                 ))}
                 {compare &&
@@ -1096,17 +1354,27 @@ function DashboardPage() {
 
       {/* Monthly cumulative table */}
       {trend.isLoading ? (
-        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-20 w-full" />
       ) : trend.data?.current && trend.data.current.length > 0 ? (
         <MonthlyOrderTable trendData={trend.data.current} />
       ) : null}
 
       {/* Daily breakdown table */}
       {trend.isLoading ? (
-        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-28 w-full" />
       ) : trend.data?.current && trend.data.current.length > 0 ? (
         <DailyOrderTable trendData={trend.data.current} />
       ) : null}
+        </TabsContent>
+
+        <TabsContent value="goods-lost" className="mt-0 space-y-2">
+          <GoodsLostInTransitPanel
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            enabled={tab === "goods-lost"}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

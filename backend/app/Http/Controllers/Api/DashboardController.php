@@ -7,6 +7,7 @@ use App\Models\AcumaticaSalesOrder;
 use App\Models\User;
 use App\Services\Admin\SalesOrderLineFulfillmentDeriver;
 use App\Services\Operations\OperationsCatalogResolver;
+use App\Support\DataScope;
 use App\Support\SalesConsultantScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,18 +20,148 @@ class DashboardController extends Controller
         private readonly OperationsCatalogResolver $catalogResolver,
     ) {
     }
-    /** Return status-broken-down KPI counts for the given date range. */
+
+    /** Return status-broken-down KPI counts for the given date range (excludes Goods Lost in Transit). */
     public function kpis(Request $request): JsonResponse
     {
         $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
         $dateTo   = $request->input('date_to',   now()->toDateString());
+        $user = $request->user();
 
-        $counts = $this->statusCounts($dateFrom, $dateTo, $request->user());
+        $counts = $this->statusCounts($dateFrom, $dateTo, $user, excludeSpecialCustomers: true);
+        $allCounts = $this->statusCounts($dateFrom, $dateTo, $user, excludeSpecialCustomers: false);
+        $gltCounts = $this->statusCounts($dateFrom, $dateTo, $user, onlyGoodsLostInTransit: true);
 
         return response()->json(array_merge($counts, [
             'date_from' => $dateFrom,
             'date_to'   => $dateTo,
+            // Total SO calculation: all SO vs dashboard (excl. GLT) vs GLT tab.
+            'so_totals' => [
+                'all_so' => $allCounts['total'],
+                'dashboard_so' => $counts['total'],
+                'goods_lost_in_transit_so' => $gltCounts['total'],
+                'excluded_customer_ids' => $this->excludedCustomerIds(),
+                'formula' => 'All SO = Dashboard SO + Goods Lost in Transit SO',
+                'calculation' => sprintf(
+                    '%d = %d + %d',
+                    $allCounts['total'],
+                    $counts['total'],
+                    $gltCounts['total'],
+                ),
+            ],
+            'goods_lost_in_transit' => [
+                'customer_id' => $this->goodsLostInTransitCustomerId(),
+                'label' => $this->goodsLostInTransitLabel(),
+                'total' => $gltCounts['total'],
+                'statuses' => $gltCounts,
+            ],
         ]));
+    }
+
+    /**
+     * Goods Lost in Transit tab — SOs for the dedicated customer (default CUST102641).
+     */
+    public function goodsLostInTransit(Request $request): JsonResponse
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
+        $dateTo = $request->input('date_to', now()->toDateString());
+        $customerId = $this->goodsLostInTransitCustomerId();
+        $user = $request->user();
+
+        $base = DataScope::applyOrderScope(
+            AcumaticaSalesOrder::query()->salesOrdersOnly(),
+            $user,
+        )
+            ->where('customer_acumatica_id', $customerId)
+            ->whereDate('order_date', '>=', $dateFrom)
+            ->whereDate('order_date', '<=', $dateTo);
+
+        $statusRows = (clone $base)
+            ->select([DB::raw('status'), DB::raw('COUNT(*) as cnt')])
+            ->groupBy('status')
+            ->pluck('cnt', 'status')
+            ->mapWithKeys(fn ($cnt, $status) => [strtolower(trim($status ?? 'unknown')) => (int) $cnt])
+            ->toArray();
+
+        $total = (int) (clone $base)->count();
+        $orderTotalSum = (float) (clone $base)->sum('order_total');
+
+        $orders = (clone $base)
+            ->withSum('lines as total_qty', 'order_qty')
+            ->orderByDesc('order_date')
+            ->orderByDesc('acumatica_order_nbr')
+            ->limit(500)
+            ->get([
+                'id',
+                'acumatica_order_nbr',
+                'customer_name',
+                'customer_acumatica_id',
+                'order_total',
+                'currency_id',
+                'status',
+                'order_date',
+            ]);
+
+        $customerNames = $this->catalogResolver->namesForCustomerIds([$customerId]);
+        $customerName = $this->catalogResolver->resolveCustomerName(
+            $orders->first()?->customer_name,
+            $customerId,
+            $customerNames,
+        ) ?? $this->goodsLostInTransitLabel();
+
+        // All SO in range (same scope) for the calculation strip.
+        $allSoTotal = (int) DataScope::applyOrderScope(
+            AcumaticaSalesOrder::query()->salesOrdersOnly(),
+            $user,
+        )
+            ->whereDate('order_date', '>=', $dateFrom)
+            ->whereDate('order_date', '<=', $dateTo)
+            ->count();
+
+        $dashboardSoTotal = max(0, $allSoTotal - $total);
+
+        return response()->json([
+            'customer_id' => $customerId,
+            'customer_name' => $customerName,
+            'label' => $this->goodsLostInTransitLabel(),
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'total' => $total,
+            'order_total_sum' => round($orderTotalSum, 2),
+            'completed' => $statusRows['completed'] ?? 0,
+            'shipping' => $statusRows['shipping'] ?? 0,
+            'pending_approval' => $statusRows['pending approval'] ?? 0,
+            'rejected' => $statusRows['rejected'] ?? 0,
+            'on_hold' => ($statusRows['on hold'] ?? 0) + ($statusRows['credit hold'] ?? 0),
+            'open' => $statusRows['open'] ?? 0,
+            'so_totals' => [
+                'all_so' => $allSoTotal,
+                'dashboard_so' => $dashboardSoTotal,
+                'goods_lost_in_transit_so' => $total,
+                'formula' => 'All SO = Dashboard SO + Goods Lost in Transit SO',
+                'calculation' => sprintf(
+                    '%d = %d + %d',
+                    $allSoTotal,
+                    $dashboardSoTotal,
+                    $total,
+                ),
+            ],
+            'orders' => $orders->map(fn ($order) => [
+                'id' => $order->id,
+                'order_nbr' => $order->acumatica_order_nbr,
+                'customer_acumatica_id' => $order->customer_acumatica_id,
+                'customer_name' => $this->catalogResolver->resolveCustomerName(
+                    $order->customer_name,
+                    $order->customer_acumatica_id,
+                    $customerNames,
+                ),
+                'amount' => round((float) $order->order_total, 2),
+                'currency_id' => $order->currency_id,
+                'quantity' => round((float) ($order->total_qty ?? 0), 4),
+                'order_date' => $order->order_date?->toDateString(),
+                'status' => $order->status,
+            ])->values(),
+        ]);
     }
 
     /** Orders for a dashboard status bucket (used by expandable status accordions). */
@@ -54,9 +185,11 @@ class DashboardController extends Controller
             return response()->json(['message' => 'Invalid status key.'], 422);
         }
 
-        $orders = SalesConsultantScope::applyOrderScope(
-            AcumaticaSalesOrder::query()->salesOrdersOnly(),
-            $request->user(),
+        $orders = $this->excludeSpecialCustomers(
+            DataScope::applyOrderScope(
+                AcumaticaSalesOrder::query()->salesOrdersOnly(),
+                $request->user(),
+            ),
         )
             ->whereDate('order_date', '>=', $dateFrom)
             ->whereDate('order_date', '<=', $dateTo)
@@ -86,9 +219,10 @@ class DashboardController extends Controller
             'date_to'    => $dateTo,
             'count'      => $orders->count(),
             'orders'     => $orders->map(fn ($order) => [
-                'id'            => $order->id,
-                'order_nbr'     => $order->acumatica_order_nbr,
-                'customer_name' => $this->catalogResolver->resolveCustomerName(
+                'id'                    => $order->id,
+                'order_nbr'             => $order->acumatica_order_nbr,
+                'customer_acumatica_id' => $order->customer_acumatica_id,
+                'customer_name'         => $this->catalogResolver->resolveCustomerName(
                     $order->customer_name,
                     $order->customer_acumatica_id,
                     $customerNames,
@@ -129,14 +263,25 @@ class DashboardController extends Controller
     // Helpers
     // -------------------------------------------------------------------------
 
-    private function statusCounts(string $dateFrom, string $dateTo, ?User $user): array
-    {
-        $base = SalesConsultantScope::applyOrderScope(
+    private function statusCounts(
+        string $dateFrom,
+        string $dateTo,
+        ?User $user,
+        bool $excludeSpecialCustomers = true,
+        bool $onlyGoodsLostInTransit = false,
+    ): array {
+        $base = DataScope::applyOrderScope(
             AcumaticaSalesOrder::salesOrdersOnly(),
             $user,
         )
             ->whereDate('order_date', '>=', $dateFrom)
             ->whereDate('order_date', '<=', $dateTo);
+
+        if ($onlyGoodsLostInTransit) {
+            $base->where('customer_acumatica_id', $this->goodsLostInTransitCustomerId());
+        } elseif ($excludeSpecialCustomers) {
+            $base = $this->excludeSpecialCustomers($base);
+        }
 
         $rows = (clone $base)
             ->select([DB::raw('status'), DB::raw('COUNT(*) as cnt')])
@@ -171,6 +316,50 @@ class DashboardController extends Controller
         ];
     }
 
+    /** @return list<string> */
+    private function excludedCustomerIds(): array
+    {
+        $ids = config('dashboard.excluded_customer_ids', ['CUST102641']);
+
+        return array_values(array_filter(array_map(
+            static fn ($id) => strtoupper(trim((string) $id)),
+            is_array($ids) ? $ids : [],
+        )));
+    }
+
+    private function goodsLostInTransitCustomerId(): string
+    {
+        return strtoupper(trim((string) config(
+            'dashboard.goods_lost_in_transit.customer_id',
+            'CUST102641',
+        )));
+    }
+
+    private function goodsLostInTransitLabel(): string
+    {
+        return (string) config(
+            'dashboard.goods_lost_in_transit.label',
+            'Goods Lost in Transit',
+        );
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\AcumaticaSalesOrder>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\AcumaticaSalesOrder>
+     */
+    private function excludeSpecialCustomers($query)
+    {
+        $ids = $this->excludedCustomerIds();
+        if ($ids !== []) {
+            $query->where(function ($q) use ($ids) {
+                $q->whereNull('customer_acumatica_id')
+                    ->orWhereNotIn('customer_acumatica_id', $ids);
+            });
+        }
+
+        return $query;
+    }
+
     /**
      * Group orders by day, returning a flat array where each entry is:
      * { day, label, total, completed, shipping, pending_approval, rejected, on_hold }
@@ -180,9 +369,11 @@ class DashboardController extends Controller
      */
     private function dailyTrend(string $dateFrom, string $dateTo, ?string $labelOffset = null, ?User $user = null): array
     {
-        $rows = SalesConsultantScope::applyOrderScope(
-            AcumaticaSalesOrder::query()->salesOrdersOnly(),
-            $user,
+        $rows = $this->excludeSpecialCustomers(
+            DataScope::applyOrderScope(
+                AcumaticaSalesOrder::query()->salesOrdersOnly(),
+                $user,
+            ),
         )
             ->selectRaw('DATE(order_date) as day, status, COUNT(*) as cnt')
             ->whereDate('order_date', '>=', $dateFrom)
@@ -283,6 +474,14 @@ class DashboardController extends Controller
             ->whereDate('o.order_date', '>=', $dateFrom)
             ->whereDate('o.order_date', '<=', $dateTo)
             ->where('f.fill_rate_status', '!=', 'na');
+
+        $excluded = $this->excludedCustomerIds();
+        if ($excluded !== []) {
+            $query->where(function ($q) use ($excluded) {
+                $q->whereNull('o.customer_acumatica_id')
+                    ->orWhereNotIn('o.customer_acumatica_id', $excluded);
+            });
+        }
 
         if (SalesConsultantScope::appliesTo($user)) {
             $repCode = SalesConsultantScope::repCode($user);

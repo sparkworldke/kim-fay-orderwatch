@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiFetch, ApiError } from "@/lib/api";
+import { API_BASE_URL, apiFetch, ApiError } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import type {
   AcumaticaCustomerSummary,
   AcumaticaLookupResult,
@@ -29,7 +30,11 @@ import type {
   CreateTeamMemberInput,
   UpdateTeamMemberInput,
   RepCodeHistoryEntry,
+  UserSessionEntry,
   DeliverySlaConfigRule,
+  StaffImportGap,
+  StaffImportResult,
+  CustomerBackfillResult,
 } from "@/types/admin";
 import type { AcumaticaInput, AiKeyInput } from "@/lib/admin-schemas";
 
@@ -341,6 +346,13 @@ export function useRoles() {
   });
 }
 
+export function useDepartments() {
+  return useQuery({
+    queryKey: [...adminKey, "departments"],
+    queryFn: () => apiFetch<import("@/types/admin").Department[]>("admin/departments"),
+  });
+}
+
 export function useTeamMembers() {
   return useQuery({
     queryKey: [...adminKey, "team-members"],
@@ -370,6 +382,43 @@ export function useResendWelcomeEmail() {
       apiFetch<{ message: string }>(`admin/users/${userId}/resend-welcome`, { method: "POST" }),
     onSuccess: (result) => {
       toast.success(result.message);
+    },
+    onError: showError,
+  });
+}
+
+export type UpdateUserPasswordInput = {
+  userId: number;
+  auto_generate: boolean;
+  password?: string;
+  email_user?: boolean;
+};
+
+export type UpdateUserPasswordResult = {
+  message: string;
+  auto_generate: boolean;
+  emailed: boolean;
+  password: string | null;
+};
+
+export function useUpdateUserPassword() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, ...body }: UpdateUserPasswordInput) =>
+      apiFetch<UpdateUserPasswordResult>(`admin/users/${userId}/password`, {
+        method: "POST",
+        body,
+      }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      if (result.password) {
+        toast.message("Generated password", {
+          description: result.password,
+          duration: 20_000,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
     },
     onError: showError,
   });
@@ -425,6 +474,291 @@ export function useRepCodeHistory(userId: number | null) {
     queryKey: [...adminKey, "rep-code-history", userId],
     queryFn: () => apiFetch<RepCodeHistoryEntry[]>(`admin/users/${userId}/rep-code-history`),
     enabled: userId !== null,
+  });
+}
+
+export function useUserSessions(userId: number | null, page = 1) {
+  return useQuery({
+    queryKey: [...adminKey, "user-sessions", userId, page],
+    queryFn: () =>
+      apiFetch<PaginatedResponse<UserSessionEntry>>(`admin/users/${userId}/sessions?page=${page}`),
+    enabled: userId !== null,
+  });
+}
+
+export function useBrandOptions() {
+  return useQuery({
+    queryKey: [...adminKey, "brand-options"],
+    queryFn: () =>
+      apiFetch<{ partner_brands: string[] }>("admin/brand-options"),
+  });
+}
+
+export function useSyncBrandAssignments() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, brands }: { userId: number; brands: string[] }) =>
+      apiFetch<{ message: string; brands: string[] }>(`admin/users/${userId}/brand-assignments`, {
+        method: "PUT",
+        body: { brands },
+      }),
+    onSuccess: () => {
+      toast.success("Brand assignments saved");
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+    },
+    onError: showError,
+  });
+}
+
+export interface CustomerAssignmentRow {
+  id: number;
+  customer_acumatica_id: string;
+  assignment_type: string;
+  notes: string | null;
+  source?: string | null;
+  source_batch_id?: string | null;
+}
+
+export interface CustomerSearchRow {
+  id: number;
+  acumatica_id: string;
+  name: string;
+  customer_class: string | null;
+  status: string | null;
+}
+
+export function useCustomerSearch(q: string) {
+  return useQuery({
+    queryKey: [...adminKey, "customer-search", q],
+    queryFn: () =>
+      apiFetch<CustomerSearchRow[]>(`admin/customers/search?q=${encodeURIComponent(q)}`),
+    enabled: q.trim().length >= 2,
+  });
+}
+
+export function useCustomerAssignments(userId: number | null) {
+  return useQuery({
+    queryKey: [...adminKey, "customer-assignments", userId],
+    queryFn: () => apiFetch<CustomerAssignmentRow[]>(`admin/users/${userId}/customer-assignments`),
+    enabled: userId !== null,
+  });
+}
+
+export function useSyncCustomerAssignments() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      userId,
+      customer_acumatica_ids,
+    }: {
+      userId: number;
+      customer_acumatica_ids: string[];
+    }) =>
+      apiFetch<{ message: string; assignments: CustomerAssignmentRow[] }>(
+        `admin/users/${userId}/customer-assignments`,
+        { method: "PUT", body: { customer_acumatica_ids } },
+      ),
+    onSuccess: (_, vars) => {
+      toast.success("Customer assignments saved");
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "customer-assignments", vars.userId] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useBackfillCustomers() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiFetch<CustomerBackfillResult>(`admin/users/${userId}/backfill-customers`, { method: "POST" }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+    },
+    onError: showError,
+  });
+}
+
+export interface CustomerAssignmentSourceStatus {
+  sales_orders: { available: boolean; message: string };
+  customer_endpoint: { available: boolean; field: string | null; message: string };
+  upload: { available: boolean; message: string };
+}
+
+export interface CustomerAssignmentBatchRow {
+  id: number;
+  row_no: number;
+  rep_code: string | null;
+  customer_acumatica_id: string | null;
+  customer_name: string | null;
+  resolved_user_id: number | null;
+  action: "create" | "update" | "error";
+  status: "valid" | "error";
+  source: string;
+  message: string | null;
+}
+
+export interface CustomerAssignmentBatch {
+  id: number;
+  uuid: string;
+  source: string;
+  mode: string;
+  status: "dry_run" | "applied" | "failed";
+  target_user_id: number | null;
+  filename: string | null;
+  stats_json: {
+    rows?: number;
+    valid?: number;
+    errors?: number;
+    create?: number;
+    update?: number;
+    created?: number;
+    updated?: number;
+    applied?: number;
+  } | null;
+  rows: CustomerAssignmentBatchRow[];
+}
+
+export function useCustomerAssignmentSources() {
+  return useQuery({
+    queryKey: [...adminKey, "customer-assignment-sources"],
+    queryFn: () => apiFetch<CustomerAssignmentSourceStatus>("admin/customer-assignments/sources"),
+    staleTime: 60_000,
+  });
+}
+
+export function usePreviewCustomerAssignmentMatch() {
+  return useMutation({
+    mutationFn: ({ userId, source }: { userId: number; source: "so_match" | "customer_endpoint" }) => {
+      const endpoint = source === "so_match" ? "match-so" : "match-customer-endpoint";
+      return apiFetch<CustomerAssignmentBatch>(`admin/users/${userId}/customer-assignments/${endpoint}`, {
+        method: "POST",
+        body: { dry_run: true },
+        timeoutMs: 300_000,
+      });
+    },
+    onError: showError,
+  });
+}
+
+export function useApplyCustomerAssignmentBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (batchId: number) =>
+      apiFetch<CustomerAssignmentBatch>(`admin/customer-assignments/batches/${batchId}/apply`, {
+        method: "POST",
+        timeoutMs: 300_000,
+      }),
+    onSuccess: (batch) => {
+      toast.success(`Applied ${batch.stats_json?.applied ?? 0} customer assignment(s).`);
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "customer-assignments"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useUploadCustomerAssignments() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      const token = getToken();
+      const res = await fetch(`${API_BASE_URL}/admin/customer-assignments/upload`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new ApiError(data?.message ?? "Customer upload failed.", res.status, data);
+      }
+      return data as CustomerAssignmentBatch;
+    },
+    onError: showError,
+  });
+}
+
+export function useImportStaff() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: { dry_run?: boolean; preserve_manual?: boolean; min_confidence?: string }) =>
+      apiFetch<StaffImportResult>("admin/team/import-staff", { method: "POST", body: payload }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "staff-import-gaps"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useStaffImportGaps() {
+  return useQuery({
+    queryKey: [...adminKey, "staff-import-gaps"],
+    queryFn: () => apiFetch<StaffImportGap[]>("admin/team/import-gaps"),
+  });
+}
+
+export function useResolveStaffGap() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      gapId,
+      resolution_status,
+      resolved_user_id,
+    }: {
+      gapId: number;
+      resolution_status: "linked" | "ignored";
+      resolved_user_id?: number;
+    }) =>
+      apiFetch<StaffImportGap>(`admin/team/import-gaps/${gapId}`, {
+        method: "PATCH",
+        body: { resolution_status, resolved_user_id },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "staff-import-gaps"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useCreateUserFromGap() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (gapId: number) =>
+      apiFetch<{ message: string }>(`admin/team/import-gaps/${gapId}/create-user`, { method: "POST" }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "staff-import-gaps"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useSeedOrgTree() {
+  return useMutation({
+    mutationFn: (payload: { dry_run?: boolean }) =>
+      apiFetch<{ message: string; result: { linked: number; missing: string[] } }>(
+        "admin/team/seed-org-tree",
+        { method: "POST", body: payload },
+      ),
+    onSuccess: (result) => {
+      toast.success(`${result.message} (${result.result.linked} linked)`);
+    },
+    onError: showError,
   });
 }
 
@@ -841,6 +1175,76 @@ export function useUpdateDeliverySlaConfig() {
       qc.invalidateQueries({ queryKey: [...adminKey, "delivery-sla-config"] });
       qc.invalidateQueries({ queryKey: ["operations-business-optimization"] });
       qc.invalidateQueries({ queryKey: ["operations-fill-rate-summary"] });
+    },
+    onError: showError,
+  });
+}
+
+// ── FOL settings (dynamic stages + mail + attachments) ───────────────────────
+
+export type FolApprovalStageConfig = {
+  id?: number;
+  key: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  assignee_mode: "role" | "user_list" | "manager_of_submitter";
+  role_names: string[];
+  user_ids: number[];
+  require_comment: boolean;
+  sla_hours: number | null;
+};
+
+export type FolSettings = {
+  mail_from_address: string;
+  mail_from_name: string;
+  max_attachment_kb: number;
+  attachment_mimes: string[];
+  invoicing_roles: string[];
+  cc_watcher_emails: string[];
+  duplicate_policy: "block" | "warn" | "allow";
+  consumables_months: number;
+  require_attachment: boolean;
+  allow_admin_on_all_stages: boolean;
+  stages: FolApprovalStageConfig[];
+  available_roles: string[];
+  users: Array<{ id: number; name: string; email: string; role: string }>;
+  defaults?: Record<string, unknown>;
+};
+
+export function useFolSettings() {
+  return useQuery({
+    queryKey: [...adminKey, "fol-settings"],
+    queryFn: () => apiFetch<FolSettings>("admin/fol/settings"),
+  });
+}
+
+export function useUpdateFolSettings() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: Partial<FolSettings>) =>
+      apiFetch<FolSettings>("admin/fol/settings", { method: "PUT", body: payload }),
+    onSuccess: () => {
+      toast.success("FOL settings saved");
+      qc.invalidateQueries({ queryKey: [...adminKey, "fol-settings"] });
+    },
+    onError: showError,
+  });
+}
+
+export function useUpdateFolStages() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (stages: FolApprovalStageConfig[]) =>
+      apiFetch<{ message: string; stages: FolApprovalStageConfig[] }>("admin/fol/stages", {
+        method: "PUT",
+        body: { stages },
+      }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      qc.invalidateQueries({ queryKey: [...adminKey, "fol-settings"] });
     },
     onError: showError,
   });

@@ -61,7 +61,37 @@ class CronJobController extends Controller
             if ($command === '') {
                 return;
             }
-            Artisan::call($command, ['--source' => 'manual', '--user-id' => $userId]);
+
+            // Parse "name --opt=value --flag" into Artisan::call($name, $params)
+            $parts = preg_split('/\s+/', $command) ?: [];
+            $name = array_shift($parts) ?: '';
+            if ($name === '') {
+                return;
+            }
+
+            $params = [
+                '--source' => 'manual',
+                '--user-id' => $userId,
+            ];
+            foreach ($parts as $part) {
+                if (! str_starts_with($part, '--')) {
+                    continue;
+                }
+                $opt = substr($part, 2);
+                if (str_contains($opt, '=')) {
+                    [$key, $value] = explode('=', $opt, 2);
+                    $params['--'.$key] = $value;
+                } else {
+                    $params['--'.$opt] = true;
+                }
+            }
+
+            // Ensure per-warehouse inventory jobs always bind to their cron row.
+            if (! isset($params['--job-key'])) {
+                $params['--job-key'] = $job->job_key;
+            }
+
+            Artisan::call($name, $params);
         });
         return response()->json(['message' => 'Cron run started. History will update automatically.'], 202);
     }

@@ -16,10 +16,12 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppZonesRouteImport } from './routes/app.zones'
 import { Route as AppTeamRouteImport } from './routes/app.team'
 import { Route as AppSoImportsRouteImport } from './routes/app.so-imports'
+import { Route as AppSalesManagementRouteImport } from './routes/app.sales-management'
 import { Route as AppSalesConsultantsRouteImport } from './routes/app.sales-consultants'
 import { Route as AppRolesRouteImport } from './routes/app.roles'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppProfileRouteImport } from './routes/app.profile'
+import { Route as AppPriceChangeRequestsRouteImport } from './routes/app.price-change-requests'
 import { Route as AppOrdersRouteImport } from './routes/app.orders'
 import { Route as AppOrderMatchRouteImport } from './routes/app.order-match'
 import { Route as AppNotificationsRouteImport } from './routes/app.notifications'
@@ -36,8 +38,14 @@ import { Route as AppAiIntelligenceRouteImport } from './routes/app.ai-intellige
 import { Route as AppAiInsightsRouteImport } from './routes/app.ai-insights'
 import { Route as AppAdministrationRouteImport } from './routes/app.administration'
 import { Route as AppSalesConsultantsIdRouteImport } from './routes/app.sales-consultants.$id'
+import { Route as AppPriceChangeRequestsNewRouteImport } from './routes/app.price-change-requests.new'
+import { Route as AppPriceChangeRequestsIdRouteImport } from './routes/app.price-change-requests.$id'
 import { Route as AppOrdersByDateDateRouteImport } from './routes/app.orders-by-date.$date'
+import { Route as AppKpFolRouteImport } from './routes/app.kp.fol'
 import { Route as AppCustomerOrdersCustomerIdRouteImport } from './routes/app.customer-orders.$customerId'
+import { Route as AppKpFolNewRouteImport } from './routes/app.kp.fol.new'
+import { Route as AppKpFolCalendarRouteImport } from './routes/app.kp.fol.calendar'
+import { Route as AppKpFolIdRouteImport } from './routes/app.kp.fol.$id'
 import { Route as AppCustomerOrdersCustomerIdSuggestedRouteImport } from './routes/app.customer-orders.$customerId.suggested'
 import { Route as AppCustomerOrdersCustomerIdSoOrderIdRouteImport } from './routes/app.customer-orders.$customerId.so.$orderId'
 import { Route as AppCustomerOrdersCustomerIdBranchBranchIdRouteImport } from './routes/app.customer-orders.$customerId.branch.$branchId'
@@ -79,6 +87,11 @@ const AppSoImportsRoute = AppSoImportsRouteImport.update({
   path: '/so-imports',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSalesManagementRoute = AppSalesManagementRouteImport.update({
+  id: '/sales-management',
+  path: '/sales-management',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSalesConsultantsRoute = AppSalesConsultantsRouteImport.update({
   id: '/sales-consultants',
   path: '/sales-consultants',
@@ -97,6 +110,11 @@ const AppReportsRoute = AppReportsRouteImport.update({
 const AppProfileRoute = AppProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPriceChangeRequestsRoute = AppPriceChangeRequestsRouteImport.update({
+  id: '/price-change-requests',
+  path: '/price-change-requests',
   getParentRoute: () => AppRoute,
 } as any)
 const AppOrdersRoute = AppOrdersRouteImport.update({
@@ -179,9 +197,26 @@ const AppSalesConsultantsIdRoute = AppSalesConsultantsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AppSalesConsultantsRoute,
 } as any)
+const AppPriceChangeRequestsNewRoute =
+  AppPriceChangeRequestsNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AppPriceChangeRequestsRoute,
+  } as any)
+const AppPriceChangeRequestsIdRoute =
+  AppPriceChangeRequestsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AppPriceChangeRequestsRoute,
+  } as any)
 const AppOrdersByDateDateRoute = AppOrdersByDateDateRouteImport.update({
   id: '/orders-by-date/$date',
   path: '/orders-by-date/$date',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppKpFolRoute = AppKpFolRouteImport.update({
+  id: '/kp/fol',
+  path: '/kp/fol',
   getParentRoute: () => AppRoute,
 } as any)
 const AppCustomerOrdersCustomerIdRoute =
@@ -190,6 +225,21 @@ const AppCustomerOrdersCustomerIdRoute =
     path: '/customer-orders/$customerId',
     getParentRoute: () => AppRoute,
   } as any)
+const AppKpFolNewRoute = AppKpFolNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AppKpFolRoute,
+} as any)
+const AppKpFolCalendarRoute = AppKpFolCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => AppKpFolRoute,
+} as any)
+const AppKpFolIdRoute = AppKpFolIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppKpFolRoute,
+} as any)
 const AppCustomerOrdersCustomerIdSuggestedRoute =
   AppCustomerOrdersCustomerIdSuggestedRouteImport.update({
     id: '/suggested',
@@ -240,18 +290,26 @@ export interface FileRoutesByFullPath {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
+  '/app/price-change-requests': typeof AppPriceChangeRequestsRouteWithChildren
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
+  '/app/sales-management': typeof AppSalesManagementRoute
   '/app/so-imports': typeof AppSoImportsRoute
   '/app/team': typeof AppTeamRoute
   '/app/zones': typeof AppZonesRoute
   '/app/': typeof AppIndexRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/kp/fol': typeof AppKpFolRouteWithChildren
   '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
+  '/app/price-change-requests/$id': typeof AppPriceChangeRequestsIdRoute
+  '/app/price-change-requests/new': typeof AppPriceChangeRequestsNewRoute
   '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
   '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/kp/fol/$id': typeof AppKpFolIdRoute
+  '/app/kp/fol/calendar': typeof AppKpFolCalendarRoute
+  '/app/kp/fol/new': typeof AppKpFolNewRoute
   '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
   '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
   '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
@@ -275,18 +333,26 @@ export interface FileRoutesByTo {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
+  '/app/price-change-requests': typeof AppPriceChangeRequestsRouteWithChildren
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
+  '/app/sales-management': typeof AppSalesManagementRoute
   '/app/so-imports': typeof AppSoImportsRoute
   '/app/team': typeof AppTeamRoute
   '/app/zones': typeof AppZonesRoute
   '/app': typeof AppIndexRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/kp/fol': typeof AppKpFolRouteWithChildren
   '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
+  '/app/price-change-requests/$id': typeof AppPriceChangeRequestsIdRoute
+  '/app/price-change-requests/new': typeof AppPriceChangeRequestsNewRoute
   '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
   '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/kp/fol/$id': typeof AppKpFolIdRoute
+  '/app/kp/fol/calendar': typeof AppKpFolCalendarRoute
+  '/app/kp/fol/new': typeof AppKpFolNewRoute
   '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
   '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
   '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
@@ -312,18 +378,26 @@ export interface FileRoutesById {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
+  '/app/price-change-requests': typeof AppPriceChangeRequestsRouteWithChildren
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
+  '/app/sales-management': typeof AppSalesManagementRoute
   '/app/so-imports': typeof AppSoImportsRoute
   '/app/team': typeof AppTeamRoute
   '/app/zones': typeof AppZonesRoute
   '/app/': typeof AppIndexRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/kp/fol': typeof AppKpFolRouteWithChildren
   '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
+  '/app/price-change-requests/$id': typeof AppPriceChangeRequestsIdRoute
+  '/app/price-change-requests/new': typeof AppPriceChangeRequestsNewRoute
   '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
   '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/kp/fol/$id': typeof AppKpFolIdRoute
+  '/app/kp/fol/calendar': typeof AppKpFolCalendarRoute
+  '/app/kp/fol/new': typeof AppKpFolNewRoute
   '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
   '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
   '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
@@ -350,18 +424,26 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/order-match'
     | '/app/orders'
+    | '/app/price-change-requests'
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/sales-consultants'
+    | '/app/sales-management'
     | '/app/so-imports'
     | '/app/team'
     | '/app/zones'
     | '/app/'
     | '/app/customer-orders/$customerId'
+    | '/app/kp/fol'
     | '/app/orders-by-date/$date'
+    | '/app/price-change-requests/$id'
+    | '/app/price-change-requests/new'
     | '/app/sales-consultants/$id'
     | '/app/customer-orders/$customerId/suggested'
+    | '/app/kp/fol/$id'
+    | '/app/kp/fol/calendar'
+    | '/app/kp/fol/new'
     | '/app/customer-orders/$customerId/branch/$branchId'
     | '/app/customer-orders/$customerId/so/$orderId'
     | '/app/customer-orders/$customerId/branch/$branchId/suggested'
@@ -385,18 +467,26 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/order-match'
     | '/app/orders'
+    | '/app/price-change-requests'
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/sales-consultants'
+    | '/app/sales-management'
     | '/app/so-imports'
     | '/app/team'
     | '/app/zones'
     | '/app'
     | '/app/customer-orders/$customerId'
+    | '/app/kp/fol'
     | '/app/orders-by-date/$date'
+    | '/app/price-change-requests/$id'
+    | '/app/price-change-requests/new'
     | '/app/sales-consultants/$id'
     | '/app/customer-orders/$customerId/suggested'
+    | '/app/kp/fol/$id'
+    | '/app/kp/fol/calendar'
+    | '/app/kp/fol/new'
     | '/app/customer-orders/$customerId/branch/$branchId'
     | '/app/customer-orders/$customerId/so/$orderId'
     | '/app/customer-orders/$customerId/branch/$branchId/suggested'
@@ -421,18 +511,26 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/order-match'
     | '/app/orders'
+    | '/app/price-change-requests'
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/sales-consultants'
+    | '/app/sales-management'
     | '/app/so-imports'
     | '/app/team'
     | '/app/zones'
     | '/app/'
     | '/app/customer-orders/$customerId'
+    | '/app/kp/fol'
     | '/app/orders-by-date/$date'
+    | '/app/price-change-requests/$id'
+    | '/app/price-change-requests/new'
     | '/app/sales-consultants/$id'
     | '/app/customer-orders/$customerId/suggested'
+    | '/app/kp/fol/$id'
+    | '/app/kp/fol/calendar'
+    | '/app/kp/fol/new'
     | '/app/customer-orders/$customerId/branch/$branchId'
     | '/app/customer-orders/$customerId/so/$orderId'
     | '/app/customer-orders/$customerId/branch/$branchId/suggested'
@@ -496,6 +594,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSoImportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/sales-management': {
+      id: '/app/sales-management'
+      path: '/sales-management'
+      fullPath: '/app/sales-management'
+      preLoaderRoute: typeof AppSalesManagementRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/sales-consultants': {
       id: '/app/sales-consultants'
       path: '/sales-consultants'
@@ -522,6 +627,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/app/profile'
       preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/price-change-requests': {
+      id: '/app/price-change-requests'
+      path: '/price-change-requests'
+      fullPath: '/app/price-change-requests'
+      preLoaderRoute: typeof AppPriceChangeRequestsRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/orders': {
@@ -636,11 +748,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSalesConsultantsIdRouteImport
       parentRoute: typeof AppSalesConsultantsRoute
     }
+    '/app/price-change-requests/new': {
+      id: '/app/price-change-requests/new'
+      path: '/new'
+      fullPath: '/app/price-change-requests/new'
+      preLoaderRoute: typeof AppPriceChangeRequestsNewRouteImport
+      parentRoute: typeof AppPriceChangeRequestsRoute
+    }
+    '/app/price-change-requests/$id': {
+      id: '/app/price-change-requests/$id'
+      path: '/$id'
+      fullPath: '/app/price-change-requests/$id'
+      preLoaderRoute: typeof AppPriceChangeRequestsIdRouteImport
+      parentRoute: typeof AppPriceChangeRequestsRoute
+    }
     '/app/orders-by-date/$date': {
       id: '/app/orders-by-date/$date'
       path: '/orders-by-date/$date'
       fullPath: '/app/orders-by-date/$date'
       preLoaderRoute: typeof AppOrdersByDateDateRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/fol': {
+      id: '/app/kp/fol'
+      path: '/kp/fol'
+      fullPath: '/app/kp/fol'
+      preLoaderRoute: typeof AppKpFolRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/customer-orders/$customerId': {
@@ -649,6 +782,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/customer-orders/$customerId'
       preLoaderRoute: typeof AppCustomerOrdersCustomerIdRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/app/kp/fol/new': {
+      id: '/app/kp/fol/new'
+      path: '/new'
+      fullPath: '/app/kp/fol/new'
+      preLoaderRoute: typeof AppKpFolNewRouteImport
+      parentRoute: typeof AppKpFolRoute
+    }
+    '/app/kp/fol/calendar': {
+      id: '/app/kp/fol/calendar'
+      path: '/calendar'
+      fullPath: '/app/kp/fol/calendar'
+      preLoaderRoute: typeof AppKpFolCalendarRouteImport
+      parentRoute: typeof AppKpFolRoute
+    }
+    '/app/kp/fol/$id': {
+      id: '/app/kp/fol/$id'
+      path: '/$id'
+      fullPath: '/app/kp/fol/$id'
+      preLoaderRoute: typeof AppKpFolIdRouteImport
+      parentRoute: typeof AppKpFolRoute
     }
     '/app/customer-orders/$customerId/suggested': {
       id: '/app/customer-orders/$customerId/suggested'
@@ -687,6 +841,22 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AppPriceChangeRequestsRouteChildren {
+  AppPriceChangeRequestsIdRoute: typeof AppPriceChangeRequestsIdRoute
+  AppPriceChangeRequestsNewRoute: typeof AppPriceChangeRequestsNewRoute
+}
+
+const AppPriceChangeRequestsRouteChildren: AppPriceChangeRequestsRouteChildren =
+  {
+    AppPriceChangeRequestsIdRoute: AppPriceChangeRequestsIdRoute,
+    AppPriceChangeRequestsNewRoute: AppPriceChangeRequestsNewRoute,
+  }
+
+const AppPriceChangeRequestsRouteWithChildren =
+  AppPriceChangeRequestsRoute._addFileChildren(
+    AppPriceChangeRequestsRouteChildren,
+  )
 
 interface AppSalesConsultantsRouteChildren {
   AppSalesConsultantsIdRoute: typeof AppSalesConsultantsIdRoute
@@ -738,6 +908,22 @@ const AppCustomerOrdersCustomerIdRouteWithChildren =
     AppCustomerOrdersCustomerIdRouteChildren,
   )
 
+interface AppKpFolRouteChildren {
+  AppKpFolIdRoute: typeof AppKpFolIdRoute
+  AppKpFolCalendarRoute: typeof AppKpFolCalendarRoute
+  AppKpFolNewRoute: typeof AppKpFolNewRoute
+}
+
+const AppKpFolRouteChildren: AppKpFolRouteChildren = {
+  AppKpFolIdRoute: AppKpFolIdRoute,
+  AppKpFolCalendarRoute: AppKpFolCalendarRoute,
+  AppKpFolNewRoute: AppKpFolNewRoute,
+}
+
+const AppKpFolRouteWithChildren = AppKpFolRoute._addFileChildren(
+  AppKpFolRouteChildren,
+)
+
 interface AppRouteChildren {
   AppAdministrationRoute: typeof AppAdministrationRoute
   AppAiInsightsRoute: typeof AppAiInsightsRoute
@@ -754,15 +940,18 @@ interface AppRouteChildren {
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppOrderMatchRoute: typeof AppOrderMatchRoute
   AppOrdersRoute: typeof AppOrdersRoute
+  AppPriceChangeRequestsRoute: typeof AppPriceChangeRequestsRouteWithChildren
   AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
   AppRolesRoute: typeof AppRolesRoute
   AppSalesConsultantsRoute: typeof AppSalesConsultantsRouteWithChildren
+  AppSalesManagementRoute: typeof AppSalesManagementRoute
   AppSoImportsRoute: typeof AppSoImportsRoute
   AppTeamRoute: typeof AppTeamRoute
   AppZonesRoute: typeof AppZonesRoute
   AppIndexRoute: typeof AppIndexRoute
   AppCustomerOrdersCustomerIdRoute: typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  AppKpFolRoute: typeof AppKpFolRouteWithChildren
   AppOrdersByDateDateRoute: typeof AppOrdersByDateDateRoute
 }
 
@@ -782,16 +971,19 @@ const AppRouteChildren: AppRouteChildren = {
   AppNotificationsRoute: AppNotificationsRoute,
   AppOrderMatchRoute: AppOrderMatchRoute,
   AppOrdersRoute: AppOrdersRoute,
+  AppPriceChangeRequestsRoute: AppPriceChangeRequestsRouteWithChildren,
   AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,
   AppRolesRoute: AppRolesRoute,
   AppSalesConsultantsRoute: AppSalesConsultantsRouteWithChildren,
+  AppSalesManagementRoute: AppSalesManagementRoute,
   AppSoImportsRoute: AppSoImportsRoute,
   AppTeamRoute: AppTeamRoute,
   AppZonesRoute: AppZonesRoute,
   AppIndexRoute: AppIndexRoute,
   AppCustomerOrdersCustomerIdRoute:
     AppCustomerOrdersCustomerIdRouteWithChildren,
+  AppKpFolRoute: AppKpFolRouteWithChildren,
   AppOrdersByDateDateRoute: AppOrdersByDateDateRoute,
 }
 

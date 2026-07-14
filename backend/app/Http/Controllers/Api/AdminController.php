@@ -25,4 +25,17 @@ class AdminController extends Controller
 
         return response()->json($logs);
     }
+
+    public function userSessions(Request $request, User $user): JsonResponse
+    {
+        if ($request->user()->role !== 'Administrator') {
+            abort(403, 'Forbidden.');
+        }
+
+        $sessions = $user->userSessions()
+            ->orderByDesc('login_at')
+            ->paginate(20);
+
+        return response()->json($sessions);
+    }
 }

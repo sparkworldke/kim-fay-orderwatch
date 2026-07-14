@@ -116,6 +116,10 @@ export interface AcumaticaSalesOrderLine {
   line_nbr: number;
   inventory_id: string | null;
   description: string | null;
+  brand?: string | null;
+  posting_class?: string | null;
+  sub_trading_group?: string | null;
+  supplier?: string | null;
   order_qty: string;
   shipped_qty?: string | null;
   qty_on_shipments?: string | null;
@@ -160,6 +164,9 @@ export interface AcumaticaSalesOrder {
   rejection_reason: string | null;
   rejection_reason_code: string | null;
   on_hold_reason: string | null;
+  workflow_parent_reason: string | null;
+  workflow_sub_reason_code: string | null;
+  workflow_reason_label: string | null;
   email_subject: string | null;
   email_received_at: string | null;
   matched_po_number?: string | null;
@@ -182,6 +189,7 @@ export interface AcumaticaSalesOrder {
   lines_count?: number;
   lines_avg_fill_rate_pct?: string | number | null;
   lines_sum_backorder_qty?: string | number | null;
+  revenue_lost?: string | number | null;
   lines?: AcumaticaSalesOrderLine[];
   synced_at: string | null;
 }
@@ -225,6 +233,25 @@ export interface Role {
   permissions: Permission[];
 }
 
+export interface Department {
+  id: number;
+  slug: string;
+  name: string;
+  is_customer_facing: boolean;
+  brands?: string[];
+}
+
+export type OrgLevel = "executive" | "c_suite" | "hod" | "sales" | "brandsops" | "operations" | "gap";
+export type DataScopeMode = "org_wide" | "scoped" | "deny_all";
+export type ProductTypeScope = "manufactured" | "trading" | "both";
+export type SectorScope = "GT" | "MT" | "KP" | "ALL";
+
+export interface TeamMemberReportsTo {
+  id: number;
+  name: string;
+  email: string;
+}
+
 export interface TeamMember {
   id: number;
   name: string;
@@ -232,6 +259,24 @@ export interface TeamMember {
   role: string;
   phone_number: string | null;
   rep_code: string | null;
+  employee_number: string | null;
+  department_id: number | null;
+  department_role: string | null;
+  org_level: OrgLevel | null;
+  reports_to_user_id: number | null;
+  reports_to?: TeamMemberReportsTo | null;
+  product_type_scope: ProductTypeScope | null;
+  data_scope_mode: DataScopeMode | null;
+  is_shared_mailbox: boolean;
+  is_consultant: boolean;
+  department?: Department | null;
+  departments?: Department[];
+  department_ids?: number[];
+  sector_scopes?: SectorScope[];
+  brand_assignments?: string[];
+  roles?: Array<{ id: number; name: string }>;
+  role_ids?: number[];
+  customer_assignment_count?: number;
   is_active: boolean;
   is_account_manager: boolean;
   is_super_admin: boolean;
@@ -242,19 +287,82 @@ export interface CreateTeamMemberInput {
   name: string;
   email: string;
   role: string;
+  role_ids?: number[];
   phone_number?: string;
   rep_code?: string;
+  employee_number?: string;
+  department_id?: number | null;
+  department_ids?: number[];
+  department_role?: string;
+  org_level?: OrgLevel;
+  reports_to_user_id?: number | null;
+  product_type_scope?: ProductTypeScope;
+  data_scope_mode?: DataScopeMode;
+  sector_scopes?: SectorScope[];
+  is_consultant?: boolean;
+  is_shared_mailbox?: boolean;
   is_account_manager?: boolean;
+  is_active?: boolean;
 }
 
 export interface UpdateTeamMemberInput {
   name?: string;
   email?: string;
   role?: string;
+  role_ids?: number[];
   phone_number?: string | null;
   rep_code?: string | null;
+  employee_number?: string | null;
+  department_id?: number | null;
+  department_ids?: number[];
+  department_role?: string;
+  org_level?: OrgLevel;
+  reports_to_user_id?: number | null;
+  product_type_scope?: ProductTypeScope;
+  data_scope_mode?: DataScopeMode;
+  sector_scopes?: SectorScope[];
+  is_consultant?: boolean;
+  is_shared_mailbox?: boolean;
   is_account_manager?: boolean;
+  is_active?: boolean;
   change_reason?: string | null;
+}
+
+export interface StaffImportGap {
+  id: number;
+  email: string | null;
+  employee_number: string | null;
+  display_name: string | null;
+  gap_reason: string;
+  match_score: number | null;
+  resolution_status: string;
+  created_at: string;
+}
+
+export interface StaffImportResult {
+  message: string;
+  stats: {
+    created: number;
+    updated: number;
+    skipped: number;
+    gaps: number;
+    errors: string[];
+  };
+}
+
+export interface CustomerBackfillResult {
+  message: string;
+  result: { added: number; total: number; customer_ids: string[] };
+}
+
+export interface UserSessionEntry {
+  id: number;
+  login_at: string;
+  logout_at: string | null;
+  logout_reason: string | null;
+  duration_seconds: number | null;
+  ip_address: string | null;
+  login_mode: string;
 }
 
 export interface RepCodeHistoryEntry {

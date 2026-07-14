@@ -145,6 +145,15 @@ class InboxEmailGroupsTest extends TestCase
         ]);
         Email::create([
             'mailbox_account_id' => $account->id,
+            'message_id' => 'googlemail-1',
+            'subject' => 'Googlemail alias',
+            'from_email' => 'alias@googlemail.com',
+            'folder' => 'Inbox',
+            'received_at' => '2026-06-24 11:45:00',
+            'ingestion_classification' => 'stored_non_order',
+        ]);
+        Email::create([
+            'mailbox_account_id' => $account->id,
             'message_id' => 'outlook-1',
             'subject' => 'Outlook request',
             'from_email' => 'person@outlook.com',
@@ -176,7 +185,7 @@ class InboxEmailGroupsTest extends TestCase
             ->getJson('/api/emails/inbox-groups?date_from=2026-06-24&date_to=2026-06-24')
             ->assertOk()
             ->assertJsonPath('group_by', 'domain')
-            ->assertJsonPath('stats.total', 6)
+            ->assertJsonPath('stats.total', 7)
             ->assertJsonPath('stats.with_po', 1)
             ->assertJsonPath('stats.needs_review', 1);
 
@@ -191,8 +200,9 @@ class InboxEmailGroupsTest extends TestCase
 
         $gmail = $groups->firstWhere('group_label', 'gmail.com');
         $this->assertNotNull($gmail);
-        $this->assertSame(2, $gmail['email_count']);
+        $this->assertSame(3, $gmail['email_count']); // gmail.com + googlemail.com alias
         $this->assertNull($gmail['customer_id']);
+        $this->assertSame('domain-gmail.com', $gmail['group_key']);
 
         $outlook = $groups->firstWhere('group_label', 'outlook.com');
         $this->assertNotNull($outlook);

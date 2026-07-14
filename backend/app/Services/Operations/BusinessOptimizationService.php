@@ -49,6 +49,9 @@ class BusinessOptimizationService
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @param  list<string>|null  $portfolioCustomerIds
+     */
     public function dashboard(
         string $dateFrom,
         string $dateTo,
@@ -56,12 +59,14 @@ class BusinessOptimizationService
         bool $emptyScope = false,
         ?string $shippingZoneId = null,
         ?string $regionFilter = null,
+        ?array $portfolioCustomerIds = null,
     ): array
     {
         $status = $this->opsStatus();
         $scope = $this->resolveScope($shippingZoneId, $regionFilter);
         $shippingZoneId = $scope['shipping_zone_id'];
         $regionFilter = $scope['region_filter'];
+        $scopeCustomerIds = $this->intersectCustomerIds($scope['customer_ids'], $portfolioCustomerIds);
 
         if ($emptyScope) {
             $backorderLines = collect();
@@ -84,8 +89,8 @@ class BusinessOptimizationService
                 });
             }
 
-            $this->applyCustomerScope($backorderQuery, 'customer_acumatica_id', $scope['customer_ids']);
-            $this->applyCustomerScope($fillQuery, 'customer_acumatica_id', $scope['customer_ids']);
+            $this->applyCustomerScope($backorderQuery, 'customer_acumatica_id', $scopeCustomerIds);
+            $this->applyCustomerScope($fillQuery, 'customer_acumatica_id', $scopeCustomerIds);
 
             $backorderLines = $backorderQuery->get();
             $fillSnapshots = $fillQuery
@@ -233,17 +238,23 @@ class BusinessOptimizationService
     {
         $inventoryIds = $lines->pluck('inventory_id')->unique()->values()->all();
         $descriptions = $this->catalogResolver->descriptionsForInventoryIds($inventoryIds);
+        $classifications = $this->catalogResolver->classificationsForInventoryIds($inventoryIds);
         $stock        = $this->catalogResolver->stockForInventoryIds($inventoryIds);
 
         $byProduct = $lines
             ->groupBy('inventory_id')
-            ->map(function ($group, $inventoryId) use ($descriptions, $stock) {
+            ->map(function ($group, $inventoryId) use ($descriptions, $classifications, $stock) {
                 $openQty = (float) $group->sum('open_qty');
                 $onHand  = isset($stock[$inventoryId]) ? (float) $stock[$inventoryId]['qty_on_hand'] : null;
+                $classification = $this->catalogResolver->classificationFieldsFor($inventoryId, $classifications);
 
                 return [
                     'inventory_id'    => $inventoryId,
                     'product_name'    => $this->catalogResolver->resolveProductName($inventoryId, null, $descriptions),
+                    'brand'           => $classification['brand'],
+                    'posting_class'   => $classification['posting_class'],
+                    'sub_trading_group' => $classification['sub_trading_group'],
+                    'supplier'        => $classification['supplier'],
                     'open_lines'      => $group->count(),
                     'total_open_qty'  => round($openQty, 4),
                     'revenue_at_risk' => round((float) $group->sum('revenue_at_risk'), 2),
@@ -279,11 +290,18 @@ class BusinessOptimizationService
 
         $inventoryIds = $logs->pluck('inventory_id')->all();
         $descriptions = $this->catalogResolver->descriptionsForInventoryIds($inventoryIds);
+        $classifications = $this->catalogResolver->classificationsForInventoryIds($inventoryIds);
 
-        $atRiskItems = $logs->map(function ($log) use ($descriptions) {
+        $atRiskItems = $logs->map(function ($log) use ($descriptions, $classifications) {
+            $classification = $this->catalogResolver->classificationFieldsFor($log->inventory_id, $classifications);
+
             return [
                 'inventory_id'        => $log->inventory_id,
                 'product_name'        => $this->catalogResolver->resolveProductName($log->inventory_id, null, $descriptions),
+                'brand'               => $classification['brand'],
+                'posting_class'       => $classification['posting_class'],
+                'sub_trading_group'   => $classification['sub_trading_group'],
+                'supplier'            => $classification['supplier'],
                 'qty_on_hand'         => (float) $log->qty_on_hand,
                 'daily_run_rate'      => $log->daily_run_rate !== null ? (float) $log->daily_run_rate : null,
                 'days_until_stockout' => $log->days_until_stockout,
@@ -606,6 +624,24 @@ class BusinessOptimizationService
         }
 
         $query->whereIn($column, $customerIds);
+    }
+
+    /**
+     * @param  list<string>|null  $zoneCustomerIds
+     * @param  list<string>|null  $portfolioCustomerIds
+     * @return list<string>|null
+     */
+    private function intersectCustomerIds(?array $zoneCustomerIds, ?array $portfolioCustomerIds): ?array
+    {
+        if ($zoneCustomerIds === null) {
+            return $portfolioCustomerIds;
+        }
+
+        if ($portfolioCustomerIds === null) {
+            return $zoneCustomerIds;
+        }
+
+        return array_values(array_intersect($zoneCustomerIds, $portfolioCustomerIds));
     }
 
     /**

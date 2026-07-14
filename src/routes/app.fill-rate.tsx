@@ -1,13 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { BarChart3, FileDown, Gauge, List, RefreshCw, Search } from "lucide-react";
+import { BarChart3, FileDown, Gauge, List, PackageX, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
+import {
+  CustomerLink,
+  DateWithActions,
+  OrderLink,
+} from "@/components/entity-links";
+import { ProductListingCell } from "@/components/inventory/ProductListingCell";
+import { BrandFilterCascade, type BrandFilterValue } from "@/components/filters/BrandFilterCascade";
+import { MaskedCurrency, useMaskedKESFormatter } from "@/components/MaskedCurrency";
 import { OperationsSyncStatus } from "@/components/operations-sync-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
@@ -19,15 +28,27 @@ import {
   fillRateStatusColor,
   formatOpsSyncToast,
   type DeliverySlaStatus,
+  type FillRateExcelSummary,
+  type FillRateBusinessCategoryRow,
+  type FillRateOutOfStockReport,
+  type FillRateReasonCaptureReport,
+  type FillRateSegmentBucket,
+  type FillRateSegmentSplit,
   type FillRateSnapshot,
   useFillRate,
+  useFillRateOutOfStockReport,
   useFillRateSummary,
   useSyncFillRate,
   type FillRateSort,
   type ContributionRow,
 } from "@/hooks/useOperations";
 import { shippingZoneLabel } from "@/hooks/useShippingZones";
+import {
+  BusinessCategorySkuSheet,
+  type BusinessCategoryKey,
+} from "@/components/operations/BusinessCategorySkuSheet";
 import { downloadApiFile } from "@/lib/api";
+import { formatNumber } from "@/lib/format";
 
 type FillRateSearch = {
   shipping_zone_id?: string;
@@ -65,16 +86,13 @@ function startOfMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-function formatKes(n: number | string) {
-  return `KES ${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
 function qtyWithUom(qty: string | number, uom: string | null | undefined) {
   const n = Number(qty).toLocaleString();
   return uom ? `${n} ${uom}` : n;
 }
 
 function FillRatePage() {
+  const kes = useMaskedKESFormatter();
   const {
     shipping_zone_id: initialZoneId,
     date_from: initialDateFrom,
@@ -91,10 +109,21 @@ function FillRatePage() {
   const [reasonCode, setReasonCode] = useState("all");
   const [shippingZoneId, setShippingZoneId] = useState(initialZoneId ?? "all");
   const [deliverySla, setDeliverySla] = useState(initialDeliverySla ?? "all");
+  const [segment, setSegment] = useState<"all" | "KP" | "CS">("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const [selectedOrder, setSelectedOrder] = useState<FillRateSnapshot | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  /** Default off: fill rate excludes out-of-stock shortfall lines. Toggle on to include them. */
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
+  const [oosBrand, setOosBrand] = useState<string>("all");
+  const [oosCategory, setOosCategory] = useState<"all" | "manufactured" | "trading">("all");
+  const [isDownloadingOos, setIsDownloadingOos] = useState(false);
+  const [brandFilter, setBrandFilter] = useState<BrandFilterValue>({
+    partner_brand: "",
+    brand: "",
+    category: "",
+  });
 
   const listFilters = {
     customer_group: customerGroup !== "all" ? customerGroup : undefined,
@@ -102,6 +131,11 @@ function FillRatePage() {
     reason_code: reasonCode !== "all" ? reasonCode : undefined,
     shipping_zone_id: shippingZoneId !== "all" ? shippingZoneId : undefined,
     status: status !== "all" ? status : undefined,
+    segment: segment !== "all" ? segment : undefined,
+    partner_brand: brandFilter.partner_brand || undefined,
+    brand: brandFilter.brand || undefined,
+    category: brandFilter.category || undefined,
+    include_out_of_stock: includeOutOfStock,
   };
 
   const summary = useFillRateSummary(dateFrom, dateTo, listFilters);
@@ -115,9 +149,24 @@ function FillRatePage() {
     reason_code: listFilters.reason_code,
     shipping_zone_id: listFilters.shipping_zone_id,
     delivery_sla: deliverySla === "breach" || deliverySla === "warning" ? deliverySla : undefined,
+    segment: listFilters.segment,
+    partner_brand: listFilters.partner_brand,
+    brand: listFilters.brand,
+    category: listFilters.category,
+    include_out_of_stock: includeOutOfStock,
     sort,
     page,
     per_page: perPage,
+  });
+  const oosReport = useFillRateOutOfStockReport({
+    date_from: dateFrom,
+    date_to: dateTo,
+    brand: oosBrand !== "all" ? oosBrand : undefined,
+    business_category: oosCategory !== "all" ? oosCategory : undefined,
+    partner_brand: brandFilter.partner_brand || undefined,
+    customer_group: listFilters.customer_group,
+    segment: listFilters.segment,
+    shipping_zone_id: listFilters.shipping_zone_id,
   });
   const sync = useSyncFillRate();
 
@@ -171,6 +220,11 @@ function FillRatePage() {
     if (reasonCode !== "all") qs.set("reason_code", reasonCode);
     if (shippingZoneId !== "all") qs.set("shipping_zone_id", shippingZoneId);
     if (deliverySla === "breach" || deliverySla === "warning") qs.set("delivery_sla", deliverySla);
+    if (segment !== "all") qs.set("segment", segment);
+    if (brandFilter.partner_brand) qs.set("partner_brand", brandFilter.partner_brand);
+    if (brandFilter.brand) qs.set("brand", brandFilter.brand);
+    if (brandFilter.category) qs.set("category", brandFilter.category);
+    qs.set("include_out_of_stock", includeOutOfStock ? "1" : "0");
     qs.set("sort", sort);
 
     setIsDownloading(true);
@@ -192,7 +246,7 @@ function FillRatePage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Fill Rate</h1>
           <p className="text-sm text-muted-foreground">
-            Unique-item rollup for the date range — use Update to refresh existing snapshots and add new orders
+            Completed orders only: Shipped Qty ÷ Order Qty × 100. Use Update to refresh snapshots from Acumatica.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -218,6 +272,37 @@ function FillRatePage() {
           <FileDown className={`mr-2 h-4 w-4 ${isDownloading ? "animate-pulse" : ""}`} />
           {isDownloading ? "Preparing…" : "Download Excel"}
         </Button>
+        <div className="w-40">
+          <Label>Segment</Label>
+          <Select value={segment} onValueChange={(v) => { setSegment(v as "all" | "KP" | "CS"); setPage(1); }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All (combined)</SelectItem>
+              <SelectItem value="KP">KP (Kimfay Professional)</SelectItem>
+              <SelectItem value="CS">CS (Consumer Sales)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+          <Switch
+            id="include-oos"
+            checked={includeOutOfStock}
+            onCheckedChange={(checked) => {
+              setIncludeOutOfStock(checked);
+              setPage(1);
+            }}
+          />
+          <div className="min-w-0">
+            <Label htmlFor="include-oos" className="cursor-pointer text-sm font-medium">
+              Include out of stock
+            </Label>
+            <p className="text-[11px] text-muted-foreground">
+              {includeOutOfStock
+                ? "Fill rate counts OOS shortfalls"
+                : "Fill rate excludes OOS lines (default)"}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -248,16 +333,86 @@ function FillRatePage() {
         />
       </div>
 
+      {summary.data?.segment_split && (
+        <SegmentSplitSection split={summary.data.segment_split} loading={summary.isLoading} />
+      )}
+
       {summary.data && (
         <p className="text-sm text-muted-foreground">
-          Revenue not yet shipped: <span className="font-medium text-foreground">KES {summary.data.revenue_not_shipped.toLocaleString()}</span>
+          Revenue not yet shipped:{" "}
+          <MaskedCurrency value={summary.data.revenue_not_shipped} className="font-medium text-foreground" />
           {" · "}N/A orders: {summary.data.na_count}
+          {!includeOutOfStock && (
+            <span className="ml-1 text-amber-700 dark:text-amber-400">
+              · OOS excluded from fill rate
+            </span>
+          )}
         </p>
       )}
 
+      <OutOfStockReportPanel
+        report={oosReport.data}
+        loading={oosReport.isLoading}
+        brand={oosBrand}
+        category={oosCategory}
+        brands={oosReport.data?.brands ?? []}
+        onBrandChange={setOosBrand}
+        onCategoryChange={setOosCategory}
+        isDownloading={isDownloadingOos}
+        onDownload={async () => {
+          const qs = new URLSearchParams();
+          qs.set("date_from", dateFrom);
+          qs.set("date_to", dateTo);
+          if (oosBrand !== "all") qs.set("brand", oosBrand);
+          if (oosCategory !== "all") qs.set("business_category", oosCategory);
+          if (brandFilter.partner_brand) qs.set("partner_brand", brandFilter.partner_brand);
+          if (listFilters.customer_group) qs.set("customer_group", listFilters.customer_group);
+          if (listFilters.segment) qs.set("segment", listFilters.segment);
+          if (listFilters.shipping_zone_id) qs.set("shipping_zone_id", listFilters.shipping_zone_id);
+          setIsDownloadingOos(true);
+          try {
+            await downloadApiFile(
+              `operations/fill-rate/out-of-stock/export?${qs}`,
+              `fill-rate-out-of-stock-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.xlsx`,
+              { timeoutMs: 180_000 },
+            );
+            toast.success("Out of stock Excel download started.");
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to download OOS report.");
+          } finally {
+            setIsDownloadingOos(false);
+          }
+        }}
+      />
+
       {summary.data?.excel_summary && (
-        <FillRateExcelSummaryPanel summary={summary.data.excel_summary} />
+        <FillRateExcelSummaryPanel
+          summary={summary.data.excel_summary}
+          filters={{
+            date_from: dateFrom,
+            date_to: dateTo,
+            customer_group: listFilters.customer_group,
+            product_line: listFilters.product_line,
+            reason_code: listFilters.reason_code,
+            shipping_zone_id: listFilters.shipping_zone_id,
+            segment: listFilters.segment,
+            partner_brand: listFilters.partner_brand,
+            brand: listFilters.brand,
+            category: listFilters.category,
+            status: status !== "all" ? status : undefined,
+            q: q || undefined,
+            include_out_of_stock: includeOutOfStock ? "1" : "0",
+          }}
+        />
       )}
+
+      <BrandFilterCascade
+        value={brandFilter}
+        onChange={(next) => {
+          setBrandFilter(next);
+          setPage(1);
+        }}
+      />
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-[200px]">
@@ -381,11 +536,27 @@ function FillRatePage() {
             ))}
             {!isLoading && (data?.data ?? []).map((row) => (
               <tr key={row.id} className="border-b hover:bg-muted/20">
-                <td className="px-4 py-3 font-medium">{row.order_nbr}</td>
+                <td className="px-4 py-3 font-medium">
+                  <OrderLink
+                    customerId={row.customer_acumatica_id ?? row.order?.customer_acumatica_id}
+                    orderId={row.order_nbr}
+                  />
+                  {(row.order_description ?? "").trim() !== "" && (
+                    <div className="text-xs text-muted-foreground">{row.order_description}</div>
+                  )}
+                </td>
                 <td className="px-4 py-3">
-                  <div>{row.customer_name ?? row.order?.customer_name ?? row.customer_acumatica_id ?? "—"}</div>
+                  <CustomerLink
+                    customerId={row.customer_acumatica_id ?? row.order?.customer_acumatica_id}
+                    customerName={row.customer_name ?? row.order?.customer_name}
+                    className="block"
+                  >
+                    <div>{row.customer_name ?? row.order?.customer_name ?? row.customer_acumatica_id ?? "—"}</div>
+                  </CustomerLink>
                   {row.order?.order_date && (
-                    <div className="text-xs text-muted-foreground">{row.order.order_date.slice(0, 10)}</div>
+                    <div className="mt-1">
+                      <DateWithActions value={row.order.order_date} />
+                    </div>
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -442,7 +613,7 @@ function FillRatePage() {
       )}
 
       <Sheet open={!!selectedOrder} onOpenChange={(o) => !o && setSelectedOrder(null)}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
           {selectedOrder && (
             <FillRateProductsSheet order={selectedOrder} />
           )}
@@ -486,21 +657,31 @@ function DeliverySlaBadge({ row }: { row: FillRateSnapshot }) {
 
 function FillRateExcelSummaryPanel({
   summary,
+  filters,
 }: {
-  summary: {
-    totals: {
-      actual_qty: number;
-      ordered_qty: number;
-      undershipped_qty: number;
-      undershipped_value: number;
-      fill_rate_pct: number | null;
-      order_count: number;
-    };
-    by_status: ContributionRow[];
-    by_reason: ContributionRow[];
-    by_customer_group: ContributionRow[];
+  summary: FillRateExcelSummary;
+  filters?: {
+    date_from?: string;
+    date_to?: string;
+    customer_group?: string;
+    product_line?: string;
+    reason_code?: string;
+    shipping_zone_id?: string;
+    segment?: string;
+    partner_brand?: string;
+    brand?: string;
+    category?: string;
+    status?: string;
+    q?: string;
+    include_out_of_stock?: string;
   };
 }) {
+  const kes = useMaskedKESFormatter();
+  const [skuCategory, setSkuCategory] = useState<BusinessCategoryKey | null>(null);
+  const segmentReasons = summary.by_segment_reason ?? [];
+  const kpReasons = segmentReasons.filter((r) => r.segment === "KP").slice(0, 4);
+  const csReasons = segmentReasons.filter((r) => r.segment === "CS").slice(0, 4);
+
   return (
     <div className="rounded-lg border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
@@ -511,13 +692,489 @@ function FillRateExcelSummaryPanel({
         <MetricTile label="Actual Qty" value={Number(summary.totals.actual_qty).toLocaleString()} tone="green" />
         <MetricTile label="Ordered Qty" value={Number(summary.totals.ordered_qty).toLocaleString()} tone="blue" />
         <MetricTile label="Undershipped Qty" value={Number(summary.totals.undershipped_qty).toLocaleString()} tone="amber" />
-        <MetricTile label="Undershipped Value" value={formatKes(summary.totals.undershipped_value)} tone="red" />
+        <MetricTile label="Undershipped Value" value={kes(summary.totals.undershipped_value)} tone="red" />
         <MetricTile label="Fill Rate" value={summary.totals.fill_rate_pct != null ? `${summary.totals.fill_rate_pct}%` : "N/A"} tone="cyan" />
       </div>
+
+      {(summary.by_segment ?? []).length > 0 && (
+        <div className="mt-4 rounded-md border p-3">
+          <h3 className="text-sm font-medium">KP (Kimfay Professional) vs CS segment breakdown</h3>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="py-2 pr-4 font-medium">Segment</th>
+                  <th className="py-2 pr-4 font-medium text-right">Fill rate</th>
+                  <th className="py-2 pr-4 font-medium text-right">Orders</th>
+                  <th className="py-2 pr-4 font-medium text-right">Ordered qty</th>
+                  <th className="py-2 pr-4 font-medium text-right">Shipped qty</th>
+                  <th className="py-2 pr-4 font-medium text-right">Not shipped (KES)</th>
+                  <th className="py-2 pr-4 font-medium text-right">Healthy</th>
+                  <th className="py-2 pr-4 font-medium text-right">At risk</th>
+                  <th className="py-2 pr-4 font-medium text-right">Critical</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.by_segment.map((row) => (
+                  <tr key={row.segment} className="border-b last:border-0">
+                    <td className="py-2 pr-4 font-medium">{row.label}</td>
+                    <td className="py-2 pr-4 text-right">
+                      <Badge variant={fillRateStatusColor(row.status)}>
+                        {row.fill_rate_pct != null ? `${row.fill_rate_pct}%` : "N/A"}
+                      </Badge>
+                    </td>
+                    <td className="py-2 pr-4 text-right font-mono">{row.order_count}</td>
+                    <td className="py-2 pr-4 text-right font-mono">{Number(row.total_ordered_qty).toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-right font-mono">{Number(row.total_shipped_qty).toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-right font-mono">{Number(row.revenue_not_shipped).toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-right text-emerald-600 font-mono">{row.healthy_count}</td>
+                    <td className="py-2 pr-4 text-right text-amber-600 font-mono">{row.at_risk_count}</td>
+                    <td className="py-2 pr-4 text-right text-red-600 font-mono">{row.critical_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <ContributionList title="Status contribution" rows={summary.by_status} labelKey="status" valueKey="undershipped_value" tone="blue" />
         <ContributionList title="Reason contribution" rows={summary.by_reason} labelKey="reason" valueKey="undershipped_value" tone="red" />
         <ContributionList title="Customer group contribution" rows={summary.by_customer_group} labelKey="customer_group" valueKey="undershipped_value" tone="cyan" />
+      </div>
+
+      {(kpReasons.length > 0 || csReasons.length > 0) && (
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <SegmentReasonList title="KP (Kimfay Professional) root causes" rows={kpReasons} />
+          <SegmentReasonList title="CS (Consumer Sales) root causes" rows={csReasons} />
+        </div>
+      )}
+
+      {(summary.by_business_category ?? []).length > 0 && (
+        <BusinessCategorySection
+          rows={summary.by_business_category}
+          onSelectCategory={(category) => setSkuCategory(category)}
+        />
+      )}
+
+      {summary.reason_capture_report && (
+        <ReasonCaptureReportPanel report={summary.reason_capture_report} />
+      )}
+
+      <BusinessCategorySkuSheet
+        open={skuCategory != null}
+        onOpenChange={(open) => {
+          if (!open) setSkuCategory(null);
+        }}
+        module="fill-rate"
+        businessCategory={skuCategory}
+        filters={filters}
+      />
+    </div>
+  );
+}
+
+function OutOfStockReportPanel({
+  report,
+  loading,
+  brand,
+  category,
+  brands,
+  onBrandChange,
+  onCategoryChange,
+  isDownloading,
+  onDownload,
+}: {
+  report?: FillRateOutOfStockReport;
+  loading: boolean;
+  brand: string;
+  category: "all" | "manufactured" | "trading";
+  brands: string[];
+  onBrandChange: (brand: string) => void;
+  onCategoryChange: (category: "all" | "manufactured" | "trading") => void;
+  isDownloading: boolean;
+  onDownload: () => void;
+}) {
+  const kes = useMaskedKESFormatter();
+  const categoryRows = report?.by_business_category ?? [];
+
+  return (
+    <div className="rounded-lg border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <PackageX className="h-4 w-4 text-amber-600" />
+          <div>
+            <h2 className="font-medium">Out of stock report</h2>
+            <p className="text-xs text-muted-foreground">
+              Shortfall lines with out-of-stock reasons — Manufactured vs Trading (Partners), filterable by brand.
+            </p>
+          </div>
+        </div>
+        <Button size="sm" variant="outline" onClick={onDownload} disabled={isDownloading || loading}>
+          <FileDown className={`mr-2 h-4 w-4 ${isDownloading ? "animate-pulse" : ""}`} />
+          {isDownloading ? "Preparing…" : "Download OOS Excel"}
+        </Button>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-end gap-3">
+        <div className="w-44">
+          <Label>Category</Label>
+          <Select value={category} onValueChange={(v) => onCategoryChange(v as "all" | "manufactured" | "trading")}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              <SelectItem value="manufactured">Manufactured</SelectItem>
+              <SelectItem value="trading">Trading (Partners)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-48">
+          <Label>Brand</Label>
+          <Select value={brand} onValueChange={onBrandChange}>
+            <SelectTrigger><SelectValue placeholder="All brands" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All brands</SelectItem>
+              {brands.map((b) => (
+                <SelectItem key={b} value={b}>{b}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
+        </div>
+      )}
+
+      {report && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <MetricTile label="OOS lines" value={String(report.totals.line_count)} tone="amber" />
+            <MetricTile label="Orders" value={String(report.totals.order_count)} tone="blue" />
+            <MetricTile label="SKUs" value={String(report.totals.sku_count)} tone="cyan" />
+            <MetricTile label="Short qty" value={formatNumber(report.totals.undershipped_qty)} tone="red" />
+            <MetricTile label="Value (KES)" value={kes(report.totals.undershipped_value)} tone="red" />
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-md border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/40 text-left text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Category</th>
+                  <th className="px-3 py-2 font-medium text-right">Lines</th>
+                  <th className="px-3 py-2 font-medium text-right">Orders</th>
+                  <th className="px-3 py-2 font-medium text-right">SKUs</th>
+                  <th className="px-3 py-2 font-medium text-right">Short qty</th>
+                  <th className="px-3 py-2 font-medium text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoryRows.map((row) => (
+                  <tr key={row.business_category} className="border-b last:border-0">
+                    <td className="px-3 py-2 font-medium">{row.label}</td>
+                    <td className="px-3 py-2 text-right font-mono">{row.line_count}</td>
+                    <td className="px-3 py-2 text-right font-mono">{row.order_count}</td>
+                    <td className="px-3 py-2 text-right font-mono">{row.sku_count}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatNumber(row.undershipped_qty)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{Number(row.undershipped_value).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-md border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/40 text-left text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">SKU</th>
+                  <th className="px-3 py-2 font-medium">Category</th>
+                  <th className="px-3 py-2 font-medium">Reason</th>
+                  <th className="px-3 py-2 font-medium text-right">Lines</th>
+                  <th className="px-3 py-2 font-medium text-right">Orders</th>
+                  <th className="px-3 py-2 font-medium text-right">Short qty</th>
+                  <th className="px-3 py-2 font-medium text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.skus.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                      No out-of-stock shortfall lines for the current filters.
+                    </td>
+                  </tr>
+                )}
+                {report.skus.slice(0, 100).map((sku) => (
+                  <tr key={sku.inventory_id} className="border-b last:border-0">
+                    <td className="px-3 py-2">
+                      <ProductListingCell product={sku} />
+                    </td>
+                    <td className="px-3 py-2">{sku.business_category_label}</td>
+                    <td className="px-3 py-2">{sku.reason_label}</td>
+                    <td className="px-3 py-2 text-right font-mono">{sku.line_count}</td>
+                    <td className="px-3 py-2 text-right font-mono">{sku.order_count}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatNumber(sku.undershipped_qty)}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      <MaskedCurrency value={sku.undershipped_value} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {report.skus.length > 100 && (
+              <p className="px-3 py-2 text-[11px] text-muted-foreground">
+                Showing top 100 SKUs by value. Download Excel for the full list.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BusinessCategorySection({
+  rows,
+  onSelectCategory,
+}: {
+  rows: FillRateBusinessCategoryRow[];
+  onSelectCategory: (category: BusinessCategoryKey) => void;
+}) {
+  return (
+    <div className="mt-4 rounded-md border p-3">
+      <h3 className="text-sm font-medium">Manufactured vs Trading (Partners) — business category comparison</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Click a category to open the SKU breakdown and download Excel.
+      </p>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b text-left text-muted-foreground">
+              <th className="py-2 pr-4 font-medium">Category</th>
+              <th className="py-2 pr-4 font-medium text-right">Fill rate</th>
+              <th className="py-2 pr-4 font-medium text-right">Lines</th>
+              <th className="py-2 pr-4 font-medium text-right">Orders</th>
+              <th className="py-2 pr-4 font-medium text-right">Not shipped (KES)</th>
+              <th className="py-2 pr-4 font-medium text-right">SKUs</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const category = row.business_category === "manufactured" || row.business_category === "trading"
+                ? row.business_category
+                : null;
+              return (
+                <tr
+                  key={row.business_category}
+                  className={`border-b last:border-0 ${category ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                  onClick={() => category && onSelectCategory(category)}
+                  onKeyDown={(e) => {
+                    if (category && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      onSelectCategory(category);
+                    }
+                  }}
+                  tabIndex={category ? 0 : undefined}
+                  role={category ? "button" : undefined}
+                >
+                  <td className="py-2 pr-4 font-medium text-primary underline-offset-2 hover:underline">
+                    {row.label}
+                  </td>
+                  <td className="py-2 pr-4 text-right font-mono">
+                    {row.fill_rate_pct != null ? `${row.fill_rate_pct}%` : "N/A"}
+                  </td>
+                  <td className="py-2 pr-4 text-right font-mono">{row.line_count}</td>
+                  <td className="py-2 pr-4 text-right font-mono">{row.order_count}</td>
+                  <td className="py-2 pr-4 text-right font-mono">{Number(row.undershipped_value).toLocaleString()}</td>
+                  <td className="py-2 pr-4 text-right">
+                    {category ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectCategory(category);
+                        }}
+                      >
+                        View SKUs
+                      </Button>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ReasonCaptureReportPanel({ report }: { report: FillRateReasonCaptureReport }) {
+  const { summary, breakdown, flagged_records: flagged } = report;
+  const hasGaps = summary.missing_reason_lines > 0 || summary.unclassified_reason_lines > 0;
+
+  return (
+    <div className="mt-4 rounded-md border p-3">
+      <h3 className="text-sm font-medium">Root cause capture report</h3>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <MetricTile label="Shortfall lines" value={String(summary.total_shortfall_lines)} tone="blue" />
+        <MetricTile label="Valid reasons" value={String(summary.valid_reason_lines)} tone="green" />
+        <MetricTile label="Missing" value={String(summary.missing_reason_lines)} tone="amber" />
+        <MetricTile label="Unclassified" value={String(summary.unclassified_reason_lines)} tone="red" />
+        <MetricTile
+          label="Capture rate"
+          value={summary.capture_rate_pct != null ? `${summary.capture_rate_pct}%` : "N/A"}
+          tone="cyan"
+        />
+        <MetricTile label="Flagged records" value={String(flagged.length)} tone={hasGaps ? "red" : "green"} />
+      </div>
+
+      {breakdown.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">Category</th>
+                <th className="py-2 pr-3 font-medium">Parent reason</th>
+                <th className="py-2 pr-3 font-medium">Sub-reason</th>
+                <th className="py-2 pr-3 font-medium text-right">Lines</th>
+                <th className="py-2 pr-3 font-medium text-right">Value (KES)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakdown.slice(0, 12).map((row, index) => (
+                <tr key={`${row.business_category}-${row.sub_reason}-${index}`} className="border-b last:border-0">
+                  <td className="py-2 pr-3">{row.business_category}</td>
+                  <td className="py-2 pr-3">{row.parent_reason}</td>
+                  <td className="py-2 pr-3">{row.sub_reason_label}</td>
+                  <td className="py-2 pr-3 text-right font-mono">{row.line_count}</td>
+                  <td className="py-2 pr-3 text-right font-mono">{Number(row.undershipped_value).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasGaps && flagged.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-amber-700">Flagged records (missing or unclassified reasons)</p>
+          <div className="mt-2 max-h-40 overflow-y-auto text-xs">
+            {flagged.slice(0, 10).map((row, index) => (
+              <div key={`${row.order_nbr}-${row.inventory_id}-${index}`} className="flex justify-between gap-2 border-b py-1">
+                <span className="inline-flex flex-wrap items-center gap-1">
+                  <OrderLink
+                    customerId={row.customer_acumatica_id}
+                    orderId={row.order_nbr}
+                  />
+                  <span className="text-muted-foreground">·</span>
+                  <ProductListingCell product={row} showDescription={false} className="inline" />
+                </span>
+                <span className="text-muted-foreground">{row.issue} · {row.business_category}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SegmentReasonList({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: Array<{ segment: string; reason: string; undershipped_value: number; contribution_pct: number }>;
+}) {
+  const kes = useMaskedKESFormatter();
+
+  return (
+    <div className="rounded-md border p-3">
+      <h3 className="text-sm font-medium">{title}</h3>
+      <div className="mt-3 space-y-3">
+        {rows.length === 0 && <p className="text-xs text-muted-foreground">No contribution data yet.</p>}
+        {rows.map((row, index) => (
+          <div key={`${row.segment}-${row.reason}-${index}`} className="space-y-1">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="truncate font-medium">{reasonLabel(row.reason)}</span>
+              <span className="shrink-0 font-mono">{kes(row.undershipped_value)}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-muted">
+              <div className="h-1.5 rounded-full bg-purple-500" style={{ width: `${Math.min(row.contribution_pct, 100)}%` }} />
+            </div>
+            <p className="text-[11px] text-muted-foreground">{row.contribution_pct.toFixed(1)}% contribution</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SegmentSplitSection({
+  split,
+  loading,
+}: {
+  split: FillRateSegmentSplit;
+  loading?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <Gauge className="h-4 w-4 text-purple-600" />
+        <h2 className="font-medium">KP (Kimfay Professional) vs CS (Consumer Sales) — sector split</h2>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SegmentCard title="KP (Kimfay Professional)" bucket={split.KP} loading={loading} />
+        <SegmentCard title="CS (Consumer Sales)" bucket={split.CS} loading={loading} />
+      </div>
+    </div>
+  );
+}
+
+function SegmentCard({
+  title,
+  bucket,
+  loading,
+}: {
+  title: string;
+  bucket: FillRateSegmentBucket;
+  loading?: boolean;
+}) {
+  const kes = useMaskedKESFormatter();
+  const pct = bucket.fill_rate_pct;
+  const color =
+    bucket.status === "critical" ? "text-red-600" :
+    bucket.status === "at_risk" ? "text-amber-600" :
+    bucket.status === "healthy" ? "text-emerald-600" : "";
+
+  return (
+    <div className="rounded-md border p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <Badge variant={fillRateStatusColor(bucket.status)}>{bucket.status}</Badge>
+      </div>
+      {loading ? (
+        <Skeleton className="mt-2 h-8 w-20" />
+      ) : (
+        <p className={`mt-2 text-3xl font-bold ${color}`}>
+          {pct != null ? `${pct.toFixed(1)}%` : "N/A"}
+        </p>
+      )}
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <div>Orders: <span className="font-mono text-foreground">{bucket.order_count}</span></div>
+        <div>Not shipped: <span className="font-mono text-foreground">{kes(bucket.revenue_not_shipped)}</span></div>
+        <div className="text-emerald-600">Healthy: <span className="font-mono">{bucket.healthy_count}</span></div>
+        <div className="text-amber-600">At risk: <span className="font-mono">{bucket.at_risk_count}</span></div>
+        <div className="text-red-600">Critical: <span className="font-mono">{bucket.critical_count}</span></div>
+        <div>Ordered qty: <span className="font-mono text-foreground">{Number(bucket.total_ordered_qty).toLocaleString()}</span></div>
       </div>
     </div>
   );
@@ -555,6 +1212,7 @@ function ContributionList({
   valueKey: string;
   tone: "blue" | "red" | "cyan";
 }) {
+  const kes = useMaskedKESFormatter();
   const bar = tone === "red" ? "bg-red-500" : tone === "cyan" ? "bg-cyan-500" : "bg-blue-500";
   const topRows = rows.slice(0, 5);
 
@@ -567,7 +1225,7 @@ function ContributionList({
           <div key={`${String(row[labelKey])}-${index}`} className="space-y-1">
             <div className="flex items-center justify-between gap-3 text-xs">
               <span className="truncate font-medium">{reasonLabel(String(row[labelKey] ?? "Unassigned"))}</span>
-              <span className="shrink-0 font-mono">{formatKes(Number(row[valueKey] ?? 0))}</span>
+              <span className="shrink-0 font-mono">{kes(Number(row[valueKey] ?? 0))}</span>
             </div>
             <div className="h-1.5 rounded-full bg-muted">
               <div className={`h-1.5 rounded-full ${bar}`} style={{ width: `${Math.min(Number(row.contribution_pct ?? 0), 100)}%` }} />
@@ -581,20 +1239,37 @@ function ContributionList({
 }
 
 function FillRateProductsSheet({ order }: { order: FillRateSnapshot }) {
+  const kes = useMaskedKESFormatter();
   const products = order.products ?? [];
   const lineTotal = products.reduce((sum, p) => sum + Number(p.not_shipped_value), 0);
 
   return (
-    <>
-      <SheetHeader>
-        <SheetTitle>{order.order_nbr}</SheetTitle>
-        <SheetDescription>
-          {order.customer_name ?? order.customer_acumatica_id ?? "Unknown customer"}
-          {order.order?.order_date && ` · ${order.order.order_date.slice(0, 10)}`}
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 space-y-4 border-b p-6 pr-12">
+      <SheetHeader className="p-0">
+        <SheetTitle>
+          <OrderLink
+            customerId={order.customer_acumatica_id ?? order.order?.customer_acumatica_id}
+            orderId={order.order_nbr}
+          />
+        </SheetTitle>
+        <SheetDescription className="flex flex-wrap items-center gap-2">
+          <CustomerLink
+            customerId={order.customer_acumatica_id ?? order.order?.customer_acumatica_id}
+            customerName={order.customer_name}
+          >
+            {order.customer_name ?? order.customer_acumatica_id ?? "Unknown customer"}
+          </CustomerLink>
+          {order.order?.order_date && (
+            <>
+              <span className="text-muted-foreground">·</span>
+              <DateWithActions value={order.order.order_date} />
+            </>
+          )}
         </SheetDescription>
       </SheetHeader>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {order.fill_rate_pct != null && (
           <Badge variant={fillRateStatusColor(order.fill_rate_status)}>
             {Number(order.fill_rate_pct).toFixed(1)}% fill rate
@@ -602,17 +1277,19 @@ function FillRateProductsSheet({ order }: { order: FillRateSnapshot }) {
         )}
         <Badge variant="outline">{products.length} line{products.length !== 1 ? "s" : ""}</Badge>
       </div>
+      </div>
 
-      <div className="mt-6 rounded-lg border">
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="rounded-lg border">
         {products.length === 0 ? (
           <p className="p-3 text-sm text-muted-foreground">No line items — re-sync fill rate for this order.</p>
         ) : (
           <div className="divide-y">
             {products.map((p) => (
               <div key={p.inventory_id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{p.product_name ?? p.inventory_id}</div>
-                  <div className="truncate text-xs text-muted-foreground">
+                <div className="min-w-0 flex-1">
+                  <ProductListingCell product={p} />
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
                     {qtyWithUom(p.order_qty, p.uom)} ordered · {qtyWithUom(p.qty_on_shipments, p.uom)} shipped
                     {p.unfilled_reason_code && ` · ${p.unfilled_reason_code.replace(/_/g, " ")}`}
                   </div>
@@ -627,7 +1304,7 @@ function FillRateProductsSheet({ order }: { order: FillRateSnapshot }) {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </div>
-                  <div className="mt-0.5 font-mono text-xs font-medium">{formatKes(p.not_shipped_value)}</div>
+                  <div className="mt-0.5 font-mono text-xs font-medium">{kes(p.not_shipped_value)}</div>
                 </div>
               </div>
             ))}
@@ -638,15 +1315,16 @@ function FillRateProductsSheet({ order }: { order: FillRateSnapshot }) {
       {products.length > 0 && (
         <div className="mt-4 flex justify-between border-t pt-4 text-sm">
           <span className="text-muted-foreground">Sum of line not-shipped values</span>
-          <span className="font-mono font-medium">{formatKes(lineTotal)}</span>
+          <span className="font-mono font-medium">{kes(lineTotal)}</span>
         </div>
       )}
       {products.length > 0 && Math.abs(lineTotal - Number(order.revenue_not_shipped)) > 1 && (
         <p className="mt-2 text-xs text-amber-600">
-          Order-level not shipped ({formatKes(order.revenue_not_shipped)}) may differ due to discounts or rounding.
+          Order-level not shipped ({kes(order.revenue_not_shipped)}) may differ due to discounts or rounding.
         </p>
       )}
-    </>
+      </div>
+    </div>
   );
 }
 

@@ -82,6 +82,24 @@ class ProfileController extends Controller
         return response()->json($logs);
     }
 
+    public function sessions(Request $request): JsonResponse
+    {
+        $sessions = $request->user()
+            ->userSessions()
+            ->orderByDesc('login_at')
+            ->paginate(20, [
+                'id',
+                'login_at',
+                'logout_at',
+                'logout_reason',
+                'duration_seconds',
+                'ip_address',
+                'login_mode',
+            ]);
+
+        return response()->json($sessions);
+    }
+
     /**
      * Request an OTP for password update (authenticated user, uses current user email).
      */

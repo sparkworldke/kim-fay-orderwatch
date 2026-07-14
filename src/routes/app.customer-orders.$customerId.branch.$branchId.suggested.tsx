@@ -5,7 +5,7 @@ import { SuggestedOrdersCard } from "@/components/customer-orders-shared";
 import { useSuggestedOrders } from "@/hooks/useCustomers";
 
 export const Route = createFileRoute("/app/customer-orders/$customerId/branch/$branchId/suggested")({
-  head: () => ({ meta: [{ title: "Whitspot - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Whitespot - Kim-Fay OrderWatch" }] }),
   component: BranchSuggestedOrdersPage,
 });
 
@@ -24,7 +24,7 @@ function BranchSuggestedOrdersPage() {
             Branch documents
           </Link>
         </Button>
-        <h1 className="text-2xl font-semibold tracking-tight">Whitspot</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Whitespot</h1>
         <p className="font-mono text-xs text-muted-foreground">{suggested.data?.customer_name ?? branchId}</p>
       </div>
 

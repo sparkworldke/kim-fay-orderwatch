@@ -137,6 +137,15 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Dedicated daily channel for inventory BI seed operations.
+        'inventory-seed' => [
+            'driver'              => 'daily',
+            'path'                => storage_path('logs/inventory-seed.log'),
+            'level'               => 'debug',
+            'days'                => 30,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

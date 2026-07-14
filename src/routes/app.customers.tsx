@@ -395,7 +395,11 @@ function StatFilterTable({
       accessorKey: "acumatica_id",
       header: "Customer ID",
       cell: ({ row }) => (
-        <span className="font-mono text-xs text-muted-foreground">{row.original.acumatica_id}</span>
+        <CustomerLink
+          customerId={row.original.acumatica_id}
+          className="font-mono text-xs text-muted-foreground"
+          showId
+        />
       ),
     },
     {
@@ -786,7 +790,11 @@ function CategoryDetailView({
       accessorKey: "acumatica_id",
       header: "Customer ID",
       cell: ({ row }) => (
-        <span className="font-mono text-xs text-muted-foreground">{row.original.acumatica_id}</span>
+        <CustomerLink
+          customerId={row.original.acumatica_id}
+          className="font-mono text-xs text-muted-foreground"
+          showId
+        />
       ),
     },
     {
@@ -1158,7 +1166,7 @@ function GlobalCustomerSearch({
   const showResults = search.trim() !== "" || categoryFilter !== "all";
 
   const QUICK_FILTERS: { key: CategoryQuickFilter; label: string; description: string }[] = [
-    { key: "KP",  label: "KP",             description: "Key Partner accounts" },
+    { key: "KP",  label: "KP",             description: "Kimfay Professional accounts" },
     { key: "CS",  label: "Consumer Sales",  description: "Consumer Sales accounts" },
   ];
 

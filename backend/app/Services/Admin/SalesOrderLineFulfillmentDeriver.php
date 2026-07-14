@@ -2,11 +2,13 @@
 
 namespace App\Services\Admin;
 
+use App\Services\Operations\SalesOrderReasonCatalog;
+
 class SalesOrderLineFulfillmentDeriver
 {
-    public const UNFILLED_REASON_OUT_OF_STOCK = 'inventory_shortage';
+    public const UNFILLED_REASON_OUT_OF_STOCK = 'out_of_stock_procurement';
 
-    public const UNFILLED_REASON_PARTIAL_SHORTAGE = 'inventory_shortage';
+    public const UNFILLED_REASON_PARTIAL_SHORTAGE = 'out_of_stock_procurement';
 
     public const STATUS_FULLY_FULFILLED = 'Fully Fulfilled';
 
@@ -65,7 +67,9 @@ class SalesOrderLineFulfillmentDeriver
         }
 
         [$qtyOnShipments, $qtyOnShipmentsSource] = self::resolveQtyOnShipments($lineRaw, $shippedQty);
-        $demandQty = $qtyAtApproval > 0 ? $qtyAtApproval : $orderQty;
+        // Fill rate demand = Order Qty (not qty-at-approval).
+        $demandQty = $orderQty > 0 ? $orderQty : $qtyAtApproval;
+        $shippedForFill = $shippedQty > 0 ? $shippedQty : $qtyOnShipments;
         $reasonCode = self::strVal($lineRaw['ReasonCode'] ?? null);
 
         $completed = self::boolVal($lineRaw['Completed'] ?? null);
@@ -82,9 +86,9 @@ class SalesOrderLineFulfillmentDeriver
             'open_qty'            => $openQty,
             'cancelled_qty'       => $cancelledQty,
             'qty_at_approval'     => $qtyAtApproval,
-            'backorder_qty'       => self::backorderQty($demandQty, $qtyOnShipments),
-            'fill_rate_pct'       => self::safeFillRate($qtyOnShipments, $demandQty),
-            'unfilled_reason_code' => self::deriveUnfilledReasonCode($qtyOnShipments, $demandQty, $reasonCode),
+            'backorder_qty'       => self::backorderQty($demandQty, $shippedForFill),
+            'fill_rate_pct'       => self::safeFillRate($shippedForFill, $demandQty),
+            'unfilled_reason_code' => self::deriveUnfilledReasonCode($shippedForFill, $demandQty, $reasonCode),
             'line_type'           => self::strVal($lineRaw['LineType'] ?? null),
             'completed'           => $completed,
             'fulfillment_status'  => $fulfillmentStatus,
@@ -179,7 +183,10 @@ class SalesOrderLineFulfillmentDeriver
 
     public static function normalizeReasonCode(string $code): string
     {
-        return strtolower(str_replace([' ', '-'], '_', trim($code)));
+        $catalog = new SalesOrderReasonCatalog();
+        $resolved = $catalog->resolveSubReason($code);
+
+        return $resolved ?? strtolower(str_replace([' ', '-', '/'], '_', trim($code)));
     }
 
     public static function safeFillRate(float $shippedQty, float $approvedQty): ?float

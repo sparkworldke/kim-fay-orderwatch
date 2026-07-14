@@ -18,6 +18,10 @@ export const ALL_AUTHENTICATED_URLS = new Set([
   "/app/zones",
   "/app/customers",
   "/app/so-imports",
+  "/app/kp/fol",
+  "/app/kp/fol/calendar",
+  "/app/price-change-requests",
+  "/app/sales-management",
   "/app/profile",
 ]);
 
@@ -28,6 +32,8 @@ const ADMIN_ONLY_ADMIN_TABS = new Set([
   "roles",
   "permissions",
   "notifications",
+  "fol",
+  "impersonation",
 ]);
 
 const ADMIN_MANAGER_ADMIN_TABS = new Set([
@@ -63,8 +69,51 @@ export function isPrivilegedRole(role: Role | undefined): boolean {
   return role != null && PRIVILEGED_ROLES.includes(role);
 }
 
-export function canAccessNavItem(role: Role | undefined, url: string): boolean {
+export const MENU_SLUG_BY_URL: Record<string, string> = {
+  "/app": "dashboard",
+  "/app/orders": "orders",
+  "/app/business-optimization": "business-optimization",
+  "/app/ai-intelligence": "ai-intelligence",
+  "/app/customer-feed": "customer-feed",
+  "/app/credit-notes-more": "credit-notes",
+  "/app/inventory": "inventory",
+  "/app/backorders": "backorders",
+  "/app/fill-rate": "fill-rate",
+  "/app/zones": "zones",
+  "/app/customers": "customers",
+  "/app/sales-consultants": "sales-consultants",
+  "/app/order-match": "order-match",
+  "/app/mailbox": "mailbox",
+  "/app/administration": "administration",
+  "/app/team": "team",
+  "/app/roles": "roles",
+  "/app/so-imports": "so-imports",
+  "/app/kp/fol": "kp-fol",
+  "/app/kp/fol/calendar": "kp-fol",
+  "/app/price-change-requests": "price-change-requests",
+  "/app/sales-management": "sales-management",
+  "/app/profile": "profile",
+};
+
+export function menuSlugForUrl(url: string): string | undefined {
+  if (MENU_SLUG_BY_URL[url]) return MENU_SLUG_BY_URL[url];
+  if (url.startsWith("/app/sales-consultants/")) return "sales-consultants";
+  if (url.startsWith("/app/kp/fol")) return "kp-fol";
+  if (url.startsWith("/app/price-change-requests")) return "price-change-requests";
+  if (url.startsWith("/app/sales-management")) return "sales-management";
+  return undefined;
+}
+
+export function canAccessNavItem(
+  role: Role | undefined,
+  url: string,
+  hiddenMenus: string[] = [],
+): boolean {
   if (!role) return false;
+
+  const slug = menuSlugForUrl(url);
+  if (slug && hiddenMenus.includes(slug)) return false;
+
   if (ALL_AUTHENTICATED_URLS.has(url)) return true;
   if (role === "Administrator") return true;
 

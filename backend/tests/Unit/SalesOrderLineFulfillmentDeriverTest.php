@@ -25,7 +25,7 @@ class SalesOrderLineFulfillmentDeriverTest extends TestCase
         $this->assertSame('qty_on_shipments', $mapped['qty_on_shipments_source']);
     }
 
-    public function test_uses_usr_qty_at_approval_for_fill_rate(): void
+    public function test_fill_rate_uses_order_qty_not_qty_at_approval(): void
     {
         $mapped = SalesOrderLineFulfillmentDeriver::mapFromRaw([
             'InventoryID'       => ['value' => 'SKU-2'],
@@ -36,9 +36,10 @@ class SalesOrderLineFulfillmentDeriverTest extends TestCase
             'OpenQty'           => ['value' => 25],
         ]);
 
+        // Approval qty is still stored for reference, but fill rate is shipped/order.
         $this->assertSame(50.0, $mapped['qty_at_approval']);
-        $this->assertSame(25.0, $mapped['backorder_qty']);
-        $this->assertSame(50.0, $mapped['fill_rate_pct']);
+        $this->assertSame(75.0, $mapped['backorder_qty']); // 100 − 25
+        $this->assertSame(25.0, $mapped['fill_rate_pct']); // 25 / 100
     }
 
     public function test_qty_on_shipments_zero_marks_out_of_stock_reason(): void
@@ -52,7 +53,7 @@ class SalesOrderLineFulfillmentDeriverTest extends TestCase
 
         $this->assertSame(0.0, $mapped['qty_on_shipments']);
         $this->assertSame(0.0, $mapped['fill_rate_pct']);
-        $this->assertSame('inventory_shortage', $mapped['unfilled_reason_code']);
+        $this->assertSame('out_of_stock_procurement', $mapped['unfilled_reason_code']);
     }
 
     public function test_falls_back_to_shipped_qty_when_qty_on_shipments_missing(): void
@@ -77,7 +78,7 @@ class SalesOrderLineFulfillmentDeriverTest extends TestCase
             'ReasonCode'     => ['value' => 'SUPPLIER_DELAY'],
         ]);
 
-        $this->assertSame('supplier_delay', $mapped['unfilled_reason_code']);
+        $this->assertSame('delay_in_delivery', $mapped['unfilled_reason_code']);
     }
 
     public function test_safe_fill_rate_returns_null_when_denominator_missing(): void

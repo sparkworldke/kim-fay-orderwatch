@@ -1,9 +1,16 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { DateLink } from "@/components/entity-links";
+import {
+  ConsultantLink,
+  CustomerLink,
+  DateWithActions,
+  OrderLink,
+} from "@/components/entity-links";
+import { ProductListingCell } from "@/components/inventory/ProductListingCell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -15,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import type { CommonProductsResponse, SuggestedOrdersResponse } from "@/hooks/useCustomers";
 import { fillRateIssueReason } from "@/lib/order-reasons";
-import { formatKES } from "@/lib/format";
+import { MaskedKES } from "@/components/MaskedCurrency";
 import type { AcumaticaCustomer, AcumaticaSalesOrder, AcumaticaSalesOrderLine } from "@/types/admin";
 import { Building2, ClipboardList } from "lucide-react";
 
@@ -41,6 +48,7 @@ export function DocumentsTable({
           <TableHead>Status</TableHead>
           <TableHead className="text-right">Fill Rate</TableHead>
           <TableHead className="text-right">Backorder</TableHead>
+          <TableHead className="text-right">Rev. Lost</TableHead>
           <TableHead className="text-right">Total</TableHead>
           <TableHead>Date</TableHead>
         </TableRow>
@@ -49,26 +57,18 @@ export function DocumentsTable({
         {docs.map((doc) => {
           const fillRate = numeric(doc.lines_avg_fill_rate_pct);
           const backorderQty = numeric(doc.lines_sum_backorder_qty) ?? 0;
+          const revenueLost = numeric(doc.revenue_lost) ?? 0;
 
           return (
             <TableRow key={doc.id}>
               <TableCell>
-                {branchId ? (
-                  <Link
-                    to="/app/customer-orders/$customerId/branch/$branchId/so/$orderId"
-                    params={{ customerId, branchId, orderId: doc.acumatica_order_nbr }}
-                    className="font-mono font-medium underline-offset-4 hover:underline"
-                  >
-                    {doc.acumatica_order_nbr}
-                  </Link>
-                ) : (
-                  <Link
-                    to="/app/customer-orders/$customerId/so/$orderId"
-                    params={{ customerId, orderId: doc.acumatica_order_nbr }}
-                    className="font-mono font-medium underline-offset-4 hover:underline"
-                  >
-                    {doc.acumatica_order_nbr}
-                  </Link>
+                <OrderLink
+                  customerId={customerId}
+                  branchId={branchId}
+                  orderId={doc.acumatica_order_nbr}
+                />
+                {doc.description && doc.description.trim() !== "" && (
+                  <div className="text-xs text-muted-foreground">{doc.description}</div>
                 )}
                 {doc.customer_order && <div className="text-xs text-muted-foreground">PO {doc.customer_order}</div>}
               </TableCell>
@@ -84,9 +84,14 @@ export function DocumentsTable({
                 )}
               </TableCell>
               <TableCell className="text-right tabular-nums">{backorderQty.toLocaleString("en-KE")}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatKES(Number(doc.order_total ?? 0))}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {revenueLost > 0 && fillRate !== null && fillRate < 100
+                  ? <MaskedKES value={revenueLost} />
+                  : "—"}
+              </TableCell>
+              <TableCell className="text-right tabular-nums"><MaskedKES value={Number(doc.order_total ?? 0)} /></TableCell>
               <TableCell>
-                <DateLink value={doc.order_date} emptyText="-">{formatDate(doc.order_date)}</DateLink>
+                <DateWithActions value={doc.order_date} emptyText="-" />
               </TableCell>
             </TableRow>
           );
@@ -119,14 +124,24 @@ export function MetricsGrid({
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <MetricCard label="Documents" value={summary.documentCount} loading={loading} />
-      <MetricCard label="Total value" value={formatKES(summary.totalValue)} loading={loading} text />
+      <MetricCard label="Total value" value={<MaskedKES value={summary.totalValue} />} loading={loading} text />
       <MetricCard label="Avg fill rate" value={summary.avgFillRate === null ? "-" : `${summary.avgFillRate.toFixed(1)}%`} loading={loading} text />
       <MetricCard label="Backorder qty" value={summary.backorderQty} loading={loading} />
     </div>
   );
 }
 
-export function MetricCard({ label, value, loading, text = false }: { label: string; value: string | number; loading: boolean; text?: boolean }) {
+export function MetricCard({
+  label,
+  value,
+  loading,
+  text = false,
+}: {
+  label: string;
+  value: string | number | ReactNode;
+  loading: boolean;
+  text?: boolean;
+}) {
   return (
     <Card className="rounded-lg shadow-sm">
       <CardContent className="p-4">
@@ -162,7 +177,7 @@ export function BranchesCard({ customerId, branches }: { customerId: string; bra
             className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2.5 text-sm hover:bg-muted/40"
           >
             <div>
-              <div className="font-medium">{branch.name}</div>
+              <CustomerLink customerId={branch.acumatica_id} customerName={branch.name} className="font-medium" />
               <div className="font-mono text-[11px] text-muted-foreground">{branch.acumatica_id}</div>
             </div>
             <div className="flex items-center gap-2">
@@ -186,13 +201,24 @@ export function CommonProductsCard({
   isError,
   error,
   onRetry,
+  pageSize,
 }: {
   data: CommonProductsResponse | undefined;
   isLoading: boolean;
   isError: boolean;
   error: unknown;
   onRetry: () => void;
+  pageSize?: number;
 }) {
+  const [page, setPage] = useState(1);
+  const products = data?.products ?? [];
+  const total = products.length;
+  const perPage = pageSize ?? total;
+  const lastPage = Math.max(1, Math.ceil(total / perPage));
+  const currentPage = Math.min(page, lastPage);
+  const start = (currentPage - 1) * perPage;
+  const pagedProducts = products.slice(start, start + perPage);
+
   return (
     <Card className="rounded-lg shadow-sm">
       <CardHeader className="pb-3">
@@ -204,34 +230,50 @@ export function CommonProductsCard({
           <SkeletonRows count={2} />
         ) : isError ? (
           <ErrorBlock message={error instanceof Error ? error.message : "Common products could not be loaded."} onRetry={onRetry} />
-        ) : data && data.products.length === 0 ? (
+        ) : total === 0 ? (
           <EmptyBlock message="No product history found for this account." />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead className="text-right">Orders</TableHead>
-                <TableHead className="text-right">Total qty</TableHead>
-                <TableHead className="text-right">Last qty</TableHead>
-                <TableHead>Last ordered</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data?.products.map((item) => (
-                <TableRow key={item.inventory_id}>
-                  <TableCell>
-                    <div className="font-medium">{item.description ?? item.inventory_id}</div>
-                    <div className="font-mono text-xs text-muted-foreground">{item.inventory_id}</div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{item.order_count}</TableCell>
-                  <TableCell className="text-right tabular-nums">{item.total_qty} {item.uom ?? ""}</TableCell>
-                  <TableCell className="text-right tabular-nums">{item.last_order_qty} {item.uom ?? ""}</TableCell>
-                  <TableCell>{formatDate(item.last_order_date)}</TableCell>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="text-right">Orders</TableHead>
+                  <TableHead className="text-right">Total qty</TableHead>
+                  <TableHead className="text-right">Last qty</TableHead>
+                  <TableHead>Last ordered</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {pagedProducts.map((item) => (
+                  <TableRow key={item.inventory_id}>
+                    <TableCell>
+                      <ProductListingCell product={item} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{item.order_count}</TableCell>
+                    <TableCell className="text-right tabular-nums">{item.total_qty} {item.uom ?? ""}</TableCell>
+                    <TableCell className="text-right tabular-nums">{item.last_order_qty} {item.uom ?? ""}</TableCell>
+                    <TableCell>
+                      <DateWithActions value={item.last_order_date} emptyText="-" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {pageSize && lastPage > 1 && (
+              <div className="mt-4">
+                <PaginationControls
+                  currentPage={currentPage}
+                  lastPage={lastPage}
+                  total={total}
+                  perPage={perPage}
+                  onPageChange={setPage}
+                  onPerPageChange={() => {}}
+                  pageSizes={[pageSize]}
+                />
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -239,7 +281,7 @@ export function CommonProductsCard({
 }
 
 // ---------------------------------------------------------------------------
-// Whitspot — recurring items that look overdue for reorder.
+// Whitespot — recurring items that look overdue for reorder.
 // ---------------------------------------------------------------------------
 
 export function SuggestedOrdersCard({
@@ -248,65 +290,94 @@ export function SuggestedOrdersCard({
   isError,
   error,
   onRetry,
+  pageSize,
 }: {
   data: SuggestedOrdersResponse | undefined;
   isLoading: boolean;
   isError: boolean;
   error: unknown;
   onRetry: () => void;
+  pageSize?: number;
 }) {
+  const [page, setPage] = useState(1);
+  const suggestions = data?.suggestions ?? [];
+  const total = suggestions.length;
+  const perPage = pageSize ?? total;
+  const lastPage = Math.max(1, Math.ceil(total / perPage));
+  const currentPage = Math.min(page, lastPage);
+  const start = (currentPage - 1) * perPage;
+  const pagedSuggestions = suggestions.slice(start, start + perPage);
+
   return (
     <Card className="rounded-lg shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Whitspot</CardTitle>
+        <CardTitle className="text-base">Whitespot</CardTitle>
         <p className="text-sm text-muted-foreground">Suggested items for the next order based on this account's sales order history.</p>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <SkeletonRows count={2} />
         ) : isError ? (
-          <ErrorBlock message={error instanceof Error ? error.message : "Whitspot could not be loaded."} onRetry={onRetry} />
-        ) : data && data.suggestions.length === 0 ? (
-          <EmptyBlock message="No Whitspot items found." />
+          <ErrorBlock message={error instanceof Error ? error.message : "Whitespot could not be loaded."} onRetry={onRetry} />
+        ) : total === 0 ? (
+          <EmptyBlock message="No Whitespot items found." />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead className="text-right">Usual qty</TableHead>
-                <TableHead className="text-right">Last qty</TableHead>
-                <TableHead>Reorders every</TableHead>
-                <TableHead>Last ordered</TableHead>
-                <TableHead>Predicted next order</TableHead>
-                <TableHead className="text-right">Overdue by</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data?.suggestions.map((item) => (
-                <TableRow key={item.inventory_id}>
-                  <TableCell>
-                    <div className="font-medium">{item.description ?? item.inventory_id}</div>
-                    <div className="font-mono text-xs text-muted-foreground">{item.inventory_id}</div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{item.avg_order_qty} {item.uom ?? ""}</TableCell>
-                  <TableCell className="text-right tabular-nums">{item.last_order_qty} {item.uom ?? ""}</TableCell>
-                  <TableCell>~{item.avg_interval_days}d</TableCell>
-                  <TableCell>{formatDate(item.last_order_date)}</TableCell>
-                  <TableCell>{formatDate(item.next_expected_date)}</TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={item.days_overdue > 14 ? "destructive" : "secondary"}>{item.days_overdue}d</Badge>
-                  </TableCell>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="text-right">Usual qty</TableHead>
+                  <TableHead className="text-right">Last qty</TableHead>
+                  <TableHead>Reorders every</TableHead>
+                  <TableHead>Last ordered</TableHead>
+                  <TableHead>Predicted next order</TableHead>
+                  <TableHead className="text-right">Overdue by</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {pagedSuggestions.map((item) => (
+                  <TableRow key={item.inventory_id}>
+                    <TableCell>
+                      <ProductListingCell product={item} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{item.avg_order_qty} {item.uom ?? ""}</TableCell>
+                    <TableCell className="text-right tabular-nums">{item.last_order_qty} {item.uom ?? ""}</TableCell>
+                    <TableCell>~{item.avg_interval_days}d</TableCell>
+                    <TableCell>
+                      <DateWithActions value={item.last_order_date} emptyText="-" />
+                    </TableCell>
+                    <TableCell>
+                      <DateWithActions value={item.next_expected_date} emptyText="-" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={item.days_overdue > 14 ? "destructive" : "secondary"}>{item.days_overdue}d</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {pageSize && lastPage > 1 && (
+              <div className="mt-4">
+                <PaginationControls
+                  currentPage={currentPage}
+                  lastPage={lastPage}
+                  total={total}
+                  perPage={perPage}
+                  onPageChange={setPage}
+                  onPerPageChange={() => {}}
+                  pageSizes={[pageSize]}
+                />
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
   );
 }
 
-/** Link out to the standalone Whitspot page instead of embedding the full table inline. */
+/** Link out to the standalone Whitespot page instead of embedding the full table inline. */
 export function SuggestedOrdersLinkCard({ children }: { children: ReactNode }) {
   return (
     <Card className="rounded-lg shadow-sm">
@@ -314,7 +385,7 @@ export function SuggestedOrdersLinkCard({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-3">
           <ClipboardList className="h-5 w-5 text-muted-foreground" />
           <div>
-            <p className="text-sm font-medium">Whitspot</p>
+            <p className="text-sm font-medium">Whitespot</p>
             <p className="text-xs text-muted-foreground">Suggested items for the next order.</p>
           </div>
         </div>
@@ -375,7 +446,7 @@ export function OrderDetailBody({ order, lines }: { order: AcumaticaSalesOrder; 
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Document total" value={formatKES(Number(order.order_total ?? 0))} loading={false} text />
+        <MetricCard label="Document total" value={<MaskedKES value={Number(order.order_total ?? 0)} />} loading={false} text />
         <MetricCard label="Lines" value={lines.length} loading={false} />
         <MetricCard label="Fill rate" value={summary.fillRate === null ? "-" : `${summary.fillRate.toFixed(1)}%`} loading={false} text />
         <MetricCard label="Backorder qty" value={summary.backorderQty} loading={false} />
@@ -388,8 +459,19 @@ export function OrderDetailBody({ order, lines }: { order: AcumaticaSalesOrder; 
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Info label="Status" value={order.status ?? "-"} />
           <Info label="PO" value={order.customer_order ?? "-"} mono />
-          <Info label="Date" value={formatDate(order.order_date)} />
-          <Info label="Consultant" value={order.sales_consultant_name ?? order.sales_consultant_rep_code ?? "-"} />
+          <Info label="Date" value={formatDate(order.order_date)} node={<DateWithActions value={order.order_date} emptyText="-" />} />
+          <Info
+            label="Consultant"
+            value={order.sales_consultant_name ?? order.sales_consultant_rep_code ?? "-"}
+            node={
+              order.sales_consultant_rep_code || order.sales_consultant_name ? (
+                <ConsultantLink
+                  repCode={order.sales_consultant_rep_code}
+                  consultantName={order.sales_consultant_name}
+                />
+              ) : undefined
+            }
+          />
           {order.description && order.description.trim() !== "" && (
             <div className="sm:col-span-2 lg:col-span-4">
               <Info label="Description" value={order.description} />
@@ -425,8 +507,7 @@ export function OrderDetailBody({ order, lines }: { order: AcumaticaSalesOrder; 
                   return (
                     <TableRow key={line.id}>
                       <TableCell>
-                        <div className="font-medium">{line.description ?? line.inventory_id ?? "-"}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{line.inventory_id ?? "-"}</div>
+                        <ProductListingCell product={line} />
                       </TableCell>
                       <QtyCell value={line.order_qty} />
                       <QtyCell value={line.shipped_qty} />
@@ -453,11 +534,13 @@ export function QtyCell({ value }: { value: unknown }) {
   return <TableCell className="text-right tabular-nums">{(numeric(value) ?? 0).toLocaleString("en-KE")}</TableCell>;
 }
 
-export function Info({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+export function Info({ label, value, mono = false, node }: { label: string; value: string; mono?: boolean; node?: ReactNode }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-sm font-medium ${mono ? "font-mono" : ""}`}>{value}</p>
+      <div className={`mt-1 text-sm font-medium ${mono ? "font-mono" : ""}`}>
+        {node ?? value}
+      </div>
     </div>
   );
 }

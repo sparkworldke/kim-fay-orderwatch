@@ -111,7 +111,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             ],
         ]);
 
-        $service = new AcumaticaBackorderSyncService($client);
+        $service = new AcumaticaBackorderSyncService($client, new \App\Services\Operations\SalesOrderReasonCatalog());
         $run = $service->run();
 
         $this->assertSame('completed', $run->status);
@@ -271,7 +271,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'shipped_qty'           => 5,
             'open_qty'              => 15,
             'revenue_at_risk'       => 1500,
-            'reason_code'           => 'supplier_delay',
+            'reason_code'           => 'delay_in_delivery',
             'synced_at'             => now(),
         ]);
 
@@ -289,7 +289,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'order_qty'            => 20,
             'qty_on_shipments'     => 0,
             'unit_price'           => 75,
-            'unfilled_reason_code' => 'inventory_shortage',
+            'unfilled_reason_code' => 'out_of_stock_procurement',
         ]);
 
         AcumaticaFillRateSnapshot::create([
@@ -324,8 +324,8 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertJsonPath('product_focus.shortfall_count', 1)
             ->assertJsonPath('revenue_bleeding.backorder_revenue_at_risk', 1500)
             ->assertJsonPath('revenue_bleeding.zero_qty_on_shipments_lines', 1)
-            ->assertJsonPath('charts.backorders_by_reason.0.reason_code', 'supplier_delay')
-            ->assertJsonPath('charts.fill_rate_unfilled_reasons.0.reason_code', 'inventory_shortage');
+            ->assertJsonPath('charts.backorders_by_reason.0.reason_code', 'delay_in_delivery')
+            ->assertJsonPath('charts.fill_rate_unfilled_reasons.0.reason_code', 'out_of_stock_procurement');
     }
 
     public function test_business_optimization_filters_by_shipping_zone(): void
@@ -367,7 +367,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'shipped_qty'           => 0,
             'open_qty'              => 10,
             'revenue_at_risk'       => 1000,
-            'reason_code'           => 'supplier_delay',
+            'reason_code'           => 'delay_in_delivery',
             'synced_at'             => now(),
         ]);
         AcumaticaBackorderLine::create([
@@ -404,7 +404,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'order_qty'            => 10,
             'qty_on_shipments'     => 0,
             'unit_price'           => 100,
-            'unfilled_reason_code' => 'inventory_shortage',
+            'unfilled_reason_code' => 'out_of_stock_procurement',
         ]);
         AcumaticaSalesOrderLine::create([
             'sales_order_id'       => $orderZ2->id,
@@ -451,8 +451,8 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertJsonPath('revenue_bleeding.backorder_revenue_at_risk', 1000)
             ->assertJsonPath('revenue_bleeding.fill_rate_not_shipped', 1000)
             ->assertJsonPath('revenue_bleeding.zero_qty_on_shipments_lines', 1)
-            ->assertJsonPath('charts.backorders_by_reason.0.reason_code', 'supplier_delay')
-            ->assertJsonPath('charts.fill_rate_unfilled_reasons.0.reason_code', 'inventory_shortage');
+            ->assertJsonPath('charts.backorders_by_reason.0.reason_code', 'delay_in_delivery')
+            ->assertJsonPath('charts.fill_rate_unfilled_reasons.0.reason_code', 'out_of_stock_procurement');
 
         $this->actingAs($user)
             ->getJson("/api/operations/business-optimization?date_from={$from}&date_to={$to}&shipping_zone_id=Z999")
@@ -479,6 +479,89 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->getJson('/api/operations/inventory')
             ->assertOk()
             ->assertJsonPath('data.0.inventory_id', 'ITEM-XYZ');
+    }
+
+    public function test_inventory_stockout_filter_returns_critical_or_zero_stock(): void
+    {
+        $user = User::factory()->create();
+
+        $zero = AcumaticaInventoryItem::create([
+            'inventory_id'         => 'OOS-ZERO',
+            'description'          => 'Zero stock item',
+            'qty_on_hand'          => 0,
+            'default_warehouse_id' => 'FGS',
+            'synced_at'            => now(),
+        ]);
+
+        $critical = AcumaticaInventoryItem::create([
+            'inventory_id'         => 'OOS-CRIT',
+            'description'          => 'Critical prediction item',
+            'qty_on_hand'          => 12,
+            'default_warehouse_id' => 'FGS',
+            'synced_at'            => now(),
+        ]);
+
+        $healthy = AcumaticaInventoryItem::create([
+            'inventory_id'         => 'OOS-OK',
+            'description'          => 'Healthy stock',
+            'qty_on_hand'          => 500,
+            'default_warehouse_id' => 'MSA',
+            'synced_at'            => now(),
+        ]);
+
+        AcumaticaInventoryRunRateLog::create([
+            'inventory_item_id'   => $critical->id,
+            'inventory_id'        => 'OOS-CRIT',
+            'qty_on_hand'         => 12,
+            'daily_run_rate'      => 4,
+            'days_until_stockout' => 3,
+            'prediction_status'   => 'critical',
+            'logged_at'           => now(),
+        ]);
+
+        AcumaticaInventoryRunRateLog::create([
+            'inventory_item_id'   => $healthy->id,
+            'inventory_id'        => 'OOS-OK',
+            'qty_on_hand'         => 500,
+            'daily_run_rate'      => 2,
+            'days_until_stockout' => 250,
+            'prediction_status'   => 'healthy',
+            'logged_at'           => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/inventory?stockout_filter=critical_or_oos')
+            ->assertOk()
+            ->assertJsonFragment(['inventory_id' => 'OOS-ZERO'])
+            ->assertJsonFragment(['inventory_id' => 'OOS-CRIT'])
+            ->assertJsonMissing(['inventory_id' => 'OOS-OK']);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/inventory?stockout_filter=out_of_stock')
+            ->assertOk()
+            ->assertJsonFragment(['inventory_id' => 'OOS-ZERO'])
+            ->assertJsonMissing(['inventory_id' => 'OOS-CRIT']);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/inventory?stockout_filter=critical_or_oos&warehouse_id[]=FGS')
+            ->assertOk()
+            ->assertJsonFragment(['inventory_id' => 'OOS-ZERO'])
+            ->assertJsonFragment(['inventory_id' => 'OOS-CRIT']);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/inventory/summary')
+            ->assertOk()
+            ->assertJsonPath('out_of_stock_count', 1)
+            ->assertJsonStructure([
+                'warehouses' => [
+                    ['warehouse_id', 'label', 'sku_count'],
+                ],
+            ]);
+
+        // Keep static analysis happy that seeded models exist.
+        $this->assertNotNull($zero->id);
+        $this->assertNotNull($critical->id);
+        $this->assertNotNull($healthy->id);
     }
 
     public function test_backorders_list_enriches_product_and_customer_names(): void
@@ -669,7 +752,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             ],
         ]);
 
-        $service = new AcumaticaBackorderSyncService($client);
+        $service = new AcumaticaBackorderSyncService($client, new \App\Services\Operations\SalesOrderReasonCatalog());
         $run = $service->run();
 
         $this->assertSame('completed', $run->status);
@@ -679,7 +762,7 @@ class AcumaticaOperationsSyncTest extends TestCase
         $this->assertDatabaseHas('acumatica_backorder_lines', [
             'order_nbr' => 'SO-BO-ERP',
             'inventory_id' => 'ITEM-ERP',
-            'reason_code' => 'SUPPLIER_DELAY',
+            'reason_code' => 'delay_in_delivery',
             'reason_notes' => 'Supplier shipment delayed at origin.',
         ]);
     }
@@ -726,7 +809,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'open_qty' => 10,
             'backorder_qty' => 10,
             'fulfillment_status' => 'Backorders Imported',
-            'reason_code' => 'supplier_delay',
+            'reason_code' => 'delay_in_delivery',
             'reason_notes' => 'Vendor shipment missed dispatch window.',
             'warehouse_id' => 'MAIN',
             'unit_price' => 150,
@@ -736,7 +819,7 @@ class AcumaticaOperationsSyncTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->getJson('/api/operations/backorders/analytics?date_from=2026-06-01&date_to=2026-06-30&product_line=Trading&warehouse_id=MAIN&reason_code=supplier_delay')
+            ->getJson('/api/operations/backorders/analytics?date_from=2026-06-01&date_to=2026-06-30&product_line=Trading&warehouse_id=MAIN&reason_code=delay_in_delivery')
             ->assertOk()
             ->assertJsonPath('summary.open_lines', 1)
             ->assertJsonPath('excel_summary.totals.back_order_value', 1500)
@@ -744,20 +827,20 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertJsonPath('excel_summary.by_customer_group.0.contribution_pct', 100)
             ->assertJsonPath('charts.category_distribution.0.product_line', 'Trading')
             ->assertJsonPath('charts.customer_group_distribution.0.customer_group', 'Consumer sales')
-            ->assertJsonPath('charts.reason_distribution.0.reason_code', 'supplier_delay');
+            ->assertJsonPath('charts.reason_distribution.0.reason_code', 'delay_in_delivery');
 
         $this->actingAs($user)
             ->patchJson('/api/operations/backorders/'.$line->id, [
-                'reason_code' => 'logistics_disruption',
+                'reason_code' => 'delay_in_delivery',
                 'reason_notes' => 'Cross-dock delay at the main warehouse.',
             ])
             ->assertOk()
-            ->assertJsonPath('reason_code', 'logistics_disruption')
+            ->assertJsonPath('reason_code', 'delay_in_delivery')
             ->assertJsonPath('reason_notes', 'Cross-dock delay at the main warehouse.');
 
         $this->assertDatabaseHas('acumatica_backorder_lines', [
             'id' => $line->id,
-            'reason_code' => 'logistics_disruption',
+            'reason_code' => 'delay_in_delivery',
         ]);
     }
 
@@ -773,11 +856,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'synced_at'    => now(),
         ]);
 
-        AcumaticaShippingZone::create([
-            'acumatica_id' => 'Z005',
-            'description' => 'Nairobi Zone',
-            'synced_at' => now(),
-        ]);
+        $this->ensureShippingZone('Z005', 'Nairobi Zone');
 
         AcumaticaCustomer::create([
             'acumatica_id' => 'CUST-FR',
@@ -848,16 +927,8 @@ class AcumaticaOperationsSyncTest extends TestCase
     {
         $user = User::factory()->create();
 
-        AcumaticaShippingZone::create([
-            'acumatica_id' => 'Z005',
-            'description' => 'Nairobi Zone',
-            'synced_at' => now(),
-        ]);
-        AcumaticaShippingZone::create([
-            'acumatica_id' => 'Z010',
-            'description' => 'Mombasa Zone',
-            'synced_at' => now(),
-        ]);
+        $this->ensureShippingZone('Z005', 'Nairobi Zone');
+        $this->ensureShippingZone('Z010', 'Mombasa Zone');
 
         AcumaticaCustomer::create([
             'acumatica_id' => 'CUST-NRB',
@@ -897,12 +968,15 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.order_nbr', 'SO-NRB-1');
 
-        $this->actingAs($user)
+        $summary = $this->actingAs($user)
             ->getJson('/api/operations/fill-rate/summary?date_from='.now()->startOfMonth()->toDateString().'&date_to='.now()->toDateString().'&shipping_zone_id=Z010')
             ->assertOk()
             ->assertJsonPath('order_count', 1)
-            ->assertJsonPath('healthy_count', 1)
-            ->assertJsonPath('filters.shipping_zones.0.acumatica_id', 'Z005');
+            ->assertJsonPath('healthy_count', 1);
+
+        $zoneIds = collect($summary->json('filters.shipping_zones'))->pluck('acumatica_id');
+        $this->assertTrue($zoneIds->contains('Z005'));
+        $this->assertTrue($zoneIds->contains('Z010'));
     }
 
     public function test_fill_rate_list_filters_critical_and_sorts_high_to_low(): void
@@ -948,6 +1022,17 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.order_nbr', 'SO-FR-LOW')
             ->assertJsonPath('data.1.order_nbr', 'SO-FR-HIGH');
+    }
+
+    private function ensureShippingZone(string $acumaticaId, string $description): AcumaticaShippingZone
+    {
+        return AcumaticaShippingZone::query()->updateOrCreate(
+            ['acumatica_id' => $acumaticaId],
+            [
+                'description' => $description,
+                'synced_at' => now(),
+            ],
+        );
     }
 
     private function inventoryService(AcumaticaClient $client): AcumaticaInventorySyncService

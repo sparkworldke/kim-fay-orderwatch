@@ -1,5 +1,5 @@
 import { Link, Outlet, createFileRoute, useParams, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, FileText, Package, ClipboardList } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   BranchesCard,
   CommonProductsCard,
@@ -18,6 +24,7 @@ import {
   SuggestedOrdersCard,
   summarizeDocuments,
 } from "@/components/customer-orders-shared";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useCommonProducts, useSuggestedOrders } from "@/hooks/useCustomers";
 import { useOrders, type OrderFilters } from "@/hooks/useOrders";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -30,6 +37,10 @@ export const Route = createFileRoute("/app/customer-orders/$customerId")({
 });
 
 type SortOption = NonNullable<OrderFilters["sort"]>;
+
+const WHITESPOT_PAGE_SIZE = 8;
+const DOCUMENTS_PAGE_SIZE = 15;
+const COMMON_PRODUCTS_PAGE_SIZE = 20;
 
 function CustomerDocumentsPage() {
   const { customerId } = useParams({ from: "/app/customer-orders/$customerId" });
@@ -46,12 +57,14 @@ function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sort, setSort] = useState<SortOption>("latest");
+  const [docsPage, setDocsPage] = useState(1);
 
   const customer = useQuery({
     queryKey: ["customers", customerId],
     queryFn: () => apiFetch<AcumaticaCustomer>(`customers/${encodeURIComponent(customerId)}`),
     retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 2,
   });
+
   const orders = useOrders({
     customer_id: customerId,
     order_type: "ALL",
@@ -59,13 +72,23 @@ function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
     sort,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
-    per_page: 200,
+    page: docsPage,
+    per_page: DOCUMENTS_PAGE_SIZE,
   });
+
   const commonProducts = useCommonProducts(customerId);
   const suggestedOrders = useSuggestedOrders(customerId);
   const docs = orders.data?.data ?? [];
   const summary = useMemo(() => summarizeDocuments(docs), [docs]);
   const branches = customer.data?.branches ?? [];
+
+  // Reset page when filters change
+  const filtersKey = `${sort}|${dateFrom}|${dateTo}`;
+  const [lastFiltersKey, setLastFiltersKey] = useState(filtersKey);
+  if (filtersKey !== lastFiltersKey) {
+    setLastFiltersKey(filtersKey);
+    if (docsPage !== 1) setDocsPage(1);
+  }
 
   if (customer.isError && customer.error instanceof ApiError && customer.error.status === 404) {
     return (
@@ -80,6 +103,11 @@ function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
       </div>
     );
   }
+
+  const docsTotal = orders.data?.total ?? 0;
+  const docsLastPage = orders.data?.last_page ?? 1;
+  const commonProductsCount = commonProducts.data?.products.length ?? 0;
+  const whitespotCount = suggestedOrders.data?.suggestions.length ?? 0;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -132,38 +160,84 @@ function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
       </Card>
 
       <Card className="rounded-lg shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <CardTitle className="text-base">All Documents</CardTitle>
-          <FileText className="h-5 w-5 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {orders.isLoading ? (
-            <SkeletonRows />
-          ) : orders.isError ? (
-            <ErrorBlock message={orders.error instanceof Error ? orders.error.message : "Documents could not be loaded."} onRetry={() => orders.refetch()} />
-          ) : docs.length === 0 ? (
-            <EmptyBlock message={branches.length > 0 ? "No sales documents found directly against this account — check its branches above." : "No sales documents found for this customer."} />
-          ) : (
-            <DocumentsTable customerId={customerId} docs={docs} />
-          )}
+        <CardContent className="p-4">
+          <Accordion type="multiple" defaultValue={["documents", "whitespot"]} className="w-full">
+            <AccordionItem value="documents" className="border-b">
+              <AccordionTrigger>
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-base font-semibold">All Documents</span>
+                  <Badge variant="secondary" className="ml-2">{docsTotal}</Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                {orders.isLoading ? (
+                  <SkeletonRows />
+                ) : orders.isError ? (
+                  <ErrorBlock message={orders.error instanceof Error ? orders.error.message : "Documents could not be loaded."} onRetry={() => orders.refetch()} />
+                ) : docs.length === 0 ? (
+                  <EmptyBlock message={branches.length > 0 ? "No sales documents found directly against this account — check its branches above." : "No sales documents found for this customer."} />
+                ) : (
+                  <>
+                    <DocumentsTable customerId={customerId} docs={docs} />
+                    <div className="mt-4">
+                      <PaginationControls
+                        currentPage={docsPage}
+                        lastPage={docsLastPage}
+                        total={docsTotal}
+                        perPage={DOCUMENTS_PAGE_SIZE}
+                        onPageChange={setDocsPage}
+                        onPerPageChange={() => {}}
+                        pageSizes={[DOCUMENTS_PAGE_SIZE]}
+                      />
+                    </div>
+                  </>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="whitespot" className="border-b">
+              <AccordionTrigger>
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-base font-semibold">Whitespot</span>
+                  <Badge variant="secondary" className="ml-2">{whitespotCount}</Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <SuggestedOrdersCard
+                  data={suggestedOrders.data}
+                  isLoading={suggestedOrders.isLoading}
+                  isError={suggestedOrders.isError}
+                  error={suggestedOrders.error}
+                  onRetry={() => suggestedOrders.refetch()}
+                  pageSize={WHITESPOT_PAGE_SIZE}
+                />
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="common-products" className="border-b-0">
+              <AccordionTrigger>
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-base font-semibold">Common Products</span>
+                  <Badge variant="secondary" className="ml-2">{commonProductsCount}</Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <CommonProductsCard
+                  data={commonProducts.data}
+                  isLoading={commonProducts.isLoading}
+                  isError={commonProducts.isError}
+                  error={commonProducts.error}
+                  onRetry={() => commonProducts.refetch()}
+                  pageSize={COMMON_PRODUCTS_PAGE_SIZE}
+                />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </CardContent>
       </Card>
-
-      <CommonProductsCard
-        data={commonProducts.data}
-        isLoading={commonProducts.isLoading}
-        isError={commonProducts.isError}
-        error={commonProducts.error}
-        onRetry={() => commonProducts.refetch()}
-      />
-
-      <SuggestedOrdersCard
-        data={suggestedOrders.data}
-        isLoading={suggestedOrders.isLoading}
-        isError={suggestedOrders.isError}
-        error={suggestedOrders.error}
-        onRetry={() => suggestedOrders.refetch()}
-      />
     </div>
   );
 }

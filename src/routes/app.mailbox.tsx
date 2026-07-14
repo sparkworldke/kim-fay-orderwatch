@@ -660,7 +660,7 @@ function InboxPanel() {
             <SelectValue placeholder="Group by" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="domain">Customer Domain</SelectItem>
+            <SelectItem value="domain">Domain (e.g. gmail.com)</SelectItem>
             <SelectItem value="customer">Customer</SelectItem>
           </SelectContent>
         </Select>

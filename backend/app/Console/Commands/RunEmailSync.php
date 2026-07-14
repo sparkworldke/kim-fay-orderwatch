@@ -27,8 +27,8 @@ class RunEmailSync extends Command
             fn (CronRunLog $run) => $this->perform($run, $outlook),
             (string) $this->option('source'),
             $userId,
-            90 * 60, // 90 min — allows the 2-hour alternating schedule
-            120 * 60, // 2 h lock — email sync can exceed the default 55 min lock on large mailboxes
+            90 * 60, // 90 min ceiling — same-day window should finish well under this
+            150 * 60, // 2.5 h lock — leave headroom under the 3-hour schedule
         );
 
         $this->info("Cron run {$run->id}: {$run->status}");

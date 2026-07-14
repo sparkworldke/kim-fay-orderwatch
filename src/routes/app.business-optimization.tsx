@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { CustomerLink, OrderLink } from "@/components/entity-links";
+import { ProductListingCell } from "@/components/inventory/ProductListingCell";
 import {
   AlertTriangle,
   ArrowRight,
@@ -52,7 +54,8 @@ import {
   useBusinessOptimization,
 } from "@/hooks/useOperations";
 import { shippingZoneLabel } from "@/hooks/useShippingZones";
-import { formatKES, formatNumber } from "@/lib/format";
+import { useMaskedKESFormatter } from "@/components/MaskedCurrency";
+import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/business-optimization")({
@@ -138,6 +141,7 @@ function topNWithOther<T>(
 }
 
 function BusinessOptimizationPage() {
+  const kes = useMaskedKESFormatter();
   const [dateFrom, setDateFrom] = useState(startOfMonth());
   const [dateTo, setDateTo] = useState(today());
   const [shippingZoneId, setShippingZoneId] = useState("all");
@@ -367,14 +371,14 @@ function BusinessOptimizationPage() {
             />
             <Kpi
               label="Backorder exposure"
-              value={formatKES(data.revenue_bleeding.backorder_revenue_at_risk, { compact: true })}
+              value={kes(data.revenue_bleeding.backorder_revenue_at_risk, { compact: true })}
               icon={PackageX}
               sub={`${formatNumber(data.revenue_bleeding.open_backorder_lines)} open lines`}
               warn={data.revenue_bleeding.backorder_revenue_at_risk > 0}
             />
             <Kpi
               label="Fill-rate gap"
-              value={formatKES(data.revenue_bleeding.fill_rate_not_shipped, { compact: true })}
+              value={kes(data.revenue_bleeding.fill_rate_not_shipped, { compact: true })}
               icon={LineChart}
               sub={`${formatNumber(data.revenue_bleeding.orders_below_80_pct)} orders below 80%`}
               warn={data.revenue_bleeding.orders_below_80_pct > 0}
@@ -422,13 +426,13 @@ function BusinessOptimizationPage() {
               href="/app/backorders"
               icon={PackageX}
               title="Review backorders"
-              stat={`${formatNumber(data.revenue_bleeding.open_backorder_lines)} open lines - ${formatKES(data.revenue_bleeding.backorder_revenue_at_risk, { compact: true })} at risk`}
+              stat={`${formatNumber(data.revenue_bleeding.open_backorder_lines)} open lines - ${kes(data.revenue_bleeding.backorder_revenue_at_risk, { compact: true })} at risk`}
             />
             <ActionCard
               href={selectedZone ? `/app/fill-rate?shipping_zone_id=${encodeURIComponent(selectedZone)}` : "/app/fill-rate"}
               icon={LineChart}
               title="Review fill rate"
-              stat={`${data.revenue_bleeding.orders_below_80_pct} orders below 80% - ${formatKES(data.revenue_bleeding.fill_rate_not_shipped, { compact: true })} unshipped`}
+              stat={`${data.revenue_bleeding.orders_below_80_pct} orders below 80% - ${kes(data.revenue_bleeding.fill_rate_not_shipped, { compact: true })} unshipped`}
             />
             <ActionCard
               href="/app/inventory"
@@ -447,7 +451,7 @@ function BusinessOptimizationPage() {
                   <RankedBar
                     rows={customerRows}
                     defaultColor={RANK_COLOR}
-                    valueFormatter={(v) => formatKES(v, { compact: true })}
+                    valueFormatter={(v) => kes(v, { compact: true })}
                   />
                 )}
                 {data.customer_focus.top_customer_concentration_pct != null && (
@@ -466,7 +470,7 @@ function BusinessOptimizationPage() {
                     <RankedBar
                       rows={productRows}
                       defaultColor={RANK_COLOR}
-                      valueFormatter={(v) => formatKES(v, { compact: true })}
+                      valueFormatter={(v) => kes(v, { compact: true })}
                     />
                     <ChartLegend
                       items={[
@@ -489,7 +493,7 @@ function BusinessOptimizationPage() {
                   <RankedBar
                     rows={backorderReasonRows}
                     defaultColor={BACKORDER_REASON_COLOR}
-                    valueFormatter={(v) => formatKES(v, { compact: true })}
+                    valueFormatter={(v) => kes(v, { compact: true })}
                   />
                 )}
               </ChartCard>
@@ -501,7 +505,7 @@ function BusinessOptimizationPage() {
                   <RankedBar
                     rows={fillReasonRows}
                     defaultColor={FILL_REASON_COLOR}
-                    valueFormatter={(v) => formatKES(v, { compact: true })}
+                    valueFormatter={(v) => kes(v, { compact: true })}
                   />
                 )}
               </ChartCard>
@@ -542,10 +546,7 @@ function BusinessOptimizationPage() {
                   {data.production_forecast.at_risk_items.map((item) => (
                     <tr key={item.inventory_id} className="border-b">
                       <td className="px-4 py-2">
-                        <div className="font-medium">{item.product_name ?? item.inventory_id}</div>
-                        <div className="text-xs font-mono text-muted-foreground">
-                          {item.inventory_id}
-                        </div>
+                        <ProductListingCell product={item} />
                       </td>
                       <td className="px-4 py-2 text-right font-mono">
                         {formatNumber(item.qty_on_hand)}
@@ -580,9 +581,13 @@ function BusinessOptimizationPage() {
               empty="No critical fill-rate customers in range"
               rows={data.customer_focus.top_by_fill_rate_risk.map((c) => ({
                 key: c.customer_acumatica_id,
-                primary: c.customer_name ?? c.customer_acumatica_id,
+                primary: (
+                  <CustomerLink customerId={c.customer_acumatica_id} customerName={c.customer_name}>
+                    {c.customer_name ?? c.customer_acumatica_id}
+                  </CustomerLink>
+                ),
                 secondary: `${c.critical_orders} critical - ${c.at_risk_orders} at risk orders`,
-                value: formatKES(c.revenue_not_shipped),
+                value: kes(c.revenue_not_shipped),
               }))}
             />
             <InsightList
@@ -590,9 +595,9 @@ function BusinessOptimizationPage() {
               empty="No stock shortfalls detected"
               rows={data.product_focus.stock_shortfall_skus.map((p) => ({
                 key: p.inventory_id,
-                primary: p.product_name ?? p.inventory_id,
+                primary: <ProductListingCell product={p} />,
                 secondary: `Open ${formatNumber(p.total_open_qty)} - On hand ${p.qty_on_hand != null ? formatNumber(p.qty_on_hand) : "?"}`,
-                value: formatKES(p.revenue_at_risk),
+                value: kes(p.revenue_at_risk),
               }))}
             />
           </div>
@@ -617,6 +622,7 @@ function ReasonImpactCard({
   colorClass: string;
   footer: string;
 }) {
+  const kes = useMaskedKESFormatter();
   const total = rows.reduce((sum, row) => sum + Number(row.revenue_at_risk ?? 0), 0);
   const topRows = rows.slice(0, 5);
 
@@ -627,7 +633,7 @@ function ReasonImpactCard({
           <Icon className="h-4 w-4 text-muted-foreground" />
           {title}
         </h3>
-        <Badge variant="outline">{formatKES(total, { compact: true })}</Badge>
+        <Badge variant="outline">{kes(total, { compact: true })}</Badge>
       </div>
       <div className="mt-4 space-y-3">
         {topRows.length === 0 && <p className="py-8 text-center text-xs text-muted-foreground">{empty}</p>}
@@ -637,7 +643,7 @@ function ReasonImpactCard({
             <div key={row.reason_code} className="space-y-1.5">
               <div className="flex items-center justify-between gap-3 text-xs">
                 <span className="min-w-0 truncate font-medium capitalize">{reasonLabel(row.reason_code)}</span>
-                <span className="shrink-0 font-mono">{formatKES(row.revenue_at_risk, { compact: true })}</span>
+                <span className="shrink-0 font-mono">{kes(row.revenue_at_risk, { compact: true })}</span>
               </div>
               <div className="h-2 rounded-full bg-muted">
                 <div className={cn("h-2 rounded-full", colorClass)} style={{ width: `${Math.min(pct, 100)}%` }} />
@@ -656,6 +662,8 @@ function ReasonImpactCard({
 }
 
 function ExecutiveDecisionTable({ rows }: { rows: DecisionRow[] }) {
+  const kes = useMaskedKESFormatter();
+
   return (
     <div className="rounded-lg border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -693,7 +701,7 @@ function ExecutiveDecisionTable({ rows }: { rows: DecisionRow[] }) {
                 </td>
                 <td className="px-3 py-2 font-medium">{row.driver}</td>
                 <td className="px-3 py-2 text-right font-mono">
-                  {row.impact > 0 ? formatKES(row.impact, { compact: true }) : "-"}
+                  {row.impact > 0 ? kes(row.impact, { compact: true }) : "-"}
                 </td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">{row.affected}</td>
                 <td className="px-3 py-2">
@@ -720,6 +728,7 @@ function ExposureHero({
   backorder: number;
   fillRate: number;
 }) {
+  const kes = useMaskedKESFormatter();
   const total = backorder + fillRate || 1;
   const backorderPct = (backorder / total) * 100;
   const fillPct = 100 - backorderPct;
@@ -730,7 +739,7 @@ function ExposureHero({
         <Wallet className="h-3.5 w-3.5" />
         Combined revenue exposure
       </div>
-      <p className="mt-1 text-3xl font-semibold text-red-600">{formatKES(combined)}</p>
+      <p className="mt-1 text-3xl font-semibold text-red-600">{kes(combined)}</p>
       <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-red-500" style={{ width: `${backorderPct}%` }} />
         <div className="h-full bg-amber-500" style={{ width: `${fillPct}%` }} />
@@ -738,11 +747,11 @@ function ExposureHero({
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-red-500" />
-          Backorders {formatKES(backorder, { compact: true })}
+          Backorders {kes(backorder, { compact: true })}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-amber-500" />
-          Fill rate gap {formatKES(fillRate, { compact: true })}
+          Fill rate gap {kes(fillRate, { compact: true })}
         </span>
       </div>
     </div>
@@ -903,6 +912,8 @@ function ExecutiveSummaryGrid({
     by_customer_group: ContributionRow[];
   };
 }) {
+  const kes = useMaskedKESFormatter();
+
   return (
     <Section title="Detailed source numbers" icon={BarChart3}>
       <div className="grid gap-4 xl:grid-cols-2">
@@ -914,7 +925,7 @@ function ExecutiveSummaryGrid({
           <div className="grid gap-3 sm:grid-cols-2">
             <ToneMetric label="Actual Qty" value={formatNumber(fillRate.totals.actual_qty)} tone="green" />
             <ToneMetric label="Ordered Qty" value={formatNumber(fillRate.totals.ordered_qty)} tone="blue" />
-            <ToneMetric label="Undershipped Value" value={formatKES(fillRate.totals.undershipped_value)} tone="red" />
+            <ToneMetric label="Undershipped Value" value={kes(fillRate.totals.undershipped_value)} tone="red" />
             <ToneMetric
               label="Fill Rate"
               value={fillRate.totals.fill_rate_pct != null ? `${fillRate.totals.fill_rate_pct}%` : "N/A"}
@@ -931,7 +942,7 @@ function ExecutiveSummaryGrid({
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <ToneMetric label="Back Order Qty" value={formatNumber(backorders.totals.back_order_qty)} tone="amber" />
-            <ToneMetric label="Back Ordered Value" value={formatKES(backorders.totals.back_order_value)} tone="red" />
+            <ToneMetric label="Back Ordered Value" value={kes(backorders.totals.back_order_value)} tone="red" />
           </div>
           <MiniContribution rows={backorders.by_customer_group} labelKey="customer_group" valueKey="back_order_value" />
         </section>
@@ -974,6 +985,7 @@ function MiniContribution({
   labelKey: string;
   valueKey: string;
 }) {
+  const kes = useMaskedKESFormatter();
   const topRows = rows.slice(0, 4);
 
   return (
@@ -986,7 +998,7 @@ function MiniContribution({
         <div key={`${String(row[labelKey])}-${index}`} className="space-y-1">
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="truncate font-medium">{String(row[labelKey] ?? "Unassigned")}</span>
-            <span className="shrink-0 font-mono">{formatKES(Number(row[valueKey] ?? 0))}</span>
+            <span className="shrink-0 font-mono">{kes(Number(row[valueKey] ?? 0))}</span>
           </div>
           <div className="h-1.5 rounded-full bg-muted">
             <div
@@ -1125,7 +1137,7 @@ function InsightList({
 }: {
   title: string;
   empty: string;
-  rows: Array<{ key: string; primary: string; secondary: string; value: string }>;
+  rows: Array<{ key: string; primary: ReactNode; secondary: string; value: string }>;
 }) {
   return (
     <div className="rounded-lg border">
@@ -1160,6 +1172,7 @@ function DeliverySlaSection({
   dateTo: string;
   selectedZone?: string;
 }) {
+  const kes = useMaskedKESFormatter();
   const { summary, rules, by_region, most_affected_zones, daily_trend, delayed_orders } = deliverySla;
   const fillRateHref = {
     to: "/app/fill-rate" as const,
@@ -1199,7 +1212,7 @@ function DeliverySlaSection({
           label="Delayed"
           value={formatNumber(summary.delayed_count)}
           icon={AlertTriangle}
-          sub={summary.delayed_pct != null ? `${summary.delayed_pct}% · ${formatKES(summary.delayed_value, { compact: true })}` : undefined}
+          sub={summary.delayed_pct != null ? `${summary.delayed_pct}% · ${kes(summary.delayed_value, { compact: true })}` : undefined}
           warn={summary.delayed_count > 0}
         />
         <Kpi
@@ -1237,7 +1250,7 @@ function DeliverySlaSection({
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Delayed value</p>
-                <p className="font-medium">{formatKES(region.delayed_value, { compact: true })}</p>
+                <p className="font-medium">{kes(region.delayed_value, { compact: true })}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Avg hours</p>
@@ -1278,6 +1291,8 @@ function DeliverySlaSection({
 }
 
 function MostAffectedZonesTable({ zones }: { zones: DeliverySlaZoneImpact[] }) {
+  const kes = useMaskedKESFormatter();
+
   if (zones.length === 0) {
     return <EmptyChart message="No zone-level SLA data in this scope" />;
   }
@@ -1311,7 +1326,7 @@ function MostAffectedZonesTable({ zones }: { zones: DeliverySlaZoneImpact[] }) {
               <td className="px-2 py-2 text-right tabular-nums">{zone.total_orders}</td>
               <td className="px-2 py-2 text-right tabular-nums">{zone.delayed_orders}</td>
               <td className="px-2 py-2 text-right tabular-nums">{zone.delayed_pct}%</td>
-              <td className="px-2 py-2 text-right tabular-nums">{formatKES(zone.delayed_value, { compact: true })}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{kes(zone.delayed_value, { compact: true })}</td>
               <td className="px-2 py-2 text-right tabular-nums">{zone.avg_delay_hours ?? "—"}</td>
               <td className="px-2 py-2 capitalize text-xs">{reasonLabel(zone.primary_reason)}</td>
             </tr>
@@ -1323,6 +1338,8 @@ function MostAffectedZonesTable({ zones }: { zones: DeliverySlaZoneImpact[] }) {
 }
 
 function DelayedOrdersTable({ orders }: { orders: DeliverySlaDelayedOrder[] }) {
+  const kes = useMaskedKESFormatter();
+
   if (orders.length === 0) {
     return <EmptyChart message="No delayed orders in this period" />;
   }
@@ -1343,13 +1360,25 @@ function DelayedOrdersTable({ orders }: { orders: DeliverySlaDelayedOrder[] }) {
         <tbody>
           {orders.map((order) => (
             <tr key={order.order_nbr} className="border-b">
-              <td className="px-2 py-2 font-mono text-xs">{order.order_nbr}</td>
-              <td className="px-2 py-2">{order.customer_name ?? order.customer_acumatica_id ?? "—"}</td>
+              <td className="px-2 py-2 font-mono text-xs">
+                <OrderLink
+                  customerId={order.customer_acumatica_id}
+                  orderId={order.order_nbr}
+                />
+              </td>
+              <td className="px-2 py-2">
+                <CustomerLink
+                  customerId={order.customer_acumatica_id}
+                  customerName={order.customer_name}
+                >
+                  {order.customer_name ?? order.customer_acumatica_id ?? "—"}
+                </CustomerLink>
+              </td>
               <td className="px-2 py-2 text-xs">
                 {order.shipping_zone_name ?? order.shipping_zone_id ?? "Unmapped"}
                 {order.shipping_zone_region ? ` (${order.shipping_zone_region})` : ""}
               </td>
-              <td className="px-2 py-2 text-right tabular-nums">{formatKES(order.order_value, { compact: true })}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{kes(order.order_value, { compact: true })}</td>
               <td className="px-2 py-2 text-right tabular-nums">{order.delivery_hours ?? "—"}</td>
               <td className="px-2 py-2 text-xs text-muted-foreground">{order.delivery_sla_label}</td>
             </tr>

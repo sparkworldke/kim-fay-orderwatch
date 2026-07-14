@@ -68,12 +68,14 @@ export function CustomerLink({
 
 export function OrderLink({
   customerId,
+  branchId,
   orderId,
   children,
   className = "",
   onNavigate,
 }: {
   customerId: string | null | undefined;
+  branchId?: string | null;
   orderId: string | null | undefined;
   children?: ReactNode;
   className?: string;
@@ -82,10 +84,18 @@ export function OrderLink({
   if (!customerId || !orderId) {
     return <span className={`font-mono text-xs font-semibold ${className}`}>{orderId ?? "—"}</span>;
   }
+
+  const to = branchId
+    ? "/app/customer-orders/$customerId/branch/$branchId/so/$orderId"
+    : "/app/customer-orders/$customerId/so/$orderId";
+  const params = branchId
+    ? { customerId, branchId, orderId }
+    : { customerId, orderId };
+
   return (
     <Link
-      to="/app/customer-orders/$customerId/so/$orderId"
-      params={{ customerId, orderId }}
+      to={to}
+      params={params}
       className={`${linkBaseClass} font-mono text-xs font-semibold ${className}`}
       onClick={(e) => {
         e.stopPropagation();
@@ -159,7 +169,7 @@ export function ConsultantLink({
   consultantName?: string | null;
   onNavigate?: (e: React.MouseEvent) => void;
 }) {
-  const id = consultantId ?? repCode;
+  const id = repCode ?? consultantId;
   if (!id) {
     return <span className={className}>{children ?? consultantName ?? "—"}</span>;
   }
@@ -269,5 +279,34 @@ export function ViewDateButton({
       <Calendar className="h-3 w-3" />
       {label}
     </Link>
+  );
+}
+
+/**
+ * Clickable date with an adjacent "View Date" button — standard pattern site-wide.
+ */
+export function DateWithActions({
+  value,
+  className = "",
+  format = "date",
+  emptyText = "—",
+  buttonLabel = "View Date",
+}: {
+  value: string | null | undefined;
+  className?: string;
+  format?: "date" | "datetime" | "raw";
+  emptyText?: string;
+  buttonLabel?: string;
+}) {
+  const isoDate = toIsoDate(value);
+  if (!isoDate) {
+    return <span className={`text-muted-foreground ${className}`}>{emptyText}</span>;
+  }
+
+  return (
+    <span className={`inline-flex flex-wrap items-center gap-2 ${className}`}>
+      <DateLink value={value} format={format} emptyText={emptyText} />
+      <ViewDateButton value={value} label={buttonLabel} />
+    </span>
   );
 }

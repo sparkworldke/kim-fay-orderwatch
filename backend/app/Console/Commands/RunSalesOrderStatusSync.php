@@ -12,7 +12,7 @@ class RunSalesOrderStatusSync extends Command
 {
     protected $signature = 'orderwatch:sales-order-status-sync {--source=scheduler} {--user-id=}';
 
-    protected $description = 'Update only sales order statuses from Acumatica for real-time workflow accuracy (no queue worker)';
+    protected $description = 'Update sales order statuses from Acumatica and delete local SOs missing from Acumatica';
 
     public function handle(CronExecutionService $cron, AcumaticaSalesOrderSyncService $salesOrders): int
     {
@@ -42,12 +42,18 @@ class RunSalesOrderStatusSync extends Command
         $failed = $sync->status === 'failed';
         $partial = ! $failed && $sync->failed_count > 0;
         $status = $failed ? 'failed' : ($partial ? 'partial' : 'success');
+        $deleted = (int) ($sync->filters['orders_deleted_missing_from_acumatica'] ?? 0);
+        $updated = (int) ($sync->filters['status_updates'] ?? 0);
 
         return [
             'status' => $status,
-            'output' => $status === 'success' ? 'Sales order status update completed.' : ($status === 'partial' ? 'Sales order status update completed with partial failures.' : 'Sales order status update failed.'),
+            'output' => $status === 'success'
+                ? "Sales order status update completed ({$updated} updated, {$deleted} deleted missing from Acumatica)."
+                : ($status === 'partial'
+                    ? 'Sales order status update completed with partial failures.'
+                    : 'Sales order status update failed.'),
             'sales_orders_checked' => (int) ($sync->filters['status_comparison_count'] ?? $sync->record_count),
-            'sales_orders_processed' => (int) ($sync->filters['status_updates'] ?? 0),
+            'sales_orders_processed' => $updated + $deleted,
             'error_count' => ($failed ? 1 : 0) + (int) $sync->failed_count,
             'error_summary' => $sync->error_message ? $this->sanitize($sync->error_message) : null,
             'step_status' => [
@@ -58,7 +64,9 @@ class RunSalesOrderStatusSync extends Command
                         'lookback_days' => $lookbackDays,
                         'max_orders' => $maxOrders,
                         'status_comparison_count' => (int) ($sync->filters['status_comparison_count'] ?? 0),
-                        'status_updates' => (int) ($sync->filters['status_updates'] ?? 0),
+                        'status_updates' => $updated,
+                        'orders_deleted_missing_from_acumatica' => $deleted,
+                        'sample_deleted_orders' => $sync->filters['sample_deleted_orders'] ?? [],
                         'source_lookups' => (int) ($sync->filters['source_lookups'] ?? 0),
                     ],
                     'errors' => $sync->error_message ? [$this->sanitize($sync->error_message)] : [],

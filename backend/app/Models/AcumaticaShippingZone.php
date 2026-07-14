@@ -33,4 +33,12 @@ class AcumaticaShippingZone extends Model
     {
         return $this->hasMany(AcumaticaCustomer::class, 'shipping_zone_id', 'acumatica_id');
     }
+
+    /**
+     * A shipping zone owns many delivery routes (Zone ID / Customer Zone).
+     */
+    public function routes(): HasMany
+    {
+        return $this->hasMany(AcumaticaRoute::class, 'shipping_zone_id', 'acumatica_id');
+    }
 }

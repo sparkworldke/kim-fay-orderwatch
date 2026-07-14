@@ -1,0 +1,25 @@
+src/lib/server-api.ts(28,5): error TS2322: Type 'Agent' is not assignable to type 'UndiciAgent'.
+  Type 'Agent' provides no match for the signature 'new (options: { connect: { rejectUnauthorized: boolean; }; }): unknown'.
+src/lib/server-api.ts(34,5): error TS2322: Type 'UndiciAgent | undefined' is not assignable to type 'Dispatcher | undefined'.
+  Type 'UndiciAgent' is not assignable to type 'Dispatcher'.
+src/routes/app.administration.tsx(1042,167): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'string | number | boolean'.
+  Type 'null' is not assignable to type 'string | number | boolean'.
+src/routes/app.administration.tsx(2253,29): error TS2552: Cannot find name 'update'. Did you mean 'Date'?
+src/routes/app.index.tsx(447,57): error TS2352: Conversion of type 'TrendDay' to type 'Record<string, number>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'TrendDay'.
+src/routes/app.index.tsx(461,26): error TS2352: Conversion of type 'TrendDay' to type 'Record<string, number>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'TrendDay'.
+src/routes/app.index.tsx(550,30): error TS2352: Conversion of type 'TrendDay' to type 'Record<string, number>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'TrendDay'.
+src/routes/app.index.tsx(579,38): error TS2352: Conversion of type 'TrendDay' to type 'Record<string, number>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'TrendDay'.
+src/routes/app.index.tsx(903,7): error TS2322: Type '{ day: string; total: number; completed: number; shipping: number; pending_approval: number; rejected: number; on_hold: number; open: number; fill_shipped_qty?: number; fill_ordered_qty?: number; fill_rate_pct?: number | null; label: string; }' is not assignable to type 'Record<string, string | number>'.
+  Property 'fill_rate_pct' is incompatible with index signature.
+    Type 'number | null' is not assignable to type 'string | number'.
+      Type 'null' is not assignable to type 'string | number'.
+src/routes/app.index.tsx(903,22): error TS2783: 'day' is specified more than once, so this usage will be overwritten.
+src/routes/app.index.tsx(907,15): error TS7022: 'd' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/routes/app.orders-by-date.$date.tsx(146,154): error TS2345: Argument of type '{ to: "/app/orders"; }' is not assignable to parameter of type 'NavigateOptions<RouterCore<Route<Register, any, "/", "/", string, "__root__", undefined, {}, { queryClient: QueryClient; }, AnyContext, AnyContext, ... 6 more ..., undefined>, "never", false, RouterHistory, Record<...>>, string, "/app/orders", string, "">'.
+  Property 'search' is missing in type '{ to: "/app/orders"; }' but required in type 'MakeRequiredSearchParams<RouterCore<Route<Register, any, "/", "/", string, "__root__", undefined, {}, { queryClient: QueryClient; }, AnyContext, AnyContext, ... 6 more ..., undefined>, "never", false, RouterHistory, Record<...>>, string, "/app/orders">'.
+src/routes/app.so-imports.tsx(335,7): error TS2322: Type 'ImportStats | { total: number; successful: number; failed: number; }' is not assignable to type 'ImportStats'.
+  Type '{ total: number; successful: number; failed: number; }' is missing the following properties from type 'ImportStats': so, qt, rc, other, in_scope_so

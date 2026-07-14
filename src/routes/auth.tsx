@@ -72,7 +72,7 @@ function AuthPage() {
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loginMode, setLoginMode] = useState<LoginMode>("otp-only");
+  const [loginMode, setLoginMode] = useState<LoginMode>("otp-and-password");
   const [secondsLeft, setSecondsLeft] = useState(900);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -306,7 +306,7 @@ function AuthPage() {
     setStep("email");
     setOtp("");
     setPassword("");
-    setLoginMode("otp-only");
+    setLoginMode("otp-and-password");
   }
 
   const emailHasKnownError =
@@ -361,12 +361,23 @@ function AuthPage() {
               <div>
                 <h2 className="text-xl font-semibold">Sign in</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Choose how you'd like to sign in to OrderWatch.
+                  Sign in with your email and password to access OrderWatch.
                 </p>
               </div>
 
-              {/* Mode tabs */}
+              {/* Mode tabs — password is the primary option */}
               <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/40 p-1">
+                <button
+                  type="button"
+                  onClick={() => setLoginMode("otp-and-password")}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                    loginMode === "otp-and-password"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Password
+                </button>
                 <button
                   type="button"
                   onClick={() => setLoginMode("otp-only")}
@@ -377,17 +388,6 @@ function AuthPage() {
                   }`}
                 >
                   Login via OTP
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLoginMode("otp-and-password")}
-                  className={`rounded-md px-3 py-2 text-sm font-medium transition-all ${
-                    loginMode === "otp-and-password"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Login via Password
                 </button>
               </div>
 
@@ -467,9 +467,9 @@ function AuthPage() {
                 }
               </Button>
               <p className="text-center text-[11px] text-muted-foreground">
-                {loginMode === "otp-only"
-                  ? "Passwordless · OTP expires in 15 minutes"
-                  : "Secured with your account password"}
+                {loginMode === "otp-and-password"
+                  ? "Use your OrderWatch account password"
+                  : "Passwordless · OTP expires in 15 minutes"}
               </p>
             </form>
           ) : (

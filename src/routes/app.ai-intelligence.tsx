@@ -21,7 +21,8 @@ import {
   resolveDatePreset,
   type DatePresetId,
 } from "@/lib/date-presets";
-import { formatKES, formatNumber } from "@/lib/format";
+import { useMaskedKESFormatter } from "@/components/MaskedCurrency";
+import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/ai-intelligence")({
@@ -32,6 +33,7 @@ export const Route = createFileRoute("/app/ai-intelligence")({
 const axisStyle = { stroke: "var(--color-muted-foreground)", fontSize: 11 } as const;
 
 function AiIntelligencePage() {
+  const kes = useMaskedKESFormatter();
   const [preset, setPreset] = useState<DatePresetId>("last_7_days");
   const initial = resolveDatePreset("last_7_days");
   const [dateFrom, setDateFrom] = useState(initial.from);
@@ -152,9 +154,9 @@ function AiIntelligencePage() {
           {/* KPI strip */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard label="Orders" value={formatNumber(metrics.orders.orders_received)} change={metrics.orders_comparison.orders_received} />
-            <KpiCard label="Order value" value={formatKES(metrics.orders.total_value, { compact: true })} change={metrics.orders_comparison.total_value} />
+            <KpiCard label="Order value" value={kes(metrics.orders.total_value, { compact: true })} change={metrics.orders_comparison.total_value} />
             <KpiCard label="Completion rate" value={`${metrics.orders.completion_rate}%`} change={metrics.orders_comparison.completion_rate} suffix="%" />
-            <KpiCard label="Revenue at risk" value={formatKES(metrics.orders.revenue_at_risk, { compact: true })} change={metrics.orders_comparison.revenue_at_risk} invert />
+            <KpiCard label="Revenue at risk" value={kes(metrics.orders.revenue_at_risk, { compact: true })} change={metrics.orders_comparison.revenue_at_risk} invert />
           </div>
 
           {/* Charts */}
@@ -228,7 +230,7 @@ function AiIntelligencePage() {
                   icon={Users}
                   title="Customer behaviour"
                   section={insights.customer_behaviour}
-                  extra={metrics.customers.top_customers.slice(0, 3).map((c) => `${c.customer_name}: ${formatKES(c.value, { compact: true })}`)}
+                  extra={metrics.customers.top_customers.slice(0, 3).map((c) => `${c.customer_name}: ${kes(c.value, { compact: true })}`)}
                 />
                 <InsightPanel
                   icon={LineChart}
@@ -236,7 +238,7 @@ function AiIntelligencePage() {
                   section={insights.predictions}
                   extra={[
                     `Next 7 days: ~${metrics.projections.projected_next_7_days_orders} orders`,
-                    `Projected value: ${formatKES(metrics.projections.projected_next_7_days_value, { compact: true })}`,
+                    `Projected value: ${kes(metrics.projections.projected_next_7_days_value, { compact: true })}`,
                     `Momentum: ${metrics.projections.volume_momentum_pct}%`,
                   ]}
                 />

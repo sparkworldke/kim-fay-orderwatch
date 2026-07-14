@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaSalesOrder;
+use App\Models\AcumaticaSalesOrderLine;
 use App\Models\User;
 use App\Services\Admin\AcumaticaClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -154,6 +155,60 @@ class SalesConsultantOperationsTest extends TestCase
             ->assertJsonPath('summary.active_orders', 1)
             ->assertJsonPath('summary.total_completed_orders', 1)
             ->assertJsonPath('summary.total_order_value', 4000);
+    }
+
+    public function test_consultant_detail_endpoint_accepts_rep_code_identifier(): void
+    {
+        $manager = User::factory()->create(['role' => 'Customer Service Manager', 'is_active' => true]);
+        User::factory()->create([
+            'role' => 'Sales Consultant',
+            'name' => 'Shirleen Chebet',
+            'email' => 'shirleen@example.test',
+            'rep_code' => 'P505',
+            'is_active' => true,
+        ]);
+
+        $this->createOrder('SO900022', 'P505', 1500, now());
+        $this->createOrder('SO900023', 'P505', 2500, null);
+
+        $this->actingAs($manager, 'sanctum')
+            ->getJson('/api/operations/sales-consultants/P505?date_from=2026-07-01&date_to=2026-07-31')
+            ->assertOk()
+            ->assertJsonPath('consultant.rep_code', 'P505')
+            ->assertJsonPath('summary.total_orders', 2)
+            ->assertJsonPath('summary.total_order_value', 4000);
+    }
+
+    public function test_detail_works_for_is_consultant_even_when_role_is_not_sales_consultant(): void
+    {
+        $admin = User::factory()->create([
+            'role' => 'Administrator',
+            'is_super_admin' => true,
+            'is_active' => true,
+        ]);
+        // Listed in directory via is_consultant, but role is Sales Operations (common after team import).
+        $consultant = User::factory()->create([
+            'role' => 'Sales Operations',
+            'name' => 'Brand Ops Consultant',
+            'email' => 'brandsops@example.test',
+            'rep_code' => 'P999',
+            'is_consultant' => true,
+            'is_active' => true,
+        ]);
+
+        $this->createOrder('SO900099', 'P999', 500, null);
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson("/api/operations/sales-consultants/{$consultant->id}")
+            ->assertOk()
+            ->assertJsonPath('consultant.id', $consultant->id)
+            ->assertJsonPath('consultant.rep_code', 'P999')
+            ->assertJsonPath('summary.total_orders', 1);
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson("/api/operations/sales-consultants/{$consultant->id}/customers")
+            ->assertOk()
+            ->assertJsonPath('rep_code', 'P999');
     }
 
     public function test_consultant_customer_endpoint_returns_grouped_customers_and_summary(): void
@@ -315,6 +370,108 @@ class SalesConsultantOperationsTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_consultant_list_search_filters_by_name_rep_code_or_employee_number(): void
+    {
+        $admin = User::factory()->create(['role' => 'Administrator', 'is_active' => true]);
+        User::factory()->create([
+            'role' => 'Sales Consultant',
+            'name' => 'Shirleen Chebet',
+            'rep_code' => 'P505',
+            'employee_number' => 'EMP-505',
+            'is_active' => true,
+        ]);
+        User::factory()->create([
+            'role' => 'Sales Consultant',
+            'name' => 'Other Consultant',
+            'rep_code' => 'P777',
+            'employee_number' => 'EMP-777',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/operations/sales-consultants?q=Shirleen')
+            ->assertOk()
+            ->assertJsonCount(1, 'items')
+            ->assertJsonPath('items.0.rep_code', 'P505');
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/operations/sales-consultants?q=p777')
+            ->assertOk()
+            ->assertJsonCount(1, 'items')
+            ->assertJsonPath('items.0.name', 'Other Consultant');
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/operations/sales-consultants?q=EMP-505')
+            ->assertOk()
+            ->assertJsonCount(1, 'items')
+            ->assertJsonPath('items.0.employee_number', 'EMP-505');
+    }
+
+    public function test_consultant_customers_support_pagination_search_sort_and_revenue_lost(): void
+    {
+        $manager = User::factory()->create(['role' => 'Customer Service Manager', 'is_active' => true]);
+        $consultant = User::factory()->create([
+            'role' => 'Sales Consultant',
+            'rep_code' => 'P505',
+            'is_active' => true,
+        ]);
+
+        foreach ([
+            ['CUST-A', 'Alpha Retail', 1000, 10, 4, 50],
+            ['CUST-B', 'Beta Supermarket', 2000, 8, 8, 40],
+            ['CUST-C', 'Charlie Wholesale', 500, 20, 0, 25],
+        ] as [$customerId, $customerName, $orderTotal, $orderQty, $shippedQty, $unitPrice]) {
+            AcumaticaCustomer::create([
+                'acumatica_id' => $customerId,
+                'name' => $customerName,
+                'status' => 'Active',
+            ]);
+
+            $order = $this->createOrder(
+                'SO-'.$customerId,
+                'P505',
+                $orderTotal,
+                null,
+                $customerId,
+                $customerName,
+            );
+
+            AcumaticaSalesOrderLine::create([
+                'sales_order_id' => $order->id,
+                'inventory_id' => 'SKU-'.$customerId,
+                'description' => 'Product '.$customerId,
+                'order_qty' => $orderQty,
+                'shipped_qty' => $shippedQty,
+                'open_qty' => max(0, $orderQty - $shippedQty),
+                'unit_price' => $unitPrice,
+            ]);
+        }
+
+        $this->actingAs($manager, 'sanctum')
+            ->getJson("/api/operations/sales-consultants/{$consultant->id}/customers?date_from=2026-07-01&date_to=2026-07-31&per_page=2&page=1")
+            ->assertOk()
+            ->assertJsonPath('pagination.per_page', 2)
+            ->assertJsonPath('pagination.total', 3)
+            ->assertJsonPath('pagination.current_page', 1)
+            ->assertJsonPath('pagination.last_page', 2)
+            ->assertJsonCount(2, 'customers');
+
+        $this->actingAs($manager, 'sanctum')
+            ->getJson("/api/operations/sales-consultants/{$consultant->id}/customers?date_from=2026-07-01&date_to=2026-07-31&q=Charlie")
+            ->assertOk()
+            ->assertJsonCount(1, 'customers')
+            ->assertJsonPath('customers.0.customer_id', 'CUST-C')
+            ->assertJsonPath('customers.0.revenue_lost', 500);
+
+        $this->actingAs($manager, 'sanctum')
+            ->getJson("/api/operations/sales-consultants/{$consultant->id}/customers?date_from=2026-07-01&date_to=2026-07-31&sort=revenue_lost&sort_dir=desc")
+            ->assertOk()
+            ->assertJsonPath('customers.0.customer_id', 'CUST-C')
+            ->assertJsonPath('customers.0.revenue_lost', 500)
+            ->assertJsonPath('customers.1.customer_id', 'CUST-A')
+            ->assertJsonPath('customers.1.revenue_lost', 300);
+    }
+
     private function createOrder(
         string $orderNbr,
         string $repCode,
@@ -322,9 +479,9 @@ class SalesConsultantOperationsTest extends TestCase
         mixed $completedAt,
         string $customerId = 'CUST001',
         string $customerName = 'Test Outlet',
-    ): void
+    ): AcumaticaSalesOrder
     {
-        AcumaticaSalesOrder::create([
+        return AcumaticaSalesOrder::create([
             'acumatica_order_nbr' => $orderNbr,
             'order_type' => 'SO',
             'customer_acumatica_id' => $customerId,

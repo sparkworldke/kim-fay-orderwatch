@@ -7,6 +7,7 @@ use App\Models\MailboxAccount;
 use App\Models\MailboxFolder;
 use App\Models\MailboxRuleMapping;
 use App\Services\Admin\EncryptionService;
+use App\Services\Email\AttachmentTextExtractorService;
 use App\Services\Email\EmailFilterEngine;
 use App\Services\Email\EmailIngestionDecisionService;
 use App\Services\Email\OutlookEmailService;
@@ -93,7 +94,7 @@ class FolderAwareIngestionTest extends TestCase
         $this->assertNull($email->fresh()->matched_order_id);
     }
 
-    public function test_folder_failures_are_isolated_and_successful_delta_is_preserved(): void
+    public function test_folder_failures_are_isolated_and_successful_same_day_check_is_preserved(): void
     {
         $account = $this->mailbox();
         $inbox = MailboxFolder::create([
@@ -105,17 +106,18 @@ class FolderAwareIngestionTest extends TestCase
             'display_name' => 'Broken POs', 'is_sync_enabled' => true, 'trust_level' => 'untrusted',
         ]);
         Http::fake([
-            'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages/delta*' => Http::response([
-                'value' => [], '@odata.deltaLink' => 'https://graph.microsoft.com/v1.0/inbox-delta',
+            'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages*' => Http::response([
+                'value' => [],
             ]),
-            'https://graph.microsoft.com/v1.0/me/mailFolders/broken-id/messages/delta*' => Http::response([], 500),
+            'https://graph.microsoft.com/v1.0/me/mailFolders/broken-id/messages*' => Http::response([], 500),
         ]);
         $encryption = Mockery::mock(EncryptionService::class);
-        $encryption->shouldReceive('decrypt')->once()->andReturn('token');
-        $service = new OutlookEmailService($encryption, new EmailFilterEngine);
+        $encryption->shouldReceive('decrypt')->atLeast()->once()->andReturn('token');
+        $service = new OutlookEmailService($encryption, new EmailFilterEngine, app(AttachmentTextExtractorService::class));
 
         $this->assertSame(0, $service->syncEmails($account));
-        $this->assertSame('https://graph.microsoft.com/v1.0/inbox-delta', $inbox->fresh()->delta_token);
+        $this->assertNotNull($inbox->fresh()->last_synced_at);
+        $this->assertNull($inbox->fresh()->last_sync_error);
         $this->assertNotNull($broken->fresh()->last_sync_error);
     }
 

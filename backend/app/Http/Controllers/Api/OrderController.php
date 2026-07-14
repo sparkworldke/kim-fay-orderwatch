@@ -6,7 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AcumaticaSalesOrder;
 use App\Models\Email;
 use App\Services\OrderMatch\CustomerPoMatchResolver;
-use App\Support\SalesConsultantScope;
+use App\Services\Operations\OperationsCatalogResolver;
+use App\Services\Operations\SalesOrderReasonTaxonomyService;
+use App\Support\DataScope;
+use App\Services\Team\ConsultantGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -18,7 +21,8 @@ use Illuminate\Validation\ValidationException;
 class OrderController extends Controller
 {
     public function __construct(
-        private readonly CustomerPoMatchResolver $poResolver = new CustomerPoMatchResolver,
+        private readonly CustomerPoMatchResolver $poResolver,
+        private readonly SalesOrderReasonTaxonomyService $reasonTaxonomy,
     ) {
     }
 
@@ -29,7 +33,21 @@ class OrderController extends Controller
             ->withCount('lines')
             ->when($request->boolean('with_fulfillment'), fn ($q) => $q
                 ->withAvg('lines', 'fill_rate_pct')
-                ->withSum('lines', 'backorder_qty'))
+                ->withSum('lines', 'backorder_qty')
+                ->addSelect([
+                    'acumatica_sales_orders.raw_payload',
+                    DB::raw('(
+                        SELECT COALESCE(SUM(
+                            CASE
+                                WHEN COALESCE(l.order_qty, 0) - COALESCE(l.shipped_qty, 0) > 0
+                                    THEN (COALESCE(l.order_qty, 0) - COALESCE(l.shipped_qty, 0)) * COALESCE(l.unit_price, 0)
+                                ELSE 0
+                            END
+                        ), 0)
+                        FROM acumatica_sales_order_lines AS l
+                        WHERE l.sales_order_id = acumatica_sales_orders.id
+                    ) AS revenue_lost'),
+                ]))
             ->select($this->orderIndexColumns());
 
         $this->applySort($query, (string) $request->input('sort', 'latest'));
@@ -46,7 +64,7 @@ class OrderController extends Controller
             $query->where('acumatica_sales_orders.customer_acumatica_id', $request->input('customer_id'));
         }
 
-        if (! SalesConsultantScope::appliesTo($request->user()) && $request->filled('rep_code')) {
+        if (! \App\Support\SalesConsultantScope::appliesTo($request->user()) && $request->filled('rep_code')) {
             $query->where('acumatica_sales_orders.sales_consultant_rep_code', strtoupper(trim((string) $request->input('rep_code'))));
         }
 
@@ -100,7 +118,7 @@ class OrderController extends Controller
             ->orWhere('id', $id)
             ->firstOrFail();
 
-        if (! SalesConsultantScope::orderBelongsToUser($request->user(), $order->sales_consultant_rep_code)) {
+        if (! DataScope::orderBelongsToUser($request->user(), $order->sales_consultant_rep_code)) {
             return response()->json(['message' => 'Order not found.'], 404);
         }
 
@@ -110,6 +128,7 @@ class OrderController extends Controller
         }
 
         $this->attachMatchDiscrepanciesToOrder($order);
+        $this->attachLineInventoryClassifications($order);
 
         return response()->json($order);
     }
@@ -198,15 +217,17 @@ class OrderController extends Controller
             ->orWhere('id', $id)
             ->firstOrFail();
 
-        if (! SalesConsultantScope::orderBelongsToUser($request->user(), $order->sales_consultant_rep_code)) {
+        if (! DataScope::orderBelongsToUser($request->user(), $order->sales_consultant_rep_code)) {
             return response()->json(['message' => 'Order not found.'], 404);
         }
+
+        $approvedCodes = $this->reasonTaxonomy->approvedSubReasonCodes();
 
         $validated = $request->validate([
             'status'           => ['sometimes', 'string', 'in:Open,Completed,Cancelled,Back Order,Credit Hold,On Hold,Rejected,Shipping,Pending Approval'],
             'match_status'     => ['sometimes', 'string', 'in:pending,matched,matched_discrepancies,needs_review,unmatched,duplicate,escalated,missing'],
             'flag_source'      => ['sometimes', 'nullable', 'string', 'in:acumatica,email'],
-            'rejection_reason_code' => ['sometimes', 'nullable', 'string', 'in:'.implode(',', AcumaticaSalesOrder::REJECTION_REASON_CODES)],
+            'rejection_reason_code' => ['sometimes', 'nullable', 'string', 'in:'.implode(',', $approvedCodes)],
             'rejection_reason' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'on_hold_reason'   => ['sometimes', 'nullable', 'string', 'max:2000'],
             'email_subject'    => ['sometimes', 'nullable', 'string', 'max:1000'],
@@ -218,13 +239,20 @@ class OrderController extends Controller
             ? $validated['rejection_reason_code']
             : $order->rejection_reason_code;
 
-        if ($resolvedStatus === 'Rejected' && blank($resolvedRejectionCode)) {
+        if ($this->statusRequiresWorkflowReason($resolvedStatus) && blank($resolvedRejectionCode)) {
             throw ValidationException::withMessages([
-                'rejection_reason_code' => ['A rejection reason is required when an order is marked as rejected.'],
+                'rejection_reason_code' => ['A standardized reason is required for cancelled, rejected, and on-hold orders.'],
             ]);
         }
 
-        $order->update($validated);
+        $workflow = $this->reasonTaxonomy->workflowAttributesForOrder($resolvedStatus, $resolvedRejectionCode);
+
+        $order->update(array_merge($validated, [
+            'rejection_reason_code' => $workflow['rejection_reason_code'] ?? $resolvedRejectionCode,
+            'workflow_parent_reason' => $workflow['workflow_parent_reason'],
+            'workflow_sub_reason_code' => $workflow['workflow_sub_reason_code'],
+            'workflow_reason_label' => $workflow['workflow_reason_label'],
+        ]));
 
         return response()->json($order->withCount('lines')->first());
     }
@@ -247,6 +275,17 @@ class OrderController extends Controller
         };
     }
 
+    private function statusRequiresWorkflowReason(?string $status): bool
+    {
+        return in_array(strtolower(trim((string) $status)), [
+            'rejected',
+            'cancelled',
+            'canceled',
+            'on hold',
+            'credit hold',
+        ], true);
+    }
+
     private function scopedOrderQuery(Request $request)
     {
         $type = strtoupper(trim((string) $request->input('order_type', 'SO')));
@@ -259,7 +298,7 @@ class OrderController extends Controller
             $query = AcumaticaSalesOrder::query()->salesOrdersOnly();
         }
 
-        return SalesConsultantScope::applyOrderScope($query, $request->user());
+        return DataScope::applyOrderScope($query, $request->user());
     }
 
     private function applyDocumentTypeFilter($query, Request $request): void
@@ -376,6 +415,9 @@ class OrderController extends Controller
             'acumatica_sales_orders.rejection_reason',
             'acumatica_sales_orders.rejection_reason_code',
             'acumatica_sales_orders.on_hold_reason',
+            'acumatica_sales_orders.workflow_parent_reason',
+            'acumatica_sales_orders.workflow_sub_reason_code',
+            'acumatica_sales_orders.workflow_reason_label',
             'acumatica_sales_orders.email_subject',
             'acumatica_sales_orders.email_received_at',
             'acumatica_sales_orders.synced_at',
@@ -424,5 +466,62 @@ class OrderController extends Controller
             ->get($emailColumns)
             ->unique('matched_order_id')
             ->keyBy('matched_order_id');
+    }
+
+    private function attachLineInventoryClassifications(AcumaticaSalesOrder $order): void
+    {
+        if (! $order->relationLoaded('lines') || $order->lines->isEmpty()) {
+            return;
+        }
+
+        $resolver = app(OperationsCatalogResolver::class);
+        $classifications = $resolver->classificationsForInventoryIds(
+            $order->lines->pluck('inventory_id')->all(),
+        );
+
+        $order->lines->transform(function ($line) use ($resolver, $classifications) {
+            foreach ($resolver->classificationFieldsFor($line->inventory_id, $classifications) as $field => $value) {
+                $line->{$field} = $value;
+            }
+
+            return $line;
+        });
+    }
+
+    public function assignConsultant(Request $request, int $id, ConsultantGuard $guard): JsonResponse
+    {
+        $validated = $request->validate([
+            'consultant_user_id' => ['required', 'integer', 'exists:users,id'],
+        ]);
+
+        $order = AcumaticaSalesOrder::query()->with('customer:acumatica_id,customer_class')->findOrFail($id);
+
+        if (! DataScope::orderBelongsToUser(
+            $request->user(),
+            $order->sales_consultant_rep_code,
+            $order->customer_acumatica_id,
+            $order->customer?->customer_class,
+        )) {
+            return response()->json(['message' => 'Order not found.'], 404);
+        }
+
+        $consultant = \App\Models\User::query()->findOrFail($validated['consultant_user_id']);
+
+        try {
+            $order = $guard->assignToOrder($order, $consultant, $request->user(), 'manual');
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Consultant assigned successfully.',
+            'order' => $order->only([
+                'id',
+                'acumatica_order_nbr',
+                'consultant_user_id',
+                'sales_consultant_rep_code',
+                'sales_consultant_name',
+            ]),
+        ]);
     }
 }

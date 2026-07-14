@@ -34,6 +34,72 @@ class OperationsCatalogResolver
     }
 
     /**
+     * @param  list<string|null>  $inventoryIds
+     * @return Collection<string, array{
+     *   description: string|null,
+     *   brand: string|null,
+     *   posting_class: string|null,
+     *   sub_trading_group: string|null,
+     *   supplier: string|null
+     * }>
+     */
+    public function classificationsForInventoryIds(array $inventoryIds): Collection
+    {
+        $ids = array_values(array_unique(array_filter($inventoryIds)));
+        if ($ids === []) {
+            return collect();
+        }
+
+        return AcumaticaInventoryItem::query()
+            ->whereIn('inventory_id', $ids)
+            ->get(['inventory_id', 'description', 'brand', 'posting_class', 'sub_trading_group', 'supplier'])
+            ->keyBy('inventory_id')
+            ->map(fn (AcumaticaInventoryItem $item) => [
+                'description'       => $item->description,
+                'brand'             => $item->brand,
+                'posting_class'     => $item->posting_class,
+                'sub_trading_group' => $item->sub_trading_group,
+                'supplier'          => $item->supplier,
+            ]);
+    }
+
+    /**
+     * @param  Collection<string, array{
+     *   description: string|null,
+     *   brand: string|null,
+     *   posting_class: string|null,
+     *   sub_trading_group: string|null,
+     *   supplier: string|null
+     * }>  $classifications
+     * @return array{
+     *   brand: string|null,
+     *   posting_class: string|null,
+     *   sub_trading_group: string|null,
+     *   supplier: string|null
+     * }
+     */
+    public function classificationFieldsFor(?string $inventoryId, Collection $classifications): array
+    {
+        if ($inventoryId === null || ! $classifications->has($inventoryId)) {
+            return [
+                'brand'             => null,
+                'posting_class'     => null,
+                'sub_trading_group' => null,
+                'supplier'          => null,
+            ];
+        }
+
+        $row = $classifications->get($inventoryId);
+
+        return [
+            'brand'             => $row['brand'] ?? null,
+            'posting_class'     => $row['posting_class'] ?? null,
+            'sub_trading_group' => $row['sub_trading_group'] ?? null,
+            'supplier'          => $row['supplier'] ?? null,
+        ];
+    }
+
+    /**
      * @param  list<string|null>  $customerIds
      * @return Collection<string, string|null>
      */

@@ -34,6 +34,10 @@ export function useCustomers(filters: CustomerFilters = {}) {
 export interface SuggestedOrderItem {
   inventory_id: string;
   description: string | null;
+  brand?: string | null;
+  posting_class?: string | null;
+  sub_trading_group?: string | null;
+  supplier?: string | null;
   uom: string | null;
   order_count: number;
   avg_interval_days: number;
@@ -61,6 +65,10 @@ export function useSuggestedOrders(customerId: string | null) {
 export interface CommonProductItem {
   inventory_id: string;
   description: string | null;
+  brand?: string | null;
+  posting_class?: string | null;
+  sub_trading_group?: string | null;
+  supplier?: string | null;
   uom: string | null;
   order_count: number;
   total_qty: number;

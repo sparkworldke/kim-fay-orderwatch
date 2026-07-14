@@ -20,9 +20,12 @@ class CustomerFeedService
      *   groups: list<array<string, mixed>>
      * }
      */
-    public function listGroups(string $dateFrom, string $dateTo, ?string $search = null): array
+    /**
+     * @param  list<string>|null  $scopedCustomerIds
+     */
+    public function listGroups(string $dateFrom, string $dateTo, ?string $search = null, ?array $scopedCustomerIds = null): array
     {
-        $groups = $this->buildGroupIndex();
+        $groups = $this->buildGroupIndex($scopedCustomerIds);
         $acumaticaIds = $groups->flatMap(fn (array $g) => $g['acumatica_ids'])->unique()->values()->all();
 
         $orderStats = $this->orderStatsByCustomer($dateFrom, $dateTo, $acumaticaIds);
@@ -124,15 +127,22 @@ class CustomerFeedService
     /**
      * @return array<string, mixed>
      */
-    public function insights(string $groupKey, string $dateFrom, string $dateTo): array
+    /**
+     * @param  list<string>|null  $scopedCustomerIds
+     */
+    public function insights(string $groupKey, string $dateFrom, string $dateTo, ?array $scopedCustomerIds = null): array
     {
-        $groups = $this->buildGroupIndex();
+        $groups = $this->buildGroupIndex($scopedCustomerIds);
         if (! isset($groups[$groupKey])) {
             abort(404, 'Customer group not found');
         }
 
         $group = $groups[$groupKey];
         $ids = $group['acumatica_ids'];
+
+        if ($ids === []) {
+            abort(404, 'Customer group not found');
+        }
 
         $issues = $this->aggregateConflictIssues($ids, $dateFrom, $dateTo);
         $fillIssues = $this->fillRateIssues($ids, $dateFrom, $dateTo);
@@ -161,13 +171,25 @@ class CustomerFeedService
         ];
     }
 
-    /** @return Collection<string, array<string, mixed>> */
-    private function buildGroupIndex(): Collection
+    /**
+     * @param  list<string>|null  $scopedCustomerIds
+     * @return Collection<string, array<string, mixed>>
+     */
+    private function buildGroupIndex(?array $scopedCustomerIds = null): Collection
     {
-        $customers = AcumaticaCustomer::query()
+        $customersQuery = AcumaticaCustomer::query()
             ->orderByDesc('is_main_account')
-            ->orderBy('name')
-            ->get(['id', 'acumatica_id', 'name', 'parent_acumatica_id', 'is_main_account']);
+            ->orderBy('name');
+
+        if ($scopedCustomerIds !== null) {
+            if ($scopedCustomerIds === []) {
+                return collect();
+            }
+
+            $customersQuery->whereIn('acumatica_id', $scopedCustomerIds);
+        }
+
+        $customers = $customersQuery->get(['id', 'acumatica_id', 'name', 'parent_acumatica_id', 'is_main_account']);
 
         $byAcumaticaId = $customers->keyBy('acumatica_id');
         $memberToRoot = [];
@@ -179,12 +201,17 @@ class CustomerFeedService
             $memberToRoot[$customer->acumatica_id] = $root;
         }
 
-        $orderNames = AcumaticaSalesOrder::query()
+        $orderNamesQuery = AcumaticaSalesOrder::query()
             ->salesOrdersOnly()
             ->whereNotNull('customer_acumatica_id')
             ->select(['customer_acumatica_id', 'customer_name'])
-            ->distinct()
-            ->get();
+            ->distinct();
+
+        if ($scopedCustomerIds !== null) {
+            $orderNamesQuery->whereIn('customer_acumatica_id', $scopedCustomerIds);
+        }
+
+        $orderNames = $orderNamesQuery->get();
 
         foreach ($orderNames as $row) {
             $id = $row->customer_acumatica_id;

@@ -23,7 +23,10 @@ use RuntimeException;
 
 class AcumaticaController extends Controller
 {
-    private const INVENTORY_WAREHOUSES = ['DTC', 'FGS', 'PRMS', 'RMS1', 'TRMS'];
+    /** @see config('inventory.warehouses') — keep in sync for validation */
+    private const INVENTORY_WAREHOUSES = [
+        'DTC', 'FGS', 'FGS2', 'FGS2 RETURNS', 'MSA', 'EXPORT', 'PRMS', 'RMS1', 'TRMS',
+    ];
 
     private const LOOKUP_DEFINITIONS = [
         'inventory_id' => [

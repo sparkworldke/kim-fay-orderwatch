@@ -5,6 +5,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -24,6 +25,15 @@ class User extends Authenticatable
         'role',
         'phone_number',
         'rep_code',
+        'employee_number',
+        'department_id',
+        'department_role',
+        'org_level',
+        'reports_to_user_id',
+        'product_type_scope',
+        'data_scope_mode',
+        'is_shared_mailbox',
+        'is_consultant',
         'is_active',
         'is_super_admin',
         'is_account_manager',
@@ -42,7 +52,56 @@ class User extends Authenticatable
             'is_active'         => 'boolean',
             'is_super_admin'    => 'boolean',
             'is_account_manager'=> 'boolean',
+            'is_consultant'     => 'boolean',
+            'is_shared_mailbox' => 'boolean',
         ];
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function departments(): BelongsToMany
+    {
+        return $this->belongsToMany(Department::class, 'department_user')
+            ->withPivot(['membership_role', 'is_primary'])
+            ->withTimestamps();
+    }
+
+    public function reportsTo(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reports_to_user_id');
+    }
+
+    public function reportees(): HasMany
+    {
+        return $this->hasMany(self::class, 'reports_to_user_id');
+    }
+
+    public function sectorScopes(): HasMany
+    {
+        return $this->hasMany(UserSectorScope::class);
+    }
+
+    public function customerAssignments(): HasMany
+    {
+        return $this->hasMany(UserCustomerAssignment::class);
+    }
+
+    public function brandAssignments(): HasMany
+    {
+        return $this->hasMany(UserBrandAssignment::class);
+    }
+
+    public function acumaticaRepMappings(): HasMany
+    {
+        return $this->hasMany(UserAcumaticaRepMapping::class);
+    }
+
+    public function userSessions(): HasMany
+    {
+        return $this->hasMany(UserSession::class);
     }
 
     public function scopeEligibleForOtp(Builder $query): Builder

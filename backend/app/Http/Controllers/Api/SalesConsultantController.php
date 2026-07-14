@@ -52,10 +52,26 @@ class SalesConsultantController extends Controller
             ]);
         }
 
+        $search = trim((string) $request->input('q', ''));
+
         $rows = User::query()
-            ->where('users.role', 'Sales Consultant')
-            ->whereNotNull('users.rep_code')
+            ->where(function ($q) {
+                $q->where('users.is_consultant', true)
+                    ->orWhere('users.role', 'Sales Consultant');
+            })
+            ->where(function ($q) {
+                $q->whereNotNull('users.rep_code')
+                    ->orWhere('users.is_consultant', true);
+            })
             ->when($scope === 'own', fn ($query) => $query->where('users.rep_code', $repCode))
+            ->when($search !== '', function ($query) use ($search) {
+                $like = '%' . $search . '%';
+                $query->where(function ($q) use ($like, $search) {
+                    $q->where('users.name', 'like', $like)
+                      ->orWhere('users.rep_code', 'like', $like)
+                      ->orWhere('users.employee_number', 'like', $like);
+                });
+            })
             ->leftJoin('acumatica_sales_orders as so', 'users.rep_code', '=', 'so.sales_consultant_rep_code')
             ->select([
                 'users.id',
@@ -63,6 +79,7 @@ class SalesConsultantController extends Controller
                 'users.email',
                 'users.role',
                 'users.rep_code',
+                'users.employee_number',
                 'users.is_active',
                 DB::raw('COUNT(so.id) as assigned_orders'),
                 DB::raw("SUM(CASE WHEN so.id IS NOT NULL AND so.completed_at IS NULL THEN 1 ELSE 0 END) as active_orders"),
@@ -70,7 +87,7 @@ class SalesConsultantController extends Controller
                 DB::raw('COALESCE(SUM(so.order_total), 0) as assigned_revenue'),
                 DB::raw('MAX(so.order_date) as last_order_date'),
             ])
-            ->groupBy('users.id', 'users.name', 'users.email', 'users.role', 'users.rep_code', 'users.is_active')
+            ->groupBy('users.id', 'users.name', 'users.email', 'users.role', 'users.rep_code', 'users.employee_number', 'users.is_active')
             ->orderBy('users.name')
             ->get();
 
@@ -87,6 +104,7 @@ class SalesConsultantController extends Controller
                 'email' => $row->email,
                 'role' => $row->role,
                 'rep_code' => $row->rep_code,
+                'employee_number' => $row->employee_number,
                 'is_active' => (bool) $row->is_active,
                 'assigned_orders' => (int) $row->assigned_orders,
                 'active_orders' => (int) $row->active_orders,
@@ -104,14 +122,130 @@ class SalesConsultantController extends Controller
             return $consultant;
         }
 
-        $summary = $this->buildSummary(
-            $this->ordersBaseQuery($consultant->rep_code, $request),
-        );
+        $repCode = strtoupper(trim((string) ($consultant->rep_code ?? '')));
+        $summary = $repCode !== ''
+            ? $this->buildSummary($this->ordersBaseQuery($repCode, $request))
+            : [
+                'total_order_value' => 0.0,
+                'customer_count' => 0,
+                'total_completed_orders' => 0,
+                'active_orders' => 0,
+                'total_orders' => 0,
+                'last_order_date' => null,
+            ];
 
         return response()->json([
             'consultant' => $this->formatConsultantProfile($consultant, $summary),
             'summary' => $summary,
         ]);
+    }
+
+    public function showByRepCode(Request $request, string $repCode): JsonResponse
+    {
+        $normalizedRepCode = strtoupper(trim($repCode));
+
+        if ($normalizedRepCode === '') {
+            return response()->json(['message' => 'Rep Code is required.'], 422);
+        }
+
+        $user = $request->user();
+        $role = (string) ($user?->role ?? '');
+
+        if ($denied = $this->authorizeRepCodeAccess($user, $role, $normalizedRepCode)) {
+            return $denied;
+        }
+
+        $isFullAccess = in_array($role, self::FULL_ACCESS_ROLES, true);
+        $consultant = null;
+
+        if (! $isFullAccess && strtoupper(trim((string) ($user?->rep_code ?? ''))) === $normalizedRepCode) {
+            $consultant = $user;
+        }
+
+        $consultant ??= User::query()
+            ->where('users.rep_code', $normalizedRepCode)
+            ->where(function ($query) {
+                $query->where('users.is_consultant', true)
+                    ->orWhere('users.role', 'Sales Consultant');
+            })
+            ->first();
+
+        if (! $consultant) {
+            return response()->json(['message' => 'Sales consultant not found.'], 404);
+        }
+
+        $summary = $this->buildSummary($this->ordersBaseQuery($normalizedRepCode, $request));
+
+        return response()->json([
+            'consultant' => $this->formatConsultantProfile($consultant, $summary),
+            'summary' => $summary,
+        ]);
+    }
+
+    /**
+     * Compute a fill rate percentage from line-level data for a set of order IDs.
+     * Returns null when no line data is available.
+     *
+     * @param  \Illuminate\Support\Collection  $orderIds
+     */
+    private function computeFillRate($orderIds): ?float
+    {
+        if ($orderIds->isEmpty()) {
+            return null;
+        }
+
+        $lineStats = \App\Models\AcumaticaSalesOrderLine::query()
+            ->whereIn('sales_order_id', $orderIds)
+            ->selectRaw('
+                COALESCE(
+                    AVG(
+                        CASE
+                            WHEN order_qty > 0 THEN
+                                CASE
+                                    WHEN COALESCE(shipped_qty, 0) * 100.0 / order_qty > 100.0 THEN 100.0
+                                    ELSE COALESCE(shipped_qty, 0) * 100.0 / order_qty
+                                END
+                            ELSE 100.0
+                        END
+                    ),
+                    0
+                ) as avg_fill_rate
+            ')
+            ->first();
+
+        $avg = $lineStats?->avg_fill_rate;
+
+        return $avg !== null ? round((float) $avg, 1) : null;
+    }
+
+    /**
+     * Compute revenue lost (value of unshipped quantity) from line-level data.
+     *
+     * @param  \Illuminate\Support\Collection  $orderIds
+     */
+    private function computeRevenueLost($orderIds): float
+    {
+        if ($orderIds->isEmpty()) {
+            return 0.0;
+        }
+
+        $lost = \App\Models\AcumaticaSalesOrderLine::query()
+            ->whereIn('sales_order_id', $orderIds)
+            ->selectRaw('
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN COALESCE(order_qty, 0) - COALESCE(shipped_qty, 0) > 0
+                                THEN (COALESCE(order_qty, 0) - COALESCE(shipped_qty, 0)) * COALESCE(unit_price, 0)
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) as revenue_lost
+            ')
+            ->first();
+
+        return round((float) ($lost?->revenue_lost ?? 0), 2);
     }
 
     public function customersById(Request $request, int $id): JsonResponse
@@ -121,7 +255,32 @@ class SalesConsultantController extends Controller
             return $consultant;
         }
 
-        return $this->customersResponse($request, $consultant->rep_code);
+        $repCode = strtoupper(trim((string) ($consultant->rep_code ?? '')));
+        if ($repCode === '') {
+            return response()->json([
+                'rep_code' => null,
+                'summary' => [
+                    'total_order_value' => 0.0,
+                    'customer_count' => 0,
+                    'total_completed_orders' => 0,
+                    'active_orders' => 0,
+                    'total_orders' => 0,
+                    'last_order_date' => null,
+                ],
+                'customers' => [],
+                'pagination' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => max(1, min(500, (int) $request->input('per_page', 20))),
+                    'total' => 0,
+                    'from' => 0,
+                    'to' => 0,
+                ],
+                'message' => 'This consultant has no rep code assigned yet.',
+            ]);
+        }
+
+        return $this->customersResponse($request, $repCode);
     }
 
     public function customers(Request $request, string $repCode): JsonResponse
@@ -182,6 +341,7 @@ class SalesConsultantController extends Controller
         $summary = $this->buildSummary($base);
         $dateFrom = $request->filled('date_from') ? (string) $request->input('date_from') : null;
         $dateTo = $request->filled('date_to') ? (string) $request->input('date_to') : null;
+        $search = trim((string) $request->input('q', ''));
 
         $rows = (clone $base)
             ->leftJoin('acumatica_customers as cust', 'cust.acumatica_id', '=', 'acumatica_sales_orders.customer_acumatica_id')
@@ -198,32 +358,102 @@ class SalesConsultantController extends Controller
                 DB::raw('MAX(acumatica_sales_orders.order_date) as last_order_date'),
             ])
             ->groupBy('acumatica_sales_orders.customer_acumatica_id')
+            ->when($search !== '', function ($query) use ($search) {
+                $like = '%' . $search . '%';
+                $query->havingRaw('MAX(COALESCE(cust.name, acumatica_sales_orders.customer_name)) LIKE ?', [$like])
+                      ->orHavingRaw('acumatica_sales_orders.customer_acumatica_id LIKE ?', [$like]);
+            })
             ->orderByDesc('total_order_value')
             ->get();
+
+        // Gather order IDs per customer for fill-rate and revenue-lost computation
+        $customerOrderIds = (clone $base)
+            ->selectRaw('customer_acumatica_id, GROUP_CONCAT(id) as order_ids')
+            ->groupBy('customer_acumatica_id')
+            ->pluck('order_ids', 'customer_acumatica_id');
+
+        // Sorting (multi-directional)
+        $sort = (string) $request->input('sort', 'total_order_value');
+        $sortDir = strtolower((string) $request->input('sort_dir', 'desc')) === 'asc' ? SORT_ASC : SORT_DESC;
+
+        $mapped = $rows->map(fn ($row) => [
+            'customer_id' => $row->customer_id,
+            'customer_name' => $row->customer_name,
+            'customer_class' => $row->customer_class,
+            'customer_status' => $row->customer_status,
+            'order_count' => (int) $row->order_count,
+            'active_orders' => (int) $row->active_orders,
+            'completed_orders' => (int) $row->completed_orders,
+            'total_order_value' => round((float) $row->total_order_value, 2),
+            'total_revenue' => round((float) $row->total_order_value, 2),
+            'fill_rate_pct' => $this->computeFillRate(
+                collect(explode(',', (string) ($customerOrderIds[$row->customer_id] ?? '')))
+                    ->filter()
+                    ->values()
+            ),
+            'revenue_lost' => $this->computeRevenueLost(
+                collect(explode(',', (string) ($customerOrderIds[$row->customer_id] ?? '')))
+                    ->filter()
+                    ->values()
+            ),
+            'first_order_date' => $row->first_order_date,
+            'last_order_date' => $row->last_order_date,
+            'orders_per_month' => $this->ordersPerMonth(
+                (int) $row->order_count,
+                $dateFrom,
+                $dateTo,
+                $row->first_order_date,
+                $row->last_order_date,
+            ),
+        ]);
+
+        // Apply sorting
+        $sortMap = [
+            'customer_name' => 'customer_name',
+            'order_count' => 'order_count',
+            'orders_per_month' => 'orders_per_month',
+            'active_orders' => 'active_orders',
+            'completed_orders' => 'completed_orders',
+            'total_order_value' => 'total_order_value',
+            'fill_rate_pct' => 'fill_rate_pct',
+            'revenue_lost' => 'revenue_lost',
+            'last_order_date' => 'last_order_date',
+        ];
+        $sortKey = $sortMap[$sort] ?? 'total_order_value';
+        $sorted = $mapped->values()->all();
+        usort($sorted, function ($a, $b) use ($sortKey, $sortDir) {
+            $valA = $a[$sortKey] ?? null;
+            $valB = $b[$sortKey] ?? null;
+            if ($valA === $valB) {
+                return 0;
+            }
+
+            return $sortDir === SORT_ASC ? ($valA <=> $valB) : ($valB <=> $valA);
+        });
+        $sortedCollection = collect($sorted);
+
+        // Pagination
+        $perPage = (int) $request->input('per_page', 20);
+        $perPage = max(1, min(500, $perPage));
+        $currentPage = max(1, (int) $request->input('page', 1));
+        $total = $sortedCollection->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $currentPage = min($currentPage, $lastPage);
+        $offset = ($currentPage - 1) * $perPage;
+        $paged = $sortedCollection->slice($offset, $perPage)->values();
 
         return response()->json([
             'rep_code' => $normalizedRepCode,
             'summary' => $summary,
-            'customers' => $rows->map(fn ($row) => [
-                'customer_id' => $row->customer_id,
-                'customer_name' => $row->customer_name,
-                'customer_class' => $row->customer_class,
-                'customer_status' => $row->customer_status,
-                'order_count' => (int) $row->order_count,
-                'active_orders' => (int) $row->active_orders,
-                'completed_orders' => (int) $row->completed_orders,
-                'total_order_value' => round((float) $row->total_order_value, 2),
-                'total_revenue' => round((float) $row->total_order_value, 2),
-                'first_order_date' => $row->first_order_date,
-                'last_order_date' => $row->last_order_date,
-                'orders_per_month' => $this->ordersPerMonth(
-                    (int) $row->order_count,
-                    $dateFrom,
-                    $dateTo,
-                    $row->first_order_date,
-                    $row->last_order_date,
-                ),
-            ])->values(),
+            'customers' => $paged,
+            'pagination' => [
+                'current_page' => $currentPage,
+                'last_page' => $lastPage,
+                'per_page' => $perPage,
+                'total' => $total,
+                'from' => $total > 0 ? $offset + 1 : 0,
+                'to' => min($offset + $perPage, $total),
+            ],
         ]);
     }
 
@@ -237,25 +467,36 @@ class SalesConsultantController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        $consultant = User::query()
-            ->whereNotNull('users.rep_code')
-            ->where('users.id', $id)
-            ->where(function ($query) use ($user, $role, $id) {
-                $query->where('users.role', 'Sales Consultant');
-
-                if (in_array($role, self::OWN_PROFILE_ROLES, true) && (int) ($user?->id ?? 0) === $id) {
-                    $query->orWhereIn('users.role', self::OWN_PROFILE_ROLES);
-                }
-            })
-            ->first();
+        $consultant = User::query()->where('users.id', $id)->first();
 
         if (! $consultant) {
             return response()->json(['message' => 'Sales consultant not found.'], 404);
         }
 
-        if ($denied = $this->authorizeRepCodeAccess($user, $role, (string) $consultant->rep_code)) {
-            return $denied;
+        $repCode = strtoupper(trim((string) ($consultant->rep_code ?? '')));
+        $isListedConsultant = (bool) $consultant->is_consultant || $consultant->role === 'Sales Consultant';
+
+        // Own-profile roles may only open their own card (or matching rep code).
+        if (in_array($role, self::OWN_PROFILE_ROLES, true)
+            && ! in_array($role, self::FULL_ACCESS_ROLES, true)) {
+            $ownId = (int) ($user?->id ?? 0);
+            $ownRep = strtoupper(trim((string) ($user?->rep_code ?? '')));
+            $sameUser = $ownId === $id;
+            $sameRep = $ownRep !== '' && $repCode !== '' && $ownRep === $repCode;
+
+            if (! $sameUser && ! $sameRep) {
+                return response()->json(['message' => 'Forbidden.'], 403);
+            }
+
+            return $consultant;
         }
+
+        // Full-access viewers may open directory-listed consultant records.
+        if (! $isListedConsultant) {
+            return response()->json(['message' => 'Sales consultant not found.'], 404);
+        }
+
+        // Empty rep_code is allowed for profile view; order metrics will be empty.
 
         return $consultant;
     }
@@ -333,6 +574,7 @@ class SalesConsultantController extends Controller
             'email' => $consultant->email,
             'role' => $consultant->role,
             'rep_code' => $consultant->rep_code,
+            'employee_number' => $consultant->employee_number,
             'is_active' => (bool) $consultant->is_active,
             'assigned_orders' => $summary['total_orders'],
             'active_orders' => $summary['active_orders'],
@@ -385,6 +627,7 @@ class SalesConsultantController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'rep_code' => $repCode,
+            'employee_number' => $user->employee_number,
             'is_active' => $user->is_active,
             'assigned_orders' => (int) ($metrics?->assigned_orders ?? 0),
             'active_orders' => (int) ($metrics?->active_orders ?? 0),

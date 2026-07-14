@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { getToken, useAuth } from "@/lib/auth";
 import { canSeeAdminTab } from "@/lib/nav-permissions";
-import { Activity, AlertTriangle, ArrowUpRight, Bot, Boxes, ChevronDown, ChevronRight, Clock, Copy, Database, Download, FlaskConical, Gauge, History, KeyRound, Mail, PackageX, Pencil, Play, RefreshCw, RotateCcw, Search, ShieldCheck, Sparkles, Timer, ToggleLeft, Trash2, Upload, UserPlus, Users, X } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, Bot, Boxes, ChevronDown, ChevronRight, Clock, Copy, Database, Download, FlaskConical, Gauge, History, KeyRound, Mail, PackageX, Pencil, Play, RefreshCw, RotateCcw, Search, ShieldCheck, Sparkles, Timer, ToggleLeft, Trash2, Upload, UserCog, UserPlus, Users, X } from "lucide-react";
 import { useRef, useEffect, useState, type ChangeEvent, type ComponentType, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
+import { UserSessionsSheet } from "@/components/admin/UserSessionsSheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,11 @@ import {
   useUpdateDailyReportConfig,
   useDeliverySlaConfig,
   useUpdateDeliverySlaConfig,
+  useFolSettings,
+  useUpdateFolSettings,
+  useUpdateFolStages,
+  type FolApprovalStageConfig,
+  type FolSettings,
   useDeleteAiKey,
   useNotificationRules,
   usePermissions,
@@ -58,6 +64,7 @@ import {
   useUpdateUser,
   useRepCodeHistory,
   useResendWelcomeEmail,
+  useUpdateUserPassword,
   useToggleUserStatus,
   useDeleteUser,
   useAiPromptLogs,
@@ -79,6 +86,10 @@ import {
   useValidateAcumatica,
   useRestoreRepCode,
 } from "@/hooks/admin/useAdminSettings";
+import {
+  useImpersonationCandidates,
+  useStartImpersonation,
+} from "@/hooks/admin/useImpersonation";
 import { acumaticaSchema, aiKeySchema, type AcumaticaInput, type AiKeyInput } from "@/lib/admin-schemas";
 import {
   formatOpsSyncToast,
@@ -98,7 +109,18 @@ export const Route = createFileRoute("/app/administration")({
 });
 
 const ACTIVE_SYNC_WINDOW_MS = 2 * 60 * 1000;
-const INVENTORY_IMPORT_WAREHOUSES = ["DTC", "FGS", "PRMS", "RMS1", "TRMS"] as const;
+/** Must match Acumatica WarehouseID / config inventory.warehouses */
+const INVENTORY_IMPORT_WAREHOUSES = [
+  "DTC",
+  "FGS",
+  "FGS2",
+  "FGS2 RETURNS",
+  "MSA",
+  "EXPORT",
+  "PRMS",
+  "RMS1",
+  "TRMS",
+] as const;
 
 function isActiveSyncLog(log: AcumaticaSyncLog) {
   if (log.status !== "running" || log.ended_at) {
@@ -126,6 +148,8 @@ const ADMIN_TABS = [
   { value: "permissions", label: "Permissions", perm: "permissions", panel: PermissionsPanel },
   { value: "notifications", label: "Notification Rules", perm: "notifications", panel: NotificationRulesPanel },
   { value: "daily-notifications", label: "Daily Notifications", perm: "daily-notifications", panel: DailyNotificationsPanel },
+  { value: "fol", label: "FOL Settings", perm: "fol", panel: FolSettingsPanel },
+  { value: "impersonation", label: "Impersonation", perm: "impersonation", panel: ImpersonationPanel },
   { value: "audit", label: "Audit Logs", perm: "audit", panel: AuditLogsPanel },
   { value: "cron-jobs", label: "Cron Jobs", perm: "cron-jobs", panel: CronJobsPanel },
   { value: "ai-logs", label: "AI Logs", perm: "ai-logs", panel: AiLogsPanel },
@@ -1017,7 +1041,7 @@ function DeliverySlaConfigPanel() {
     if (data.length > 0) setDraft(data);
   }, [data]);
 
-  function updateRule(index: number, field: string, value: string | number | boolean) {
+  function updateRule(index: number, field: string, value: string | number | boolean | null) {
     setDraft((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
   }
 
@@ -1078,6 +1102,308 @@ function DeliverySlaConfigPanel() {
         </div>
       )}
     </Panel>
+  );
+}
+
+// -------------------------------------------------------------------------
+// FOL Settings — dynamic approval stages, mail, attachments (admin-editable)
+// -------------------------------------------------------------------------
+
+function FolSettingsPanel() {
+  const { data, isLoading, refetch } = useFolSettings();
+  const saveSettings = useUpdateFolSettings();
+  const saveStages = useUpdateFolStages();
+  const [settings, setSettings] = useState<Partial<FolSettings>>({});
+  const [stages, setStages] = useState<FolApprovalStageConfig[]>([]);
+  const [mimesText, setMimesText] = useState("");
+  const [ccText, setCcText] = useState("");
+
+  useEffect(() => {
+    if (!data) return;
+    setSettings({
+      mail_from_address: data.mail_from_address,
+      mail_from_name: data.mail_from_name,
+      max_attachment_kb: data.max_attachment_kb,
+      attachment_mimes: data.attachment_mimes,
+      invoicing_roles: data.invoicing_roles,
+      cc_watcher_emails: data.cc_watcher_emails,
+      duplicate_policy: data.duplicate_policy,
+      consumables_months: data.consumables_months,
+      require_attachment: data.require_attachment,
+      allow_admin_on_all_stages: data.allow_admin_on_all_stages,
+    });
+    setStages(data.stages.map((s) => ({ ...s, role_names: [...s.role_names], user_ids: [...s.user_ids] })));
+    setMimesText(data.attachment_mimes.join(", "));
+    setCcText((data.cc_watcher_emails ?? []).join(", "));
+  }, [data]);
+
+  function updateStage(index: number, patch: Partial<FolApprovalStageConfig>) {
+    setStages((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  function addStage() {
+    const n = stages.length + 1;
+    setStages((prev) => [
+      ...prev,
+      {
+        key: `stage_${n}`,
+        name: `Stage ${n}`,
+        sort_order: n,
+        is_active: true,
+        assignee_mode: "role",
+        role_names: ["Administrator"],
+        user_ids: [],
+        require_comment: true,
+        sla_hours: 48,
+      },
+    ]);
+  }
+
+  function removeStage(index: number) {
+    setStages((prev) => prev.filter((_, i) => i !== index).map((s, i) => ({ ...s, sort_order: i + 1 })));
+  }
+
+  function toggleRole(index: number, role: string) {
+    setStages((prev) =>
+      prev.map((s, i) => {
+        if (i !== index) return s;
+        const has = s.role_names.includes(role);
+        return {
+          ...s,
+          role_names: has ? s.role_names.filter((r) => r !== role) : [...s.role_names, role],
+        };
+      }),
+    );
+  }
+
+  function toggleInvoicingRole(role: string) {
+    setSettings((prev) => {
+      const list = prev.invoicing_roles ?? [];
+      const has = list.includes(role);
+      return {
+        ...prev,
+        invoicing_roles: has ? list.filter((r) => r !== role) : [...list, role],
+      };
+    });
+  }
+
+  if (isLoading || !data) return <PanelSkeleton />;
+
+  const roles = data.available_roles ?? [];
+
+  return (
+    <div className="space-y-4">
+      <Panel title="FOL Mail & Attachments" icon={Mail}>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Runtime FOL config is stored in the database. Change stages and recipients here without redeploying code.
+          Defaults fall back to <code className="text-xs">config/fol.php</code> / env when unset.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field
+            label="Mail from address"
+            value={settings.mail_from_address ?? ""}
+            onChange={(v) => setSettings((s) => ({ ...s, mail_from_address: v }))}
+            placeholder="kp@fayshop.co.ke"
+          />
+          <Field
+            label="Mail from name"
+            value={settings.mail_from_name ?? ""}
+            onChange={(v) => setSettings((s) => ({ ...s, mail_from_name: v }))}
+            placeholder="FOL KP Approvals"
+          />
+          <Field
+            label="Max attachment KB"
+            type="number"
+            value={String(settings.max_attachment_kb ?? 15360)}
+            onChange={(v) => setSettings((s) => ({ ...s, max_attachment_kb: Number(v) || 15360 }))}
+          />
+          <Field
+            label="Consumables lookback (months)"
+            type="number"
+            value={String(settings.consumables_months ?? 6)}
+            onChange={(v) => setSettings((s) => ({ ...s, consumables_months: Number(v) || 6 }))}
+          />
+          <div className="sm:col-span-2">
+            <Field
+              label="Allowed attachment extensions (comma-separated)"
+              value={mimesText}
+              onChange={setMimesText}
+              placeholder="pdf, xlsx, jpg, png"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Field
+              label="CC watcher emails (all stage + invoicing mails)"
+              value={ccText}
+              onChange={setCcText}
+              placeholder="ops@kimfay.com, audit@kimfay.com"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Duplicate open FOL policy</Label>
+            <Select
+              value={settings.duplicate_policy ?? "warn"}
+              onValueChange={(v) => setSettings((s) => ({ ...s, duplicate_policy: v as FolSettings["duplicate_policy"] }))}
+            >
+              <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="warn">Warn</SelectItem>
+                <SelectItem value="block">Block</SelectItem>
+                <SelectItem value="allow">Allow</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col justify-end gap-2 pb-1">
+            <label className="flex items-center gap-2 text-sm">
+              <Switch
+                checked={!!settings.require_attachment}
+                onCheckedChange={(v) => setSettings((s) => ({ ...s, require_attachment: v }))}
+              />
+              Require attachment on submit
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch
+                checked={!!settings.allow_admin_on_all_stages}
+                onCheckedChange={(v) => setSettings((s) => ({ ...s, allow_admin_on_all_stages: v }))}
+              />
+              Admin can approve any stage (testing / break-glass)
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <Label className="text-xs">Invoicing notification roles (N5)</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {roles.map((role) => {
+              const on = (settings.invoicing_roles ?? []).includes(role);
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => toggleInvoicingRole(role)}
+                  className={`rounded-full border px-2.5 py-1 text-xs ${on ? "border-primary bg-primary text-primary-foreground" : "bg-background"}`}
+                >
+                  {role}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <Button
+            size="sm"
+            disabled={saveSettings.isPending}
+            onClick={() =>
+              saveSettings.mutate({
+                ...settings,
+                attachment_mimes: mimesText.split(/[,\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean),
+                cc_watcher_emails: ccText.split(/[,\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean),
+              })
+            }
+          >
+            {saveSettings.isPending ? "Saving…" : "Save FOL settings"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => refetch()}>Reset</Button>
+        </div>
+      </Panel>
+
+      <Panel title="FOL Approval Stages" icon={ShieldCheck}>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Dynamic multi-step chain (e.g. HOD → CCO). Order by sort. Each active stage needs roles and/or specific users.
+          Administrators can always act on every stage when the toggle above is on.
+        </p>
+        <div className="space-y-3">
+          {stages.map((stage, index) => (
+            <div key={`${stage.key}-${index}`} className="rounded-lg border bg-muted/20 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold">Stage {stage.sort_order}: {stage.name}</h4>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <Switch checked={stage.is_active} onCheckedChange={(v) => updateStage(index, { is_active: v })} />
+                    Active
+                  </label>
+                  <Button size="sm" variant="ghost" className="h-7 text-destructive" onClick={() => removeStage(index)} disabled={stages.length <= 1}>
+                    Remove
+                  </Button>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label="Key" value={stage.key} onChange={(v) => updateStage(index, { key: v.replace(/\s+/g, "_").toLowerCase() })} />
+                <Field label="Display name" value={stage.name} onChange={(v) => updateStage(index, { name: v })} />
+                <Field label="Sort order" type="number" value={String(stage.sort_order)} onChange={(v) => updateStage(index, { sort_order: Number(v) || 1 })} />
+                <Field
+                  label="SLA hours"
+                  type="number"
+                  value={stage.sla_hours != null ? String(stage.sla_hours) : ""}
+                  onChange={(v) => updateStage(index, { sla_hours: v === "" ? null : Number(v) || null })}
+                />
+              </div>
+              <div className="mt-3">
+                <Label className="text-xs">Assignee roles</Label>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {roles.map((role) => {
+                    const on = stage.role_names.includes(role);
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => toggleRole(index, role)}
+                        className={`rounded-full border px-2 py-0.5 text-[11px] ${on ? "border-primary bg-primary text-primary-foreground" : "bg-background"}`}
+                      >
+                        {role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mt-3">
+                <Label className="text-xs">Specific users (optional)</Label>
+                <Select
+                  value="__add__"
+                  onValueChange={(v) => {
+                    if (v === "__add__") return;
+                    const id = Number(v);
+                    if (!stage.user_ids.includes(id)) {
+                      updateStage(index, { user_ids: [...stage.user_ids, id] });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Add user…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__add__">Add user…</SelectItem>
+                    {(data.users ?? []).map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.name} ({u.email})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {stage.user_ids.map((id) => {
+                    const u = data.users?.find((x) => x.id === id);
+                    return (
+                      <Badge key={id} variant="secondary" className="gap-1 text-[10px]">
+                        {u?.name ?? id}
+                        <button type="button" className="ml-0.5" onClick={() => updateStage(index, { user_ids: stage.user_ids.filter((x) => x !== id) })}>×</button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-3 flex items-center gap-2 text-xs">
+                <Switch checked={stage.require_comment} onCheckedChange={(v) => updateStage(index, { require_comment: v })} />
+                Require comment on decision
+              </label>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={addStage}>Add stage</Button>
+          <Button size="sm" disabled={saveStages.isPending} onClick={() => saveStages.mutate(stages)}>
+            {saveStages.isPending ? "Saving…" : "Save approval stages"}
+          </Button>
+        </div>
+      </Panel>
+    </div>
   );
 }
 
@@ -1888,9 +2214,12 @@ function TeamMembersPanel() {
   });
 
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+  const [passwordMember, setPasswordMember] = useState<TeamMember | null>(null);
   const [historyMember, setHistoryMember] = useState<TeamMember | null>(null);
+  const [sessionsMember, setSessionsMember] = useState<TeamMember | null>(null);
 
   const isAdmin = session?.role === "Administrator";
+  const startImpersonation = useStartImpersonation();
   const roleOptions = (roles.data ?? []).filter((role) => isAdmin || role.name === "Sales Consultant");
   const isSalesConsultant = form.role === "Sales Consultant";
 
@@ -1936,7 +2265,7 @@ function TeamMembersPanel() {
     <div className="space-y-4">
       <Panel title="Create Team Member" icon={UserPlus}>
         <p className="mb-4 text-sm text-muted-foreground">
-          Add a new OrderWatch user. A welcome email with sign-in instructions is sent automatically.
+          Add a new OrderWatch user. A welcome email with a temporary password, OTP, and verification dates is sent automatically.
         </p>
         <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreate}>
           <Field label="Full name" value={form.name} onChange={(name) => setForm((v) => ({ ...v, name }))} placeholder="Jane Wanjiru" />
@@ -2010,6 +2339,22 @@ function TeamMembersPanel() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex justify-end gap-1">
+                      {isAdmin && member.is_active && member.id !== session?.id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] border-amber-500/40 text-amber-800 hover:bg-amber-500/10 dark:text-amber-200"
+                          disabled={startImpersonation.isPending}
+                          onClick={() => {
+                            if (confirm(`Login as ${member.name} (${member.role})?\n\nYou will see OrderWatch with their permissions. Use “Return to admin” when done.`)) {
+                              startImpersonation.mutate(member.id);
+                            }
+                          }}
+                          title={`Login as ${member.name}`}
+                        >
+                          <UserCog className="mr-1 h-3 w-3" /> Login as
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -2023,8 +2368,28 @@ function TeamMembersPanel() {
                         size="sm"
                         variant="outline"
                         className="h-6 px-2 text-[10px]"
+                        onClick={() => setPasswordMember(member)}
+                        title="Update password"
+                      >
+                        <KeyRound className="mr-1 h-3 w-3" /> Password
+                      </Button>
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => setSessionsMember(member)}
+                          title="View session history"
+                        >
+                          <Clock className="mr-1 h-3 w-3" /> Sessions
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-[10px]"
                         onClick={() => {
-                          if (confirm(`Resend welcome email to ${member.name}? This will generate a new password.`)) {
+                          if (confirm(`Resend sign-in details to ${member.name}? This emails a new temporary password and OTP (old credentials stop working).`)) {
                             resendWelcome.mutate(member.id);
                           }
                         }}
@@ -2077,13 +2442,225 @@ function TeamMembersPanel() {
         />
       )}
 
+      {passwordMember && (
+        <AdminUpdatePasswordDialog
+          member={passwordMember}
+          onClose={() => setPasswordMember(null)}
+        />
+      )}
+
       {historyMember && (
         <AdminRepCodeHistorySheet
           member={historyMember}
           onClose={() => setHistoryMember(null)}
         />
       )}
+
+      {sessionsMember && (
+        <UserSessionsSheet
+          member={sessionsMember}
+          onClose={() => setSessionsMember(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Update Password Dialog (Administration tab) ───────────────────────────────
+
+function AdminUpdatePasswordDialog({
+  member,
+  onClose,
+}: {
+  member: TeamMember;
+  onClose: () => void;
+}) {
+  const updatePassword = useUpdateUserPassword();
+  const [autoGenerate, setAutoGenerate] = useState(true);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [emailUser, setEmailUser] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [lastGenerated, setLastGenerated] = useState<string | null>(null);
+
+  const manualOk =
+    !autoGenerate &&
+    password.trim().length >= 8 &&
+    password === confirmPassword;
+
+  const canSubmit = autoGenerate || manualOk;
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!autoGenerate && password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    if (!autoGenerate && password.trim().length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+
+    updatePassword.mutate(
+      {
+        userId: member.id,
+        auto_generate: autoGenerate,
+        password: autoGenerate ? undefined : password,
+        email_user: emailUser,
+      },
+      {
+        onSuccess: (result) => {
+          if (result.password) {
+            setLastGenerated(result.password);
+          } else {
+            onClose();
+          }
+        },
+      },
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" />
+            Update Password
+          </DialogTitle>
+          <DialogDescription>
+            Set a new password for <span className="font-medium text-foreground">{member.name}</span>{" "}
+            ({member.email}).
+          </DialogDescription>
+        </DialogHeader>
+
+        {lastGenerated ? (
+          <div className="space-y-4 py-2">
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
+              <p className="font-medium">Password updated</p>
+              <p className="mt-1 text-xs text-emerald-800/80">
+                {emailUser
+                  ? "Credentials were emailed. You can also copy the generated password below."
+                  : "Copy the generated password and share it securely with the user."}
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <code className="flex-1 rounded bg-white/80 px-2 py-1.5 font-mono text-sm tracking-wide">
+                  {lastGenerated}
+                </code>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(lastGenerated);
+                    toast.success("Password copied");
+                  }}
+                >
+                  <Copy className="mr-1 h-3.5 w-3.5" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" onClick={onClose}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4 py-2">
+            <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+              <div>
+                <Label htmlFor="admin-auto-password" className="text-sm font-medium">
+                  Auto-generate password
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Creates a secure 12-character temporary password
+                </p>
+              </div>
+              <Switch
+                id="admin-auto-password"
+                checked={autoGenerate}
+                onCheckedChange={(checked) => {
+                  setAutoGenerate(checked);
+                  if (checked) {
+                    setPassword("");
+                    setConfirmPassword("");
+                  }
+                }}
+              />
+            </div>
+
+            {!autoGenerate && (
+              <div className="space-y-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="admin-new-password">New password</Label>
+                  <div className="relative">
+                    <Input
+                      id="admin-new-password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min. 8 characters"
+                      className="pr-10"
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 px-3 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowPassword((v) => !v)}
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="admin-confirm-password">Confirm password</Label>
+                  <Input
+                    id="admin-confirm-password"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter password"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                  />
+                  {confirmPassword.length > 0 && password !== confirmPassword && (
+                    <p className="text-xs text-destructive">Passwords do not match</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+              <div>
+                <Label htmlFor="admin-email-password" className="text-sm font-medium">
+                  Email credentials to user
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Sends password + OTP with verification dates
+                </p>
+              </div>
+              <Switch
+                id="admin-email-password"
+                checked={emailUser}
+                onCheckedChange={setEmailUser}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!canSubmit || updatePassword.isPending}>
+                {updatePassword.isPending ? "Updating…" : "Update Password"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2250,7 +2827,7 @@ function AdminRepCodeHistorySheet({
                   size="sm"
                   variant="outline"
                   className="h-7 px-2 text-xs"
-                  disabled={update.isPending || entry.rep_code === member.rep_code}
+                  disabled={restore.isPending || entry.rep_code === member.rep_code}
                   onClick={() => handleRestore(entry)}
                 >
                   <RotateCcw className="mr-1 h-3 w-3" />
@@ -2633,6 +3210,152 @@ function AuditLogsPanel() {
       />
       <div className="mt-3 text-xs text-muted-foreground">Showing page {data.current_page} of {data.last_page || 1}, {data.total} total entries.</div>
     </Panel>
+  );
+}
+
+// -------------------------------------------------------------------------
+// Impersonation (Admin only — switch into another user without re-login)
+// -------------------------------------------------------------------------
+
+function ImpersonationPanel() {
+  const { session } = useAuth();
+  const isAdmin = session?.role === "Administrator";
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const candidates = useImpersonationCandidates(debouncedQ, isAdmin);
+  const start = useStartImpersonation();
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(q), 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  if (!isAdmin) {
+    return (
+      <ErrorBlock
+        message="Only Administrators can impersonate users."
+        onRetry={() => undefined}
+      />
+    );
+  }
+
+  const items = candidates.data?.items ?? [];
+
+  // Quick-pick: common people/roles for testing (match name/email/role contains)
+  const quickHints = [
+    { label: "CCO", match: "cco" },
+    { label: "Beatrice", match: "beatrice" },
+    { label: "Shirleen", match: "shirleen" },
+    { label: "Sales Consultant", match: "sales consultant" },
+    { label: "Technician", match: "technician" },
+  ];
+
+  function matchesHint(user: { name: string; email: string; role: string }, match: string) {
+    const hay = `${user.name} ${user.email} ${user.role}`.toLowerCase();
+    return hay.includes(match.toLowerCase());
+  }
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Login as another user" icon={UserCog}>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Temporarily view OrderWatch with another account&apos;s roles and permissions — no password required.
+          A yellow banner lets you return to your admin account. Sessions last up to 4 hours and are audited.
+        </p>
+
+        <div className="mb-3 flex flex-wrap gap-2">
+          {quickHints.map((hint) => (
+            <Button
+              key={hint.label}
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setQ(hint.match)}
+            >
+              Find {hint.label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="relative mb-4 max-w-md">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search by name, email, role, or rep code…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+
+        {candidates.isLoading ? (
+          <PanelSkeleton />
+        ) : candidates.isError ? (
+          <ErrorBlock message="Could not load users." onRetry={() => candidates.refetch()} />
+        ) : (
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left">Name</th>
+                  <th className="px-3 py-2 text-left">Email</th>
+                  <th className="px-3 py-2 text-left">Role</th>
+                  <th className="px-3 py-2 text-left">Rep / Emp #</th>
+                  <th className="px-3 py-2 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                      No active users match this search.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((user) => {
+                    const isSelf = user.id === session?.id;
+                    const isQuick =
+                      quickHints.some((h) => matchesHint(user, h.match)) && !!debouncedQ;
+                    return (
+                      <tr
+                        key={user.id}
+                        className={`border-t ${isQuick ? "bg-amber-500/5" : ""}`}
+                      >
+                        <td className="px-3 py-2 text-xs font-medium">{user.name}</td>
+                        <td className="px-3 py-2 text-xs">{user.email}</td>
+                        <td className="px-3 py-2 text-xs">{user.role}</td>
+                        <td className="px-3 py-2 font-mono text-xs">
+                          {user.rep_code ?? user.employee_number ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="h-7"
+                            disabled={isSelf || start.isPending}
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Login as ${user.name} (${user.role})?\n\nYou will use their permissions until you return to admin.`,
+                                )
+                              ) {
+                                start.mutate(user.id);
+                              }
+                            }}
+                          >
+                            <UserCog className="mr-1.5 h-3.5 w-3.5" />
+                            {isSelf ? "You" : start.isPending ? "Switching…" : "Login as"}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }
 

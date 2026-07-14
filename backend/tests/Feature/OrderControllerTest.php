@@ -50,19 +50,83 @@ class OrderControllerTest extends TestCase
         $this->actingAs($user)
             ->patchJson('/api/orders/'.$order->id, [
                 'status' => 'Rejected',
-                'rejection_reason_code' => 'out_of_stock',
+                'rejection_reason_code' => 'out_of_stock_procurement',
                 'rejection_reason' => 'Customer requested immediate delivery but stock is unavailable.',
             ])
             ->assertOk()
             ->assertJsonPath('status', 'Rejected')
-            ->assertJsonPath('rejection_reason_code', 'out_of_stock')
-            ->assertJsonPath('rejection_reason', 'Customer requested immediate delivery but stock is unavailable.');
+            ->assertJsonPath('rejection_reason_code', 'out_of_stock_procurement')
+            ->assertJsonPath('rejection_reason', 'Customer requested immediate delivery but stock is unavailable.')
+            ->assertJsonPath('workflow_parent_reason', 'rejected_order')
+            ->assertJsonPath('workflow_sub_reason_code', 'out_of_stock_procurement')
+            ->assertJsonPath('workflow_reason_label', 'Rejected Order - Out of stock - Procurement');
 
         $this->assertDatabaseHas('acumatica_sales_orders', [
             'id' => $order->id,
             'status' => 'Rejected',
-            'rejection_reason_code' => 'out_of_stock',
+            'rejection_reason_code' => 'out_of_stock_procurement',
+            'workflow_parent_reason' => 'rejected_order',
+            'workflow_sub_reason_code' => 'out_of_stock_procurement',
+            'workflow_reason_label' => 'Rejected Order - Out of stock - Procurement',
         ]);
+    }
+
+    public function test_cancelled_and_on_hold_orders_require_a_reason_code(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'Sales Operations',
+        ]);
+
+        $cancelled = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-TEST-CAN-1',
+            'order_type' => 'SO',
+            'status' => 'Open',
+            'order_total' => 1200,
+            'synced_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->patchJson('/api/orders/'.$cancelled->id, ['status' => 'Cancelled'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['rejection_reason_code']);
+
+        $onHold = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-TEST-HOLD-1',
+            'order_type' => 'SO',
+            'status' => 'Open',
+            'order_total' => 1800,
+            'synced_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->patchJson('/api/orders/'.$onHold->id, ['status' => 'On Hold'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['rejection_reason_code']);
+    }
+
+    public function test_cancelled_orders_persist_hierarchical_workflow_reason(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'Sales Operations',
+        ]);
+
+        $order = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-TEST-CAN-2',
+            'order_type' => 'SO',
+            'status' => 'Open',
+            'order_total' => 2400,
+            'synced_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->patchJson('/api/orders/'.$order->id, [
+                'status' => 'Cancelled',
+                'rejection_reason_code' => 'wrong_code',
+            ])
+            ->assertOk()
+            ->assertJsonPath('workflow_parent_reason', 'cancelled_order')
+            ->assertJsonPath('workflow_sub_reason_code', 'wrong_code')
+            ->assertJsonPath('workflow_reason_label', 'Cancelled Order - Wrong code');
     }
 
     public function test_sales_consultant_only_sees_their_own_orders_and_stats(): void

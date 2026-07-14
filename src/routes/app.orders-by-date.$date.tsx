@@ -25,9 +25,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CustomerLink, OrderLink } from "@/components/entity-links";
+import { CustomerLink, DateWithActions, OrderLink } from "@/components/entity-links";
 import { useOrders } from "@/hooks/useOrders";
-import { formatKES, formatDateTime } from "@/lib/format";
+import { MaskedKES, useMaskedKESFormatter } from "@/components/MaskedCurrency";
 import { StatusBadge } from "@/components/status-badge";
 import type { AcumaticaSalesOrder } from "@/types/admin";
 
@@ -37,6 +37,7 @@ export const Route = createFileRoute("/app/orders-by-date/$date")({
 });
 
 function OrdersByDatePage() {
+  const kes = useMaskedKESFormatter();
   const { date } = Route.useParams();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -174,7 +175,7 @@ function OrdersByDatePage() {
               {ordersQuery.isLoading ? (
                 <Skeleton className="h-8 w-24" />
               ) : (
-                formatKES(totalAmount)
+                kes(totalAmount)
               )}
             </div>
           </CardContent>
@@ -186,7 +187,7 @@ function OrdersByDatePage() {
               {ordersQuery.isLoading ? (
                 <Skeleton className="h-8 w-24" />
               ) : totalOrders > 0 ? (
-                formatKES(totalAmount / totalOrders)
+                kes(totalAmount / totalOrders)
               ) : (
                 "—"
               )}
@@ -326,10 +327,10 @@ function OrdersByDatePage() {
                         )}
                       </TableCell>
                       <TableCell className="px-4 py-3 text-xs text-muted-foreground">
-                        {order.order_date ? formatDateTime(order.order_date) : "—"}
+                        <DateWithActions value={order.order_date} format="datetime" emptyText="—" />
                       </TableCell>
                       <TableCell className="px-4 py-3 text-right font-medium tabular-nums">
-                        {formatKES(parseFloat(order.order_total || "0"))}
+                        {kes(parseFloat(order.order_total || "0"))}
                       </TableCell>
                     </TableRow>
                   ))}

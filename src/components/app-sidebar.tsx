@@ -17,6 +17,10 @@ import {
   Target,
   MapPin,
   ShieldCheck,
+  ClipboardList,
+  CalendarDays,
+  BadgeDollarSign,
+  TrendingUp,
 } from "lucide-react";
 import {
   Sidebar,
@@ -32,6 +36,7 @@ import {
 } from "@/components/ui/sidebar";
 import { LogoImage } from "@/components/logo-image";
 import { useAuth } from "@/lib/auth";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { canAccessNavItem } from "@/lib/nav-permissions";
 
 const NAV = [
@@ -52,6 +57,10 @@ const NAV = [
     { title: "Sales Consultants", url: "/app/sales-consultants", icon: Users },
   ]},
   { group: "Workflow", items: [
+    { title: "KP FOL", url: "/app/kp/fol", icon: ClipboardList },
+    { title: "FOL Calendar", url: "/app/kp/fol/calendar", icon: CalendarDays },
+    { title: "Price Changes", url: "/app/price-change-requests", icon: BadgeDollarSign },
+    { title: "Sales Mgmt", url: "/app/sales-management", icon: TrendingUp },
     { title: "Order Match", url: "/app/order-match", icon: GitMerge },
     { title: "Mailbox", url: "/app/mailbox", icon: Inbox },
   ]},
@@ -66,6 +75,7 @@ const NAV = [
 
 export function AppSidebar() {
   const { session } = useAuth();
+  const { hidden_menus: hiddenMenus, permissions } = useCapabilities();
   const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
@@ -81,23 +91,45 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b">
-        <div className="flex items-center gap-2 px-2 py-1.5">
+        <div className="flex items-center gap-1.5 px-1.5 py-1">
           {collapsed ? (
             /* Icon-only: small square with KF initials / logo mark */
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-white shadow-sm">
-              <LogoImage iconOnly className="h-8 w-8 object-contain" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-white shadow-sm">
+              <LogoImage iconOnly className="h-6 w-6 object-contain" />
             </div>
           ) : (
             /* Expanded: full landscape logo */
-            <div className="flex h-10 items-center justify-start overflow-hidden rounded bg-white px-2 shadow-sm w-full">
-              <LogoImage className="h-8 w-auto max-w-[140px] object-contain" />
+            <div className="flex h-8 w-full items-center justify-start overflow-hidden rounded bg-white px-1.5 shadow-sm">
+              <LogoImage className="h-6 w-auto max-w-[120px] object-contain" />
             </div>
           )}
         </div>
       </SidebarHeader>
       <SidebarContent>
         {NAV.map((g) => {
-          const visibleItems = g.items.filter((item) => canAccessNavItem(role, item.url));
+          const visibleItems = g.items.filter((item) => {
+            if (item.url === "/app/kp/fol") {
+              return permissions.includes("kp.fol.view") && canAccessNavItem(role, item.url, hiddenMenus);
+            }
+            if (item.url === "/app/kp/fol/calendar") {
+              // Technicians + tech managers (and anyone with install perms)
+              const canInstall =
+                permissions.includes("kp.fol.install.execute") ||
+                permissions.includes("kp.fol.install.manage");
+              return (
+                permissions.includes("kp.fol.view") &&
+                canInstall &&
+                canAccessNavItem(role, "/app/kp/fol", hiddenMenus)
+              );
+            }
+            if (item.url === "/app/price-change-requests") {
+              return permissions.includes("pricing.pcr.view") && canAccessNavItem(role, item.url, hiddenMenus);
+            }
+            if (item.url === "/app/sales-management") {
+              return permissions.includes("sales.management.view") && canAccessNavItem(role, item.url, hiddenMenus);
+            }
+            return canAccessNavItem(role, item.url, hiddenMenus);
+          });
           if (visibleItems.length === 0) return null;
           return (
           <SidebarGroup key={g.group}>
@@ -106,10 +138,10 @@ export function AppSidebar() {
               <SidebarMenu>
                 {visibleItems.map((item) => (
                   <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={isActive(item.url, (item as { exact?: boolean }).exact)} tooltip={item.title}>
-                      <Link to={item.url} className="flex items-center gap-2" onClick={handleNavClick}>
-                        <item.icon className="h-4 w-4" />
-                        {!collapsed && <span>{item.title}</span>}
+                    <SidebarMenuButton asChild size="sm" isActive={isActive(item.url, (item as { exact?: boolean }).exact)} tooltip={item.title}>
+                      <Link to={item.url} className="flex items-center gap-1.5" onClick={handleNavClick}>
+                        <item.icon className="h-3.5 w-3.5 shrink-0" />
+                        {!collapsed && <span className="truncate text-[11px] leading-tight">{item.title}</span>}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

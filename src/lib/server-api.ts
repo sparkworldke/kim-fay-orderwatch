@@ -18,21 +18,22 @@ function allowInsecureTls(): boolean {
   return flag !== "false" && flag !== "0";
 }
 
-type UndiciAgent = { new (options: { connect: { rejectUnauthorized: boolean } }): unknown };
-
-let insecureDispatcher: UndiciAgent | undefined;
+let insecureDispatcher: import("undici").Dispatcher | undefined;
 
 async function insecureTlsFetch(url: string, init?: RequestInit): Promise<Response> {
-  const { Agent, fetch: undiciFetch } = await import("undici");
+  const undici = await import("undici");
   if (!insecureDispatcher) {
-    insecureDispatcher = new Agent({
+    insecureDispatcher = new undici.Agent({
       connect: { rejectUnauthorized: false },
     });
   }
-  return undiciFetch(url, {
-    ...init,
-    dispatcher: insecureDispatcher,
-  }) as unknown as Response;
+  return undici.fetch(
+    url,
+    {
+      ...init,
+      dispatcher: insecureDispatcher,
+    } as import("undici").RequestInit,
+  ) as unknown as Response;
 }
 
 /**

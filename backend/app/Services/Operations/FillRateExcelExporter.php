@@ -14,63 +14,38 @@ use PhpOffice\PhpSpreadsheet\Style\Font;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 /**
  * Generates the enhanced fill-rate Excel export.
  *
- * Sheets produced:
- *   1. Fill Rate           – order-level (unchanged structure)
- *   2. Product Lines       – line-level (unchanged structure + Brand Type column)
- *   3. Manufactured Lines  – Manufactured (Kim-Fay own brand) lines only
- *   4. Partner Brand Lines – Third-party / partner brand lines only
- *   5. Lost Sales Analysis – SKU-grouped with subtotals + grand total
- *   6. Reason Summary      – root-cause contribution (unchanged)
- *   7. Customer Summary    – top customers (unchanged)
- *   8. Product Summary     – top products (unchanged)
- *   9. Summary             – grand total, top-5 SKUs, reason distribution
- *  10. Instructions        – how to use this file
+ * Sheets produced (reordered — executive-focused first):
+ *   1.  Instructions           – how to use this file
+ *   2.  Summary                – grand total, brand split, KP/CS sector split, root cause
+ *                                 breakdown, top-5 SKUs, SO shortfall counts, missing-price impact
+ *   3.  Fill Rate              – order-level (unchanged structure)
+ *   4.  Product Lines          – line-level (unchanged structure + Brand Type column)
+ *   5.  Manufactured Lines     – Manufactured goods lines only
+ *   6.  Trading (Partners) Lines – Trading (Partners) goods lines only
+ *   7.  Lost Sales Analysis    – SKU-grouped with subtotals + grand total
+ *   8.  Reason Summary         – root-cause contribution (unchanged)
+ *   9.  Customer Summary       – top customers (unchanged)
+ *  10.  Product Summary        – top products (unchanged)
+ *  11.  SOs Not Fully Delivered – incomplete orders with quantities and values
+ *  12.  Missing Price Values   – items with missing unit price flagged explicitly
  */
 class FillRateExcelExporter
 {
-    // ---------------------------------------------------------------------------
-    // Brand classification
-    // ---------------------------------------------------------------------------
-
-    /** Inventory ID prefixes classified as Kim-Fay manufactured products */
-    private const MANUFACTURED_PREFIXES = [
-        'FAY', 'SIF', 'COS', 'TIS', 'ULT', 'STD', 'SHO', 'ANT',
-        'URI', 'TOI', 'AIR', 'ALK', 'DIS',
-    ];
-
-    /**
-     * Partner / third-party brand prefixes.
-     * Note: HYG appears in both lists – prefer manufactured unless context is
-     * clearly a partner product (handled by exclusion logic below).
-     */
-    private const PARTNER_PREFIXES = [
-        'DOV', 'REX', 'LUX', 'HUG', 'KOT', 'COW', 'APT', 'BIO',
-        'DAB', 'ORS', 'VAT', 'HOB', 'DUR', 'FEM', 'KLE', 'MIS',
-        'MSW', 'IKO', 'CON', 'BIG',
-    ];
+    public function __construct(
+        private readonly FillRateBusinessCategory $businessCategory,
+    ) {
+    }
 
     public function classifyBrand(string $inventoryId): string
     {
-        $upper = strtoupper(trim($inventoryId));
-
-        foreach (self::PARTNER_PREFIXES as $prefix) {
-            if (str_starts_with($upper, $prefix)) {
-                return 'Partner Brand';
-            }
-        }
-
-        foreach (self::MANUFACTURED_PREFIXES as $prefix) {
-            if (str_starts_with($upper, $prefix)) {
-                return 'Manufactured';
-            }
-        }
-
-        // Default: treat as partner brand (conservative – unknown = external)
-        return 'Partner Brand';
+        return $this->businessCategory->label(
+            $this->businessCategory->classify($inventoryId),
+        );
     }
 
     // ---------------------------------------------------------------------------
@@ -94,63 +69,146 @@ class FillRateExcelExporter
         array $productSummaryRows,
         string $dateFrom,
         string $dateTo,
+        array $segmentRows = [],
+        array $segmentReasonRows = [],
+        array $businessCategoryRows = [],
+        array $reasonCaptureReport = [],
     ): StreamedResponse {
-        $spreadsheet = new Spreadsheet();
-        $spreadsheet->getProperties()
-            ->setCreator('Kim-Fay OrderWatch')
-            ->setTitle('Fill Rate Export');
+        // Raise the memory limit for large datasets so Excel generation does
+        // not exhaust available memory or cause partial/corrupt downloads.
+        $this->raiseMemoryLimit();
 
-        // Sheet 1: Fill Rate (order level) – unchanged
-        $this->writeFillRateSheet($spreadsheet, $fillRateRows);
+        try {
+            $spreadsheet = new Spreadsheet();
+            $spreadsheet->getProperties()
+                ->setCreator('Kim-Fay OrderWatch')
+                ->setTitle('Fill Rate Export');
 
-        // Sheet 2: Product Lines (line level) + Brand Type column
-        $this->writeProductLinesSheet($spreadsheet, $productRows);
+            // Sheet 1: Instructions (how to use this file) — first so the
+            // reader immediately sees guidance and the KP/CS categorisation rules.
+            $this->writeInstructionsSheet($spreadsheet);
 
-        // Sheets 3 & 4: Brand split
-        $this->writeBrandSplitSheets($spreadsheet, $productRows);
+            // Sheet 2: Summary dashboard — executive-focused, with brand split,
+            // KP/CS sector split, root cause breakdown, top-5 SKUs and shortfall counts.
+            $this->writeSummarySheet(
+                $spreadsheet,
+                $productRows,
+                $reasonRows,
+                $dateFrom,
+                $dateTo,
+                $fillRateRows,
+                $segmentRows,
+                $segmentReasonRows,
+                $businessCategoryRows,
+                $reasonCaptureReport,
+            );
 
-        // Sheet 5: Lost Sales Analysis (SKU-grouped)
-        $this->writeLostSalesSheet($spreadsheet, $productRows);
+            // Sheet 3: Fill Rate (order level) – unchanged
+            $this->writeFillRateSheet($spreadsheet, $fillRateRows);
 
-        // Sheets 6-8: Contribution summaries (unchanged)
-        $this->writeContributionSheet($spreadsheet, 'Reason Summary', $reasonRows, [
-            'reason' => 'Reason',
-            'line_count' => 'Line Count',
-            'undershipped_value' => 'Undershipped Value',
-            'contribution_pct' => 'Contribution %',
-        ]);
-        $this->writeContributionSheet($spreadsheet, 'Customer Summary', $customerRows, [
-            'customer_id' => 'Customer ID',
-            'customer_name' => 'Customer Name',
-            'order_count' => 'Order Count',
-            'undershipped_value' => 'Undershipped Value',
-            'contribution_pct' => 'Contribution %',
-        ]);
-        $this->writeContributionSheet($spreadsheet, 'Product Summary', $productSummaryRows, [
-            'inventory_id' => 'Inventory ID',
-            'product_name' => 'Product Name',
-            'line_count' => 'Line Count',
-            'undershipped_value' => 'Undershipped Value',
-            'contribution_pct' => 'Contribution %',
-        ]);
+            // Sheet 4: Product Lines (line level) + Brand Type column
+            $this->writeProductLinesSheet($spreadsheet, $productRows);
 
-        // Sheet 9: Summary dashboard
-        $this->writeSummarySheet($spreadsheet, $productRows, $reasonRows, $dateFrom, $dateTo);
+            // Sheets 5 & 6: Brand split
+            $this->writeBrandSplitSheets($spreadsheet, $productRows);
 
-        // Sheet 10: Instructions
-        $this->writeInstructionsSheet($spreadsheet);
+            // Sheet 7: Lost Sales Analysis (SKU-grouped)
+            $this->writeLostSalesSheet($spreadsheet, $productRows);
 
-        $spreadsheet->setActiveSheetIndex(0);
+            // Sheets 8-10: Contribution summaries (unchanged)
+            $this->writeContributionSheet($spreadsheet, 'Reason Summary', $reasonRows, [
+                'reason' => 'Reason',
+                'line_count' => 'Line Count',
+                'undershipped_value' => 'Undershipped Value',
+                'contribution_pct' => 'Contribution %',
+            ]);
+            $this->writeContributionSheet($spreadsheet, 'Customer Summary', $customerRows, [
+                'customer_id' => 'Customer ID',
+                'customer_name' => 'Customer Name',
+                'order_count' => 'Order Count',
+                'undershipped_value' => 'Undershipped Value',
+                'contribution_pct' => 'Contribution %',
+            ]);
+            $this->writeContributionSheet($spreadsheet, 'Product Summary', $productSummaryRows, [
+                'inventory_id' => 'Inventory ID',
+                'product_name' => 'Product Name',
+                'line_count' => 'Line Count',
+                'undershipped_value' => 'Undershipped Value',
+                'contribution_pct' => 'Contribution %',
+            ]);
 
-        $filename = 'fill-rate-export-' . now()->format('Ymd-Hi') . '.xlsx';
+            // Sheet 11: SOs Not Fully Delivered (incomplete orders)
+            $this->writeSosNotFullyDeliveredSheet($spreadsheet, $fillRateRows, $productRows);
 
-        return response()->streamDownload(function () use ($spreadsheet) {
-            $writer = new Xlsx($spreadsheet);
-            $writer->save('php://output');
-            $spreadsheet->disconnectWorksheets();
-        }, $filename, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ]);
+            // Sheet 12: Missing Price Values (items with missing unit price flagged)
+            $this->writeMissingPriceSheet($spreadsheet, $productRows);
+
+            // Sheet 13: Reason Capture Report (validation + breakdown by business category)
+            if ($reasonCaptureReport !== []) {
+                $this->writeReasonCaptureSheet($spreadsheet, $reasonCaptureReport, $dateFrom, $dateTo);
+            }
+
+            $spreadsheet->setActiveSheetIndex(0);
+
+            $filename = 'fill-rate-export-' . now()->format('Ymd-Hi') . '.xlsx';
+
+            return response()->streamDownload(function () use ($spreadsheet) {
+                $writer = new Xlsx($spreadsheet);
+                $writer->save('php://output');
+                $spreadsheet->disconnectWorksheets();
+            }, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]);
+        } catch (Throwable $e) {
+            // Ensure worksheets are cleaned up even on failure to prevent
+            // memory leaks, and rethrow so the framework can surface the error.
+            if (isset($spreadsheet)) {
+                $spreadsheet->disconnectWorksheets();
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Raise the PHP memory limit to a safe ceiling for spreadsheet generation.
+     * Large exports (tens of thousands of SO records) can exceed the default
+     * limit, which would truncate the output stream and produce a corrupt file.
+     */
+    private function raiseMemoryLimit(): void
+    {
+        $target = '512M';
+        $current = ini_get('memory_limit');
+
+        if ($current === false || $current === '-1') {
+            return; // unlimited already
+        }
+
+        // Convert current to bytes and compare against target (512 MB).
+        $currentBytes = $this->toBytes($current);
+        $targetBytes = $this->toBytes($target);
+
+        if ($currentBytes < $targetBytes) {
+            @ini_set('memory_limit', $target);
+        }
+    }
+
+    private function toBytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return 0;
+        }
+
+        $unit = strtolower($value[strlen($value) - 1]);
+        $number = (int) $value;
+
+        return match ($unit) {
+            'g' => $number * 1024 * 1024 * 1024,
+            'm' => $number * 1024 * 1024,
+            'k' => $number * 1024,
+            default => (int) $value,
+        };
     }
 
     // ---------------------------------------------------------------------------
@@ -196,7 +254,7 @@ class FillRateExcelExporter
         $this->writeSheet($ss, 'Product Lines', $headers, $enriched);
     }
 
-    /** Sheets 3 & 4 – Manufactured vs Partner Brand split */
+    /** Sheets 5 & 6 – Manufactured vs Trading (Partners) split */
     private function writeBrandSplitSheets(Spreadsheet $ss, array $rows): void
     {
         $headers = [
@@ -207,20 +265,20 @@ class FillRateExcelExporter
         ];
 
         $manufactured = [];
-        $partner = [];
+        $trading = [];
 
         foreach ($rows as $row) {
             $invId = (string) ($row[2] ?? '');
-            $brand = $this->classifyBrand($invId);
-            if ($brand === 'Manufactured') {
+            $category = $this->businessCategory->classify($invId);
+            if ($category === FillRateBusinessCategory::MANUFACTURED) {
                 $manufactured[] = $row;
             } else {
-                $partner[] = $row;
+                $trading[] = $row;
             }
         }
 
         $this->writeSheet($ss, 'Manufactured Lines', $headers, $manufactured);
-        $this->writeSheet($ss, 'Partner Brand Lines', $headers, $partner);
+        $this->writeSheet($ss, 'Trading (Partners) Lines', $headers, $trading);
     }
 
     /**
@@ -299,7 +357,7 @@ class FillRateExcelExporter
         foreach ($bySkuRows as $invId => $skuRowList) {
             foreach ($skuRowList as $r) {
                 $val = (float) ($r[14] ?? 0);
-                if ($this->classifyBrand($invId) === 'Manufactured') {
+                if ($this->businessCategory->classify($invId) === FillRateBusinessCategory::MANUFACTURED) {
                     $mfgTotal += $val;
                 } else {
                     $partnerTotal += $val;
@@ -309,7 +367,7 @@ class FillRateExcelExporter
 
         $sheet->mergeCells("A2:{$lastCol}2");
         $sheet->setCellValue('A2', sprintf(
-            'Manufactured (Kim-Fay): KES %s     |     Partner Brands: KES %s',
+            'Manufactured: KES %s     |     Trading (Partners): KES %s',
             number_format($mfgTotal, 2),
             number_format($partnerTotal, 2),
         ));
@@ -328,7 +386,9 @@ class FillRateExcelExporter
 
             // ── SKU header ───────────────────────────────────────────────────
             $sheet->mergeCells("A{$currentRow}:{$lastCol}{$currentRow}");
-            $headerBg = $brand === 'Manufactured' ? 'FF0F4C81' : 'FF6B3A7D';
+            $headerBg = $this->businessCategory->classify($invId) === FillRateBusinessCategory::MANUFACTURED
+                ? 'FF0F4C81'
+                : 'FF6B3A7D';
             $sheet->setCellValue("A{$currentRow}", "  {$invId}  —  {$skuName}  [{$brand}]   Total: KES " . number_format($skuLostTotal, 2));
             $sheet->getStyle("A{$currentRow}:{$lastCol}{$currentRow}")->applyFromArray([
                 'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
@@ -413,15 +473,249 @@ class FillRateExcelExporter
         $sheet->freezePane('A4');
     }
 
-    /** Sheet 9 – Summary dashboard */
+    /**
+     * Sheet 9 – SOs Not Fully Delivered.
+     *
+     * Lists every sales order whose fill rate is below 100% (incomplete
+     * delivery), together with ordered qty, shipped qty, unfilled qty and
+     * the monetary value of the shortfall.
+     *
+     * fillRateRows layout (0-indexed):
+     *   0 Order | 1 Customer ID | 2 Customer Name | 3 Status | 4 Order Date |
+     *   5 Ordered Qty | 6 Shipped Qty | 7 Fill Rate % | 8 Fill Rate Status |
+     *   9 Revenue Not Shipped | …
+     */
+    private function writeSosNotFullyDeliveredSheet(
+        Spreadsheet $ss,
+        array $fillRateRows,
+        array $productRows,
+    ): void {
+        $sheet = $ss->createSheet();
+        $sheet->setTitle('SOs Not Fully Delivered');
+
+        // Aggregate line-level unfilled quantities per order from productRows.
+        // productRows: 0 Order | … | 5 Order Qty | 7 Qty On Shipments | 14 Not Shipped Value
+        $unfilledQtyByOrder = [];
+        foreach ($productRows as $row) {
+            $orderNbr = (string) ($row[0] ?? '');
+            if ($orderNbr === '') {
+                continue;
+            }
+            $demandQty = (float) ($row[5] ?? 0);
+            $qtyOnShipments = (float) ($row[7] ?? 0);
+            $unfilledQtyByOrder[$orderNbr]
+                = ($unfilledQtyByOrder[$orderNbr] ?? 0) + max($demandQty - $qtyOnShipments, 0);
+        }
+
+        // Filter to orders that are not fully delivered (fill rate < 100 or
+        // revenue not shipped > 0). Skip NA rows.
+        $incompleteRows = [];
+        foreach ($fillRateRows as $row) {
+            $fillRatePct = $row[7] ?? null;
+            $fillRateStatus = (string) ($row[8] ?? '');
+            $revenueNotShipped = (float) ($row[9] ?? 0);
+
+            if ($fillRateStatus === 'na') {
+                continue;
+            }
+            if ($fillRatePct !== null && (float) $fillRatePct >= 100.0 && $revenueNotShipped <= 0) {
+                continue;
+            }
+
+            $orderNbr = (string) ($row[0] ?? '');
+            $incompleteRows[] = [
+                $orderNbr,
+                $row[1] ?? '',        // Customer ID
+                $row[2] ?? '',        // Customer Name
+                $row[3] ?? '',        // Status
+                $row[4] ?? '',        // Order Date
+                (float) ($row[5] ?? 0), // Ordered Qty
+                (float) ($row[6] ?? 0), // Shipped Qty
+                $unfilledQtyByOrder[$orderNbr] ?? 0, // Unfilled Qty
+                $fillRatePct !== null ? (float) $fillRatePct : null, // Fill Rate %
+                $revenueNotShipped,   // Value Shortfall (KES)
+            ];
+        }
+
+        // Sort by value shortfall descending so the worst offenders are on top.
+        usort($incompleteRows, fn ($a, $b) => $b[9] <=> $a[9]);
+
+        $headers = [
+            'Order', 'Customer ID', 'Customer Name', 'Status', 'Order Date',
+            'Ordered Qty', 'Shipped Qty', 'Unfilled Qty', 'Fill Rate %', 'Value Shortfall (KES)',
+        ];
+
+        $sheet->fromArray($headers, null, 'A1');
+        $sheet->getStyle('A1:' . $sheet->getHighestColumn() . '1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:' . $sheet->getHighestColumn() . '1')->getFill()
+            ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE5E7EB');
+
+        $summaryRow = 2;
+
+        if ($incompleteRows !== []) {
+            $sheet->fromArray($incompleteRows, null, 'A2');
+            $summaryRow = count($incompleteRows) + 2;
+        }
+
+        // Grand total row
+        $totalOrdered = array_sum(array_column($incompleteRows, 5));
+        $totalShipped = array_sum(array_column($incompleteRows, 6));
+        $totalUnfilled = array_sum(array_column($incompleteRows, 7));
+        $totalValue = array_sum(array_column($incompleteRows, 9));
+
+        if ($incompleteRows !== []) {
+            $sheet->setCellValue("A{$summaryRow}", 'GRAND TOTAL (' . count($incompleteRows) . ' orders)');
+        } else {
+            $sheet->setCellValue("A{$summaryRow}", 'All sales orders fully delivered for this period.');
+        }
+
+        $sheet->setCellValue("F{$summaryRow}", round($totalOrdered, 4));
+        $sheet->setCellValue("G{$summaryRow}", round($totalShipped, 4));
+        $sheet->setCellValue("H{$summaryRow}", round($totalUnfilled, 4));
+        $sheet->setCellValue("J{$summaryRow}", round($totalValue, 2));
+
+        $sheet->getStyle("A{$summaryRow}:J{$summaryRow}")->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1E3A5F']],
+        ]);
+        $sheet->getStyle("J{$summaryRow}")->getNumberFormat()
+            ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2);
+
+        // Format currency column for data rows
+        if ($incompleteRows !== []) {
+            $dataEnd = $summaryRow - 1;
+            $sheet->getStyle("J2:J{$dataEnd}")->getNumberFormat()
+                ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2);
+        }
+
+        foreach (range('A', 'J') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        $sheet->freezePane('A2');
+        $sheet->setAutoFilter($sheet->calculateWorksheetDimension());
+    }
+
+    /**
+     * Sheet 10 – Missing Price Values.
+     *
+     * Flags every product line whose unit price is missing or zero. Lines
+     * without a price cannot contribute to revenue-loss calculations, so they
+     * are surfaced here as a data-quality issue that distorts fill-rate
+     * financial analysis.
+     *
+     * productRows: 0 Order | 1 Customer ID | 2 Inventory ID | 3 Product Name |
+     *              10 Unit Price | 5 Order Qty | 7 Qty On Shipments | 12 Reason Code
+     */
+    private function writeMissingPriceSheet(Spreadsheet $ss, array $productRows): void
+    {
+        $sheet = $ss->createSheet();
+        $sheet->setTitle('Missing Price Values');
+
+        $missingRows = [];
+        foreach ($productRows as $row) {
+            $unitPrice = (float) ($row[10] ?? 0);
+            if ($unitPrice > 0) {
+                continue;
+            }
+
+            $orderQty = (float) ($row[5] ?? 0);
+            $qtyOnShipments = (float) ($row[7] ?? 0);
+            $unfilledQty = max($orderQty - $qtyOnShipments, 0);
+
+            $missingRows[] = [
+                $row[0] ?? '',  // Order
+                $row[1] ?? '',  // Customer ID
+                $row[2] ?? '',  // Inventory ID
+                $row[3] ?? '',  // Product Name
+                $orderQty,
+                $qtyOnShipments,
+                $unfilledQty,
+                $row[12] ?? '', // Unfilled Reason Code
+                'MISSING PRICE', // Flag
+            ];
+        }
+
+        $headers = [
+            'Order', 'Customer ID', 'Inventory ID', 'Product Name',
+            'Order Qty', 'Shipped Qty', 'Unfilled Qty',
+            'Unfilled Reason Code', 'Flag',
+        ];
+
+        $sheet->fromArray($headers, null, 'A1');
+        $lastCol = $sheet->getHighestColumn();
+        $sheet->getStyle("A1:{$lastCol}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastCol}1")->getFill()
+            ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE5E7EB');
+
+        $r = 2;
+
+        if ($missingRows === []) {
+            $sheet->mergeCells("A2:I2");
+            $sheet->setCellValue('A2', 'No lines with missing price values found. All products have unit prices assigned.');
+            $sheet->getStyle('A2')->getFont()->setItalic(true);
+        } else {
+            $sheet->fromArray($missingRows, null, 'A2');
+            $r = count($missingRows) + 2;
+
+            // Highlight the Flag column in red for every data row
+            $dataEnd = $r - 1;
+            $sheet->getStyle("I2:I{$dataEnd}")->applyFromArray([
+                'font' => ['bold' => true, 'color' => ['argb' => 'FFFF0000']],
+            ]);
+
+            // Conditional formatting on Unfilled Qty > 0 to emphasise items
+            // that are both missing price AND undershipped.
+            $cf = new Conditional();
+            $cf->setConditionType(Conditional::CONDITION_CELLIS);
+            $cf->setOperatorType(Conditional::OPERATOR_GREATERTHAN);
+            $cf->addCondition('0');
+            $cf->getStyle()->getFill()
+                ->setFillType(Fill::FILL_SOLID)
+                ->getStartColor()->setARGB('FFFFC7CE');
+            $sheet->getStyle("G2:G{$dataEnd}")->setConditionalStyles([$cf]);
+        }
+
+        // Summary KPI row
+        $totalLinesMissing = count($missingRows);
+        $totalUnfilledQty = array_sum(array_column($missingRows, 6));
+
+        $sheet->setCellValue("A{$r}", 'Summary');
+        $sheet->getStyle("A{$r}")->getFont()->setBold(true);
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Lines with Missing Price');
+        $sheet->setCellValue("B{$r}", $totalLinesMissing);
+        $sheet->getStyle("A{$r}")->getFont()->setBold(true);
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Total Unfilled Qty (Missing Price Lines)');
+        $sheet->setCellValue("B{$r}", round($totalUnfilledQty, 4));
+        $sheet->getStyle("A{$r}")->getFont()->setBold(true);
+
+        foreach (range('A', 'I') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        $sheet->freezePane('A2');
+    }
+
+    /** Sheet 2 – Summary dashboard */
     private function writeSummarySheet(
         Spreadsheet $ss,
         array $productRows,
         array $reasonRows,
         string $dateFrom,
         string $dateTo,
+        array $fillRateRows = [],
+        array $segmentRows = [],
+        array $segmentReasonRows = [],
+        array $businessCategoryRows = [],
+        array $reasonCaptureReport = [],
     ): void {
-        $sheet = $ss->createSheet();
+        // Reuse the blank default sheet (index 0) if this is the first sheet
+        // being written, otherwise create a new one.
+        $sheet = $ss->getSheetCount() === 1
+            && $ss->getActiveSheet()->getHighestRow() === 1
+            && $ss->getActiveSheet()->getCell('A1')->getValue() === null
+            ? $ss->getActiveSheet()
+            : $ss->createSheet();
         $sheet->setTitle('Summary');
 
         // Compute totals from productRows
@@ -430,21 +724,50 @@ class FillRateExcelExporter
         $bySkuName    = [];
         $mfgTotal     = 0;
         $partnerTotal = 0;
+        $missingPriceLineCount = 0;
 
         foreach ($productRows as $row) {
-            $lostVal = (float) ($row[14] ?? 0);
+            $invId    = (string) ($row[2] ?? '');
+            $brand    = $this->classifyBrand($invId);
+            $unitPrice = (float) ($row[10] ?? 0);
+            $lostVal   = (float) ($row[14] ?? 0);
+
+            // Track lines with missing/zero price regardless of whether they
+            // have a lost-sales value — this is a data-quality metric.
+            if ($unitPrice <= 0) {
+                $missingPriceLineCount++;
+            }
+
             if ($lostVal <= 0) {
                 continue;
             }
-            $invId   = (string) ($row[2] ?? '');
-            $brand   = $this->classifyBrand($invId);
             $grandTotal += $lostVal;
             $bySkuTotal[$invId]  = ($bySkuTotal[$invId] ?? 0) + $lostVal;
             $bySkuName[$invId]   = (string) ($row[3] ?? $invId);
-            if ($brand === 'Manufactured') {
+            if ($this->businessCategory->classify($invId) === FillRateBusinessCategory::MANUFACTURED) {
                 $mfgTotal += $lostVal;
             } else {
                 $partnerTotal += $lostVal;
+            }
+        }
+
+        // Compute SO shortfall metrics from fillRateRows.
+        // fillRateRows: 0 Order | 7 Fill Rate % | 8 Fill Rate Status | 9 Revenue Not Shipped
+        $totalOrders        = count($fillRateRows);
+        $incompleteOrders   = 0;
+        $totalRevenueShort  = 0.0;
+
+        foreach ($fillRateRows as $row) {
+            $fillRateStatus = (string) ($row[8] ?? '');
+            if ($fillRateStatus === 'na') {
+                continue;
+            }
+            $fillRatePct       = $row[7] ?? null;
+            $revenueNotShipped = (float) ($row[9] ?? 0);
+
+            if ($fillRatePct === null || (float) $fillRatePct < 100.0 || $revenueNotShipped > 0) {
+                $incompleteOrders++;
+                $totalRevenueShort += $revenueNotShipped;
             }
         }
 
@@ -469,10 +792,17 @@ class FillRateExcelExporter
         $r += 2;
 
         // KPI tiles
+        $shortfallPct = $totalOrders > 0
+            ? round(($incompleteOrders / $totalOrders) * 100, 1) . '%'
+            : '0%';
+
         foreach ([
             ['Total Lost Sales (KES)', 'KES ' . number_format($grandTotal, 2), 'FFDC2626'],
-            ['Manufactured Brands', 'KES ' . number_format($mfgTotal, 2), 'FF0F4C81'],
-            ['Partner Brands', 'KES ' . number_format($partnerTotal, 2), 'FF6B3A7D'],
+            ['Manufactured Goods', 'KES ' . number_format($mfgTotal, 2), 'FF0F4C81'],
+            ['Trading (Partners) Goods', 'KES ' . number_format($partnerTotal, 2), 'FF6B3A7D'],
+            ['SOs Not Fully Delivered', "{$incompleteOrders} / {$totalOrders} ({$shortfallPct})", 'FFB91C1C'],
+            ['Revenue Shortfall (KES)', 'KES ' . number_format($totalRevenueShort, 2), 'FFE11D48'],
+            ['Lines w/ Missing Price', (string) $missingPriceLineCount, 'FFF59E0B'],
             ['SKUs Affected', (string) count($bySkuTotal), 'FF0369A1'],
         ] as [$label, $val, $color]) {
             $sheet->setCellValue("A{$r}", $label);
@@ -485,6 +815,108 @@ class FillRateExcelExporter
         }
 
         $r++;
+
+        // -------------------------------------------------------------------
+        // Manufactured vs Trading (Partners) business category split
+        // -------------------------------------------------------------------
+        if ($businessCategoryRows !== []) {
+            $sheet->mergeCells("A{$r}:D{$r}");
+            $sheet->setCellValue("A{$r}", 'Manufactured vs Trading (Partners) — Business Category Split');
+            $sheet->getStyle("A{$r}")->applyFromArray([
+                'font' => ['bold' => true, 'size' => 12],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE5E7EB']],
+            ]);
+            $r++;
+
+            $catHeaders = ['Category', 'Fill Rate %', 'Lines', 'Undershipped Value (KES)'];
+            foreach (range('A', 'D') as $idx => $col) {
+                $sheet->setCellValue("{$col}{$r}", $catHeaders[$idx]);
+            }
+            $sheet->getStyle("A{$r}:D{$r}")->getFont()->setBold(true);
+            $sheet->getStyle("A{$r}:D{$r}")->getFill()
+                ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE5E7EB');
+            $r++;
+
+            foreach ($businessCategoryRows as $cat) {
+                $fillPct = $cat['fill_rate_pct'] !== null
+                    ? round((float) $cat['fill_rate_pct'], 1) . '%'
+                    : 'N/A';
+                $sheet->setCellValue("A{$r}", $cat['label'] ?? $cat['business_category'] ?? '');
+                $sheet->setCellValue("B{$r}", $fillPct);
+                $sheet->setCellValue("C{$r}", $cat['line_count'] ?? 0);
+                $sheet->setCellValue("D{$r}", $cat['undershipped_value'] ?? 0);
+                $sheet->getStyle("D{$r}")->getNumberFormat()
+                    ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2);
+                $r++;
+            }
+
+            $r++;
+        }
+
+        // Reason capture summary KPIs
+        if (($reasonCaptureReport['summary'] ?? []) !== []) {
+            $summary = $reasonCaptureReport['summary'];
+            $sheet->mergeCells("A{$r}:D{$r}");
+            $sheet->setCellValue("A{$r}", 'Root Cause Capture Status');
+            $sheet->getStyle("A{$r}")->applyFromArray([
+                'font' => ['bold' => true, 'size' => 12],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE5E7EB']],
+            ]);
+            $r++;
+
+            foreach ([
+                ['Shortfall Lines', (string) ($summary['total_shortfall_lines'] ?? 0)],
+                ['Valid Reasons', (string) ($summary['valid_reason_lines'] ?? 0)],
+                ['Missing Reasons', (string) ($summary['missing_reason_lines'] ?? 0)],
+                ['Unclassified Reasons', (string) ($summary['unclassified_reason_lines'] ?? 0)],
+                ['Capture Rate', isset($summary['capture_rate_pct']) ? $summary['capture_rate_pct'] . '%' : 'N/A'],
+            ] as [$label, $val]) {
+                $sheet->setCellValue("A{$r}", $label);
+                $sheet->setCellValue("B{$r}", $val);
+                $sheet->getStyle("A{$r}")->getFont()->setBold(true);
+                $r++;
+            }
+
+            $r++;
+        }
+
+        // -------------------------------------------------------------------
+        // KP (Kimfay Professional) vs CS (Consumer Sales) sector split
+        // -------------------------------------------------------------------
+        if ($segmentRows !== []) {
+            $sheet->mergeCells("A{$r}:D{$r}");
+            $sheet->setCellValue("A{$r}", 'KP (Kimfay Professional) vs CS (Consumer Sales) Sector Split');
+            $sheet->getStyle("A{$r}")->applyFromArray([
+                'font' => ['bold' => true, 'size' => 12],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE5E7EB']],
+            ]);
+            $r++;
+
+            $segHeaders = ['Segment', 'Fill Rate %', 'Orders', 'Revenue Not Shipped (KES)'];
+            foreach (range('A', 'D') as $idx => $col) {
+                $sheet->setCellValue("{$col}{$r}", $segHeaders[$idx]);
+            }
+            $sheet->getStyle("A{$r}:D{$r}")->getFont()->setBold(true);
+            $sheet->getStyle("A{$r}:D{$r}")->getFill()
+                ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE5E7EB');
+            $r++;
+
+            foreach ($segmentRows as $seg) {
+                $label = $seg['label'] ?? $seg['segment'] ?? '';
+                $fillPct = $seg['fill_rate_pct'] !== null
+                    ? round((float) $seg['fill_rate_pct'], 1) . '%'
+                    : 'N/A';
+                $sheet->setCellValue("A{$r}", $label);
+                $sheet->setCellValue("B{$r}", $fillPct);
+                $sheet->setCellValue("C{$r}", $seg['order_count'] ?? 0);
+                $sheet->setCellValue("D{$r}", $seg['revenue_not_shipped'] ?? 0);
+                $sheet->getStyle("D{$r}")->getNumberFormat()
+                    ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2);
+                $r++;
+            }
+
+            $r++;
+        }
 
         // Top 5 SKUs
         $sheet->setCellValue("A{$r}", 'Top 5 SKUs by Lost Sales Value');
@@ -546,60 +978,132 @@ class FillRateExcelExporter
             $r++;
         }
 
+        // -------------------------------------------------------------------
+        // Root Cause Breakdown by KP/CS Segment
+        // -------------------------------------------------------------------
+        if ($segmentReasonRows !== []) {
+            $r++;
+
+            $sheet->mergeCells("A{$r}:D{$r}");
+            $sheet->setCellValue("A{$r}", 'Root Cause Breakdown by KP/CS Segment');
+            $sheet->getStyle("A{$r}")->applyFromArray([
+                'font' => ['bold' => true, 'size' => 12],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE5E7EB']],
+            ]);
+            $r++;
+
+            $srHeaders = ['Segment', 'Root Cause', 'Undershipped Value (KES)', 'Contribution %'];
+            foreach (range('A', 'D') as $idx => $col) {
+                $sheet->setCellValue("{$col}{$r}", $srHeaders[$idx]);
+            }
+            $sheet->getStyle("A{$r}:D{$r}")->getFont()->setBold(true);
+            $sheet->getStyle("A{$r}:D{$r}")->getFill()
+                ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE5E7EB');
+            $r++;
+
+            foreach ($segmentReasonRows as $srr) {
+                $segLabel = ($srr['segment'] ?? '') === 'KP'
+                    ? 'KP (Kimfay Professional)'
+                    : 'CS (Consumer Sales)';
+                $sheet->setCellValue("A{$r}", $segLabel);
+                $sheet->setCellValue("B{$r}", $srr['reason'] ?? '');
+                $sheet->setCellValue("C{$r}", $srr['undershipped_value'] ?? 0);
+                $sheet->setCellValue("D{$r}", isset($srr['contribution_pct']) ? round((float) $srr['contribution_pct'], 1) . '%' : '');
+                $sheet->getStyle("C{$r}")->getNumberFormat()
+                    ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2);
+                $r++;
+            }
+        }
+
         foreach (['A', 'B', 'C', 'D'] as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
     }
 
-    /** Sheet 10 – Instructions */
+    /** Sheet 1 – Instructions */
     private function writeInstructionsSheet(Spreadsheet $ss): void
     {
-        $sheet = $ss->createSheet();
+        // Reuse the blank default sheet (index 0) if this is the first sheet
+        // being written, otherwise create a new one.
+        $sheet = $ss->getSheetCount() === 1
+            && $ss->getActiveSheet()->getHighestRow() === 1
+            && $ss->getActiveSheet()->getCell('A1')->getValue() === null
+            ? $ss->getActiveSheet()
+            : $ss->createSheet();
+
         $sheet->setTitle('Instructions');
 
         $lines = [
             ['Fill Rate Export — How to Use This File', 'title'],
             ['', ''],
-            ['This workbook contains 10 sheets. Here is a guide to each:', 'heading'],
+            ['This workbook contains 12 sheets. Here is a guide to each:', 'heading'],
             ['', ''],
-            ['1. Fill Rate', 'bold'],
+            ['1. Instructions (this sheet)', 'bold'],
+            ['   Guide to every sheet in this workbook, plus brand and KP/CS classification rules.', ''],
+            ['', ''],
+            ['2. Summary', 'bold'],
+            ['   Executive dashboard: grand total, business category split (Manufactured vs Trading Partners),', ''],
+            ['   KP (Kimfay Professional)/CS sector split, root cause capture status,', ''],
+            ['   root cause frequency distribution,', ''],
+            ['   root cause breakdown mapped to KP/CS segments, top 5 SKUs by lost sales,', ''],
+            ['   SOs Not Fully Delivered count and percentage, Revenue Shortfall,', ''],
+            ['   and Lines with Missing Price count.', ''],
+            ['', ''],
+            ['3. Fill Rate', 'bold'],
             ['   Order-level fill rate data for the selected period. Each row represents one sales order.', ''],
             ['   Key columns: Fill Rate %, Fill Rate Status, Revenue Not Shipped.', ''],
             ['', ''],
-            ['2. Product Lines', 'bold'],
+            ['4. Product Lines', 'bold'],
             ['   Line-level detail for every order. The last column (Brand Type) classifies each SKU', ''],
-            ['   as "Manufactured" (Kim-Fay own brand) or "Partner Brand" (third-party).', ''],
+            ['   as "Manufactured" or "Trading (Partners)" business categories.', ''],
             ['', ''],
-            ['3. Manufactured Lines', 'bold'],
+            ['5. Manufactured Lines', 'bold'],
             ['   Filtered view showing only Kim-Fay manufactured product lines.', ''],
             ['   Use this sheet to analyse fill rate performance for own brands.', ''],
             ['', ''],
-            ['4. Partner Brand Lines', 'bold'],
-            ['   Filtered view showing only third-party / partner brand lines.', ''],
-            ['   Use this sheet to compare partner brand performance.', ''],
+            ['6. Trading (Partners) Lines', 'bold'],
+            ['   Filtered view showing only Trading (Partners) goods lines.', ''],
+            ['   Use this sheet to compare trading partner performance.', ''],
             ['', ''],
-            ['5. Lost Sales Analysis', 'bold'],
+            ['7. Lost Sales Analysis', 'bold'],
             ['   SKU-by-SKU breakdown of lost sales. Each SKU has its own section with:', ''],
             ['   - Individual transaction rows (order, customer, qty, price, lost value, root cause)', ''],
             ['   - A subtotal row for that SKU', ''],
             ['   - Conditional formatting: cells shaded in gold = lost sales > KES 100,000', ''],
-            ['   Grand total and Manufactured vs Partner split are shown at the top.', ''],
+            ['   Grand total and Manufactured vs Trading (Partners) split are shown at the top.', ''],
             ['', ''],
-            ['6. Reason Summary', 'bold'],
+            ['8. Reason Summary', 'bold'],
             ['   Root cause contribution — how much of total undershipped value each reason accounts for.', ''],
             ['', ''],
-            ['7. Customer Summary', 'bold'],
+            ['9. Customer Summary', 'bold'],
             ['   Top customers by undershipped value.', ''],
             ['', ''],
-            ['8. Product Summary', 'bold'],
+            ['10. Product Summary', 'bold'],
             ['   Top SKUs by undershipped value across all orders.', ''],
             ['', ''],
-            ['9. Summary', 'bold'],
-            ['   Dashboard-style summary: grand total, brand split, top 5 SKUs, root cause distribution.', ''],
+            ['11. SOs Not Fully Delivered', 'bold'],
+            ['   Lists every sales order whose fill rate is below 100% (incomplete delivery).', ''],
+            ['   Columns: Ordered Qty, Shipped Qty, Unfilled Qty, Fill Rate %, Value Shortfall (KES).', ''],
+            ['   Sorted by Value Shortfall descending — worst offenders at the top.', ''],
+            ['   Grand total row at the bottom aggregates all quantities and value.', ''],
             ['', ''],
-            ['Brand Classification', 'heading'],
-            ['Manufactured (Kim-Fay own brands): FAY, SIF, COS, TIS, ULT, STD, SHO, ANT, URI, TOI, AIR, ALK, DIS', ''],
-            ['Partner Brands: DOV, REX, LUX, HUG, KOT, COW, APT, BIO, DAB, ORS, VAT, HOB, DUR, FEM, KLE, MIS, MSW, IKO, CON, BIG', ''],
+            ['12. Missing Price Values', 'bold'],
+            ['   Data-quality check: flags every product line whose unit price is missing or zero.', ''],
+            ['   Lines without a price cannot contribute to revenue-loss calculations.', ''],
+            ['   Conditional formatting highlights items that are both missing price AND undershipped.', ''],
+            ['   Summary KPIs at the bottom: count of affected lines and total unfilled quantity.', ''],
+            ['', ''],
+            ['Business Category Classification', 'heading'],
+            ['Manufactured goods (Kim-Fay own brands): FAY, SIF, COS, TIS, ULT, STD, SHO, ANT, URI, TOI, AIR, ALK, DIS', ''],
+            ['Trading (Partners) goods: DOV, REX, LUX, HUG, KOT, COW, APT, BIO, DAB, ORS, VAT, HOB, DUR, FEM, KLE, MIS, MSW, IKO, CON, BIG', ''],
+            ['', ''],
+            ['KP (Kimfay Professional) vs CS (Consumer Sales) Classification', 'heading'],
+            ['Every customer is classified into exactly one segment based on their customer class:', ''],
+            ['   KP (Kimfay Professional) — customer_class starts with "KP" (case-insensitive)', ''],
+            ['   CS (Consumer Sales)      — ALL other customer classes (no unclassified bucket)', ''],
+            ['The Summary sheet shows fill rate metrics per segment and per business category.', ''],
+            ['Root causes are broken down by parent reason, sub-reason, and business category.', ''],
+            ['Sheet 13 (Reason Capture Report) flags lines with missing or unclassified reasons.', ''],
             ['', ''],
             ['Tips', 'heading'],
             ['- Use the AutoFilter on any data sheet to slice by reason, customer, or date.', ''],
@@ -628,6 +1132,100 @@ class FillRateExcelExporter
         }
 
         $sheet->getColumnDimension('A')->setWidth(100);
+    }
+
+    /** Sheet 13 – Reason capture validation and structured breakdown. */
+    private function writeReasonCaptureSheet(
+        Spreadsheet $ss,
+        array $report,
+        string $dateFrom,
+        string $dateTo,
+    ): void {
+        $sheet = $ss->createSheet();
+        $sheet->setTitle('Reason Capture Report');
+
+        $r = 1;
+        $sheet->mergeCells("A{$r}:H{$r}");
+        $sheet->setCellValue("A{$r}", 'Root Cause Capture — Consolidated Report');
+        $sheet->getStyle("A{$r}")->applyFromArray([
+            'font' => ['bold' => true, 'size' => 14, 'color' => ['argb' => 'FFFFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1E3A5F']],
+        ]);
+        $r++;
+        $sheet->setCellValue("A{$r}", "Period: {$dateFrom} to {$dateTo}");
+        $r += 2;
+
+        $summary = $report['summary'] ?? [];
+        foreach ([
+            'Shortfall Lines' => $summary['total_shortfall_lines'] ?? 0,
+            'Shortfall Orders' => $summary['total_shortfall_orders'] ?? 0,
+            'Valid Reasons' => $summary['valid_reason_lines'] ?? 0,
+            'Missing Reasons' => $summary['missing_reason_lines'] ?? 0,
+            'Unclassified Reasons' => $summary['unclassified_reason_lines'] ?? 0,
+            'Capture Rate' => isset($summary['capture_rate_pct']) ? $summary['capture_rate_pct'] . '%' : 'N/A',
+        ] as $label => $value) {
+            $sheet->setCellValue("A{$r}", $label);
+            $sheet->setCellValue("B{$r}", $value);
+            $sheet->getStyle("A{$r}")->getFont()->setBold(true);
+            $r++;
+        }
+
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Breakdown by Business Category, Parent Reason & Sub-Reason');
+        $sheet->getStyle("A{$r}")->getFont()->setBold(true);
+        $sheet->mergeCells("A{$r}:H{$r}");
+        $r++;
+
+        $headers = [
+            'Business Category', 'Parent Reason', 'Sub-Reason', 'Line Count',
+            'Order Count', 'Undershipped Value (KES)',
+        ];
+        foreach (range('A', 'F') as $idx => $col) {
+            $sheet->setCellValue("{$col}{$r}", $headers[$idx]);
+        }
+        $sheet->getStyle("A{$r}:F{$r}")->getFont()->setBold(true);
+        $r++;
+
+        foreach ($report['breakdown'] ?? [] as $row) {
+            $sheet->setCellValue("A{$r}", $row['business_category'] ?? '');
+            $sheet->setCellValue("B{$r}", $row['parent_reason'] ?? '');
+            $sheet->setCellValue("C{$r}", $row['sub_reason_label'] ?? $row['sub_reason'] ?? '');
+            $sheet->setCellValue("D{$r}", $row['line_count'] ?? 0);
+            $sheet->setCellValue("E{$r}", $row['order_count'] ?? 0);
+            $sheet->setCellValue("F{$r}", $row['undershipped_value'] ?? 0);
+            $sheet->getStyle("F{$r}")->getNumberFormat()
+                ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2);
+            $r++;
+        }
+
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Flagged Records (Missing or Unclassified Reasons)');
+        $sheet->getStyle("A{$r}")->getFont()->setBold(true);
+        $sheet->mergeCells("A{$r}:H{$r}");
+        $r++;
+
+        $flagHeaders = ['Order', 'Inventory ID', 'Reason Code', 'Issue', 'Business Category', 'Undershipped Value (KES)'];
+        foreach (range('A', 'F') as $idx => $col) {
+            $sheet->setCellValue("{$col}{$r}", $flagHeaders[$idx]);
+        }
+        $sheet->getStyle("A{$r}:F{$r}")->getFont()->setBold(true);
+        $r++;
+
+        foreach ($report['flagged_records'] ?? [] as $flag) {
+            $sheet->setCellValue("A{$r}", $flag['order_nbr'] ?? '');
+            $sheet->setCellValue("B{$r}", $flag['inventory_id'] ?? '');
+            $sheet->setCellValue("C{$r}", $flag['reason_code'] ?? '—');
+            $sheet->setCellValue("D{$r}", $flag['issue'] ?? '');
+            $sheet->setCellValue("E{$r}", $flag['business_category'] ?? '');
+            $sheet->setCellValue("F{$r}", $flag['undershipped_value'] ?? 0);
+            $sheet->getStyle("F{$r}")->getNumberFormat()
+                ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2);
+            $r++;
+        }
+
+        foreach (range('A', 'F') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
     }
 
     // ---------------------------------------------------------------------------

@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaShippingZone;
-use App\Support\SalesConsultantScope;
+use App\Services\Operations\OperationsCatalogResolver;
+use App\Support\DataScope;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ class CustomerController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = SalesConsultantScope::applyCustomerScope(
+        $query = DataScope::applyCustomerScope(
             AcumaticaCustomer::query()->orderBy('name'),
             $request->user(),
         );
@@ -78,7 +79,7 @@ class CustomerController extends Controller
      */
     public function categories(Request $request): JsonResponse
     {
-        $rows = SalesConsultantScope::applyCustomerScope(
+        $rows = DataScope::applyCustomerScope(
             AcumaticaCustomer::query(),
             $request->user(),
         )
@@ -123,7 +124,7 @@ class CustomerController extends Controller
      */
     public function byCategory(Request $request, string $class): JsonResponse
     {
-        $customers = SalesConsultantScope::applyCustomerScope(
+        $customers = DataScope::applyCustomerScope(
             AcumaticaCustomer::query(),
             $request->user(),
         )
@@ -186,7 +187,7 @@ class CustomerController extends Controller
             ->orWhere('id', $id)
             ->firstOrFail();
 
-        if ($denied = SalesConsultantScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id)) {
+        if ($denied = DataScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id, $customer->customer_class)) {
             return $denied;
         }
 
@@ -241,6 +242,7 @@ class CustomerController extends Controller
         }
 
         usort($suggestions, fn ($a, $b) => $b['days_overdue'] <=> $a['days_overdue']);
+        $suggestions = $this->attachInventoryClassifications($suggestions);
 
         return response()->json([
             'customer_id' => $customer->acumatica_id,
@@ -255,7 +257,7 @@ class CustomerController extends Controller
             ->orWhere('id', $id)
             ->firstOrFail();
 
-        if ($denied = SalesConsultantScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id)) {
+        if ($denied = DataScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id, $customer->customer_class)) {
             return $denied;
         }
 
@@ -289,7 +291,7 @@ class CustomerController extends Controller
             ->orWhere('id', $id)
             ->firstOrFail();
 
-        if ($denied = SalesConsultantScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id)) {
+        if ($denied = DataScope::denyUnlessCustomerAccessible($request->user(), $customer->acumatica_id, $customer->customer_class)) {
             return $denied;
         }
 
@@ -317,12 +319,37 @@ class CustomerController extends Controller
         }
 
         usort($products, fn ($a, $b) => ($b['order_count'] <=> $a['order_count']) ?: ($b['total_qty'] <=> $a['total_qty']));
+        $products = $this->attachInventoryClassifications($products);
 
         return response()->json([
             'customer_id' => $customer->acumatica_id,
             'customer_name' => $customer->name,
             'products' => array_slice(array_values($products), 0, 10),
         ]);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function attachInventoryClassifications(array $rows): array
+    {
+        if ($rows === []) {
+            return $rows;
+        }
+
+        $resolver = app(OperationsCatalogResolver::class);
+        $classifications = $resolver->classificationsForInventoryIds(
+            array_values(array_filter(array_column($rows, 'inventory_id'))),
+        );
+
+        return array_map(function (array $row) use ($resolver, $classifications) {
+            foreach ($resolver->classificationFieldsFor($row['inventory_id'] ?? null, $classifications) as $field => $value) {
+                $row[$field] = $value;
+            }
+
+            return $row;
+        }, $rows);
     }
 
     public function store(Request $request): JsonResponse

@@ -1,7 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
-import { LogOut, RefreshCw, Loader2 } from "lucide-react";
+import { LogOut, RefreshCw, Loader2, UserCog } from "lucide-react";
 import { LogoImage } from "@/components/logo-image";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -15,11 +16,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth";
 import { canSyncMailboxes } from "@/lib/nav-permissions";
 import { useSyncAllMailboxes } from "@/hooks/mailbox/useMailbox";
+import { useStopImpersonation } from "@/hooks/admin/useImpersonation";
 
 export function AppHeader() {
-  const { session, logout } = useAuth();
+  const { session, logout, isImpersonating } = useAuth();
   const navigate  = useNavigate();
   const syncAll   = useSyncAllMailboxes();
+  const stopImpersonation = useStopImpersonation();
 
   const initials = (session?.name ?? "U")
     .split(" ")
@@ -38,6 +41,11 @@ export function AppHeader() {
       </div>
 
       <div className="ml-auto flex items-center gap-1">
+        {isImpersonating && (
+          <Badge variant="outline" className="hidden border-amber-500/50 text-amber-800 dark:text-amber-200 sm:inline-flex">
+            Impersonating
+          </Badge>
+        )}
         {canSyncMailboxes(session?.role) && (
           <Button
             variant="ghost"
@@ -56,7 +64,7 @@ export function AppHeader() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+              <div className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold text-primary-foreground ${isImpersonating ? "bg-amber-600" : "bg-primary"}`}>
                 {initials}
               </div>
               <div className="hidden text-left md:block">
@@ -69,11 +77,25 @@ export function AppHeader() {
             <DropdownMenuLabel>
               <div className="text-sm font-medium">{session?.name}</div>
               <div className="text-xs text-muted-foreground">{session?.email}</div>
+              {isImpersonating && session?.impersonator && (
+                <div className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">
+                  Real admin: {session.impersonator.name}
+                </div>
+              )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate({ to: "/app/profile" })}>Profile</DropdownMenuItem>
             {canSyncMailboxes(session?.role) && (
               <DropdownMenuItem onClick={() => navigate({ to: "/app/administration" })}>Administration</DropdownMenuItem>
+            )}
+            {isImpersonating && (
+              <DropdownMenuItem
+                disabled={stopImpersonation.isPending}
+                onClick={() => stopImpersonation.mutate()}
+              >
+                <UserCog className="mr-2 h-4 w-4" />
+                {stopImpersonation.isPending ? "Returning…" : "Return to admin"}
+              </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem

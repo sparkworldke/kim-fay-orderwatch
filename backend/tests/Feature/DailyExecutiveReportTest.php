@@ -325,11 +325,11 @@ class DailyExecutiveReportTest extends TestCase
         $this->assertStringContainsString('1. Order Exceptions', $html);
         $this->assertStringContainsString('2. Fill Rate', $html);
         $this->assertStringContainsString('3. Backorders', $html);
-        $this->assertStringContainsString('4. Nairobi', $html);
-        $this->assertStringContainsString('5. Revenue Split', $html);
-        $this->assertStringContainsString('Prior month (June 2026):', $html);
-        $this->assertStringContainsString('371 incomplete orders', $html);
-        $this->assertStringContainsString('not delivered after 24h', $html);
+        $this->assertStringContainsString('4. Revenue Split', $html);
+        $this->assertStringNotContainsString('Prior month (June 2026):', $html);
+        $this->assertStringNotContainsString('371 incomplete orders', $html);
+        $this->assertStringNotContainsString('not delivered after 24h', $html);
+        $this->assertStringNotContainsString('Nairobi &amp; Mombasa 24hr SLA', $html);
         $this->assertStringNotContainsString('Top 5 SKUs', $html);
         $this->assertStringNotContainsString('Top affected customers', $html);
         $this->assertStringContainsString('https://orderwatch.test/app', $html);

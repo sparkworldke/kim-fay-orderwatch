@@ -14,6 +14,7 @@ class InboxEmailGroupService
     private const GROUP_BY_DOMAIN = 'domain';
     private const GROUP_BY_CUSTOMER = 'customer';
 
+    /** Free / consumer domains always grouped by domain label (never by Outlook folder). */
     private const GENERIC_PROVIDER_DOMAINS = [
         'gmail.com',
         'googlemail.com',
@@ -22,6 +23,11 @@ class InboxEmailGroupService
         'live.com',
         'yahoo.com',
         'icloud.com',
+    ];
+
+    /** Canonical labels for aliases (e.g. googlemail → gmail). */
+    private const DOMAIN_ALIASES = [
+        'googlemail.com' => 'gmail.com',
     ];
 
     public function build(Request $request): array
@@ -212,7 +218,9 @@ class InboxEmailGroupService
             ];
         }
 
-        if (in_array($domain, self::GENERIC_PROVIDER_DOMAINS, true)) {
+        // Always cluster by sender domain (not Outlook folder). Generic providers
+        // (gmail.com, etc.) stay as pure domain groups with no customer mapping.
+        if (in_array($domain, self::GENERIC_PROVIDER_DOMAINS, true) || isset(self::DOMAIN_ALIASES[$domain])) {
             return [
                 'group_key' => 'domain-'.$domain,
                 'group_type' => self::GROUP_BY_DOMAIN,
@@ -229,8 +237,9 @@ class InboxEmailGroupService
             ?? $this->emailImportConfigLabel($email->emailImportConfig)
             ?? $domain;
 
+        // One group per domain (not per folder / not split by customer id).
         return [
-            'group_key' => $customer ? 'customer-domain-'.$customer->id.'-'.$domain : 'domain-'.$domain,
+            'group_key' => 'domain-'.$domain,
             'group_type' => self::GROUP_BY_DOMAIN,
             'group_label' => $label,
             'domain' => $domain,
@@ -257,7 +266,7 @@ class InboxEmailGroupService
             return null;
         }
 
-        return $domain;
+        return self::DOMAIN_ALIASES[$domain] ?? $domain;
     }
 
     private function emailImportConfigLabel(?EmailImportConfig $config): ?string

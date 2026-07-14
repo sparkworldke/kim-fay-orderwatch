@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { CustomerLink, OrderLink } from "@/components/entity-links";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -323,7 +324,7 @@ function CustomersTab({ isAdmin }: { isAdmin: boolean }) {
   const truncate                = useTruncate("customers");
 
   const { data, isLoading, isError, refetch, isFetching } = useCustomerImports({ dateFrom, dateTo, status, page, perPage });
-  const stats = data?.stats ?? { total: 0, successful: 0, failed: 0 };
+  const stats = data?.stats ?? { total: 0, successful: 0, failed: 0, so: 0, qt: 0, rc: 0, other: 0, in_scope_so: 0 };
 
   function handleClear() {
     if (!confirm("This will permanently delete ALL imported customer records. Continue?")) return;
@@ -597,10 +598,24 @@ function WorkflowTable({ items }: { items: Paginated<WorkflowOrder> }) {
         <tbody className="divide-y">
           {items.data.map((row) => (
             <tr key={row.id} className="hover:bg-muted/20 transition-colors">
-              <td className="px-4 py-3 font-mono text-xs font-semibold">{row.acumatica_order_nbr}</td>
+              <td className="px-4 py-3 font-mono text-xs font-semibold">
+                <OrderLink customerId={row.customer_acumatica_id} orderId={row.acumatica_order_nbr} />
+              </td>
               <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.order_type}</td>
-              <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.customer_acumatica_id ?? "—"}</td>
-              <td className="px-4 py-3 font-medium">{row.customer_name ?? <span className="text-muted-foreground">—</span>}</td>
+              <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                <CustomerLink customerId={row.customer_acumatica_id} className="font-mono text-xs">
+                  {row.customer_acumatica_id ?? "—"}
+                </CustomerLink>
+              </td>
+              <td className="px-4 py-3 font-medium">
+                <CustomerLink
+                  customerId={row.customer_acumatica_id}
+                  customerName={row.customer_name}
+                  className="block"
+                >
+                  {row.customer_name ?? <span className="text-muted-foreground">—</span>}
+                </CustomerLink>
+              </td>
               <td className="px-4 py-3"><WorkflowCell value={row.order_date} color="blue" isDate /></td>
               <td className="px-4 py-3"><WorkflowCell value={row.approved_at} color="amber" /></td>
               <td className="px-4 py-3"><WorkflowCell value={row.shipped_at} color="purple" /></td>
@@ -795,10 +810,24 @@ function OrdersTable({ items, status }: { items: Paginated<SuccessfulOrder>; sta
         <tbody className="divide-y">
           {(items.data as SuccessfulOrder[]).map((row) => (
             <tr key={row.id} className="hover:bg-muted/20 transition-colors">
-              <td className="px-4 py-2.5 font-mono text-xs font-medium">{row.acumatica_order_nbr}</td>
+              <td className="px-4 py-2.5 font-mono text-xs font-medium">
+                <OrderLink customerId={row.customer_acumatica_id} orderId={row.acumatica_order_nbr} />
+              </td>
               <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{row.order_type}</td>
-              <td className="px-4 py-2.5 font-medium">{row.customer_name ?? <span className="text-muted-foreground">—</span>}</td>
-              <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{row.customer_acumatica_id ?? "—"}</td>
+              <td className="px-4 py-2.5 font-medium">
+                <CustomerLink
+                  customerId={row.customer_acumatica_id}
+                  customerName={row.customer_name}
+                  className="block"
+                >
+                  {row.customer_name ?? <span className="text-muted-foreground">—</span>}
+                </CustomerLink>
+              </td>
+              <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                <CustomerLink customerId={row.customer_acumatica_id} className="font-mono text-xs">
+                  {row.customer_acumatica_id ?? "—"}
+                </CustomerLink>
+              </td>
               <td className="px-4 py-2.5"><StatusBadge status={row.status} /></td>
               <td className="px-4 py-2.5 text-xs text-muted-foreground">{fmtDate(row.order_date)}</td>
               <td className="px-4 py-2.5 text-xs tabular-nums">{fmtCurrency(row.order_total, row.currency_id)}</td>

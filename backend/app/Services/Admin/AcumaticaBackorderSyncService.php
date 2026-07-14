@@ -7,6 +7,7 @@ use App\Models\AcumaticaBackorderLine;
 use App\Models\AcumaticaDeadLetter;
 use App\Models\AcumaticaSyncLog;
 use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
+use App\Services\Operations\SalesOrderReasonCatalog;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -25,6 +26,7 @@ class AcumaticaBackorderSyncService
 
     public function __construct(
         private readonly AcumaticaClient $client,
+        private readonly SalesOrderReasonCatalog $reasonCatalog,
     ) {
     }
 
@@ -267,7 +269,7 @@ class AcumaticaBackorderSyncService
             'unit_price'      => $unitPrice,
             'revenue_at_risk' => $revenueAtRisk,
             'warehouse_id'    => $mapped['warehouse_id'],
-            'reason_code'     => $mapped['reason_code'],
+            'reason_code'     => $this->normalizeStoredReasonCode($mapped['reason_code']),
             'reason_notes'    => $mapped['reason_notes'],
         ]);
 
@@ -325,6 +327,25 @@ class AcumaticaBackorderSyncService
             $this->reasonValidationSummary['invalid_reason_codes']++;
             throw new \RuntimeException("Backorder reason code exceeds 80 characters for {$orderNbr}/{$inventoryId}");
         }
+
+        $classified = $this->reasonCatalog->classify(SalesOrderReasonCatalog::PARENT_BACKORDER, $reasonCode);
+        if ($classified['issue'] === SalesOrderReasonCatalog::ISSUE_UNCLASSIFIED) {
+            $this->reasonValidationSummary['invalid_reason_codes']++;
+            StructuredLogger::write('warning', 'acumatica', 'backorder_reason_code_unclassified', [
+                'order_nbr' => $orderNbr,
+                'inventory_id' => $inventoryId,
+                'reason_code' => $reasonCode,
+            ]);
+        }
+    }
+
+    private function normalizeStoredReasonCode(?string $raw): ?string
+    {
+        if ($raw === null || trim($raw) === '') {
+            return null;
+        }
+
+        return $this->reasonCatalog->resolveSubReason($raw) ?? trim($raw);
     }
 
     private function str(mixed $field): ?string

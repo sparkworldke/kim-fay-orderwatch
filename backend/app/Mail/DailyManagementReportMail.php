@@ -51,7 +51,6 @@ class DailyManagementReportMail extends Mailable
         $orders = $this->payload['orders'] ?? [];
         $fill = $this->payload['fill_rate'] ?? $this->payload['fill_rate_backorders'] ?? [];
         $backorders = $this->payload['backorders'] ?? [];
-        $sla = $this->payload['sla'] ?? [];
         $revenue = $this->payload['revenue_split'] ?? [];
 
         $reportLabel = e($this->payload['report_date_label'] ?? '');
@@ -88,18 +87,6 @@ class DailyManagementReportMail extends Mailable
             );
         }
 
-        $carryover = $orders['prior_month_carryover'] ?? [];
-        $carryoverHtml = '';
-        if (! empty($carryover['show'])) {
-            $carryoverHtml = sprintf(
-                '<p style="margin:12px 0 0;font-size:13px;color:#b45309;"><strong>Prior month (%s):</strong> %d incomplete orders &mdash; %d pending approval, %d in shipping</p>',
-                e($carryover['month_label'] ?? ''),
-                (int) ($carryover['total_incomplete'] ?? 0),
-                (int) ($carryover['pending_approval'] ?? 0),
-                (int) ($carryover['in_shipping'] ?? 0),
-            );
-        }
-
         $reasonRows = '';
         foreach ($backorders['top_reasons'] ?? $fill['top_reasons'] ?? [] as $reason) {
             $reasonRows .= sprintf(
@@ -110,22 +97,23 @@ class DailyManagementReportMail extends Mailable
             );
         }
 
-        $nairobi = $sla['nairobi'] ?? [];
-        $mombasa = $sla['mombasa'] ?? [];
-        $slaHtml = sprintf(
-            '<p style="margin:0 0 8px;font-size:13px;"><strong>Nairobi (24hr):</strong> %.1f%% not delivered after 24h (%d of %d orders, %d completed, KES %s at risk)</p>
-             <p style="margin:0;font-size:13px;"><strong>Mombasa (24hr):</strong> %.1f%% not delivered after 24h (%d of %d orders, %d completed, KES %s at risk)</p>',
-            (float) ($nairobi['delayed_pct'] ?? 0),
-            (int) ($nairobi['delayed_orders'] ?? 0),
-            (int) ($nairobi['total_orders'] ?? 0),
-            (int) ($nairobi['completed_orders'] ?? 0),
-            number_format((float) ($nairobi['delayed_value'] ?? 0), 0),
-            (float) ($mombasa['delayed_pct'] ?? 0),
-            (int) ($mombasa['delayed_orders'] ?? 0),
-            (int) ($mombasa['total_orders'] ?? 0),
-            (int) ($mombasa['completed_orders'] ?? 0),
-            number_format((float) ($mombasa['delayed_value'] ?? 0), 0),
-        );
+        // #4/ hide it for now - 4. Nairobi & Mombasa 24hr SLA — retained for future reactivation
+        // $nairobi = $sla['nairobi'] ?? [];
+        // $mombasa = $sla['mombasa'] ?? [];
+        // $slaHtml = sprintf(
+        //     '<p style="margin:0 0 8px;font-size:13px;"><strong>Nairobi (24hr):</strong> %.1f%% not delivered after 24h (%d of %d orders, %d completed, KES %s at risk)</p>
+        //      <p style="margin:0;font-size:13px;"><strong>Mombasa (24hr):</strong> %.1f%% not delivered after 24h (%d of %d orders, %d completed, KES %s at risk)</p>',
+        //     (float) ($nairobi['delayed_pct'] ?? 0),
+        //     (int) ($nairobi['delayed_orders'] ?? 0),
+        //     (int) ($nairobi['total_orders'] ?? 0),
+        //     (int) ($nairobi['completed_orders'] ?? 0),
+        //     number_format((float) ($nairobi['delayed_value'] ?? 0), 0),
+        //     (float) ($mombasa['delayed_pct'] ?? 0),
+        //     (int) ($mombasa['delayed_orders'] ?? 0),
+        //     (int) ($mombasa['total_orders'] ?? 0),
+        //     (int) ($mombasa['completed_orders'] ?? 0),
+        //     number_format((float) ($mombasa['delayed_value'] ?? 0), 0),
+        // );
 
         $revenueDate = e($revenue['date_label'] ?? $reportLabel);
         $unclassified = (float) ($revenue['unclassified'] ?? 0);
@@ -163,7 +151,6 @@ class DailyManagementReportMail extends Mailable
                     </tr>
                     {$dailyRows}
                 </table>
-                {$carryoverHtml}
             </td></tr>
 
             <tr><td style="padding:16px 32px 8px;">
@@ -185,13 +172,8 @@ class DailyManagementReportMail extends Mailable
                 <table width="100%" style="font-size:12px;border-collapse:collapse;">{$reasonRows}</table>
             </td></tr>
 
-            <tr><td style="padding:16px 32px 8px;">
-                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">4. Nairobi &amp; Mombasa 24hr SLA &mdash; {$reportLabel}</h2>
-                {$slaHtml}
-            </td></tr>
-
             <tr><td style="padding:16px 32px 24px;">
-                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">5. Revenue Split ({$revenueDate})</h2>
+                <h2 style="margin:0 0 8px;font-size:15px;color:#111827;">4. Revenue Split ({$revenueDate})</h2>
                 <table width="100%" style="font-size:13px;border-collapse:collapse;">
                     <tr><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">KP (customer class KP*)</td><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">KES {$this->formatKes($revenue['kp'] ?? 0)}</td></tr>
                     <tr><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">CS (Consumer Sales)</td><td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">KES {$this->formatKes($revenue['cs'] ?? 0)}</td></tr>

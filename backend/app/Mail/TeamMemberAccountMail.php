@@ -3,9 +3,11 @@
 namespace App\Mail;
 
 use App\Support\FrontendUrl;
+use Carbon\CarbonInterface;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Support\Carbon;
 
 class TeamMemberAccountMail extends Mailable
 {
@@ -15,16 +17,25 @@ class TeamMemberAccountMail extends Mailable
         private readonly string $role,
         private readonly string $invitedByName,
         private readonly string $otp,
+        private readonly string $suggestedPassword,
+        private readonly CarbonInterface|string|null $otpExpiresAt = null,
+        private readonly CarbonInterface|string|null $accountVerifiedAt = null,
+        private readonly CarbonInterface|string|null $credentialsIssuedAt = null,
+        private readonly bool $isResend = false,
     ) {}
 
     public function envelope(): Envelope
     {
+        $subject = $this->isResend
+            ? 'Your Kim-Fay OrderWatch sign-in details (updated)'
+            : 'Your Kim-Fay OrderWatch account is ready';
+
         return new Envelope(
             from: new \Illuminate\Mail\Mailables\Address(
                 config('mail.from.address'),
                 config('mail.from.name'),
             ),
-            subject: 'Your Kim-Fay OrderWatch account is ready',
+            subject: $subject,
         );
     }
 
@@ -45,8 +56,17 @@ class TeamMemberAccountMail extends Mailable
         $role = e($this->role);
         $invitedBy = e($this->invitedByName);
         $otp = e($this->otp);
+        $password = e($this->suggestedPassword);
         $appUrl = e(FrontendUrl::path('/app'));
         $authUrl = e(FrontendUrl::path('/auth'));
+
+        $issuedAt = $this->formatDateTime($this->credentialsIssuedAt ?? now());
+        $verifiedAt = $this->formatDateTime($this->accountVerifiedAt ?? now());
+        $otpExpiresAt = $this->formatDateTime($this->otpExpiresAt ?? now()->addMinutes(15));
+
+        $intro = $this->isResend
+            ? "{$invitedBy} has resent your OrderWatch sign-in details. Your previous temporary password and OTP no longer work — use the new credentials below."
+            : "{$invitedBy} has created your OrderWatch team account. You can now sign in to monitor orders, customer activity, and operational insights.";
 
         return <<<HTML
         <!DOCTYPE html>
@@ -74,26 +94,54 @@ class TeamMemberAccountMail extends Mailable
                                         Hi {$name},
                                     </p>
                                     <p style="margin:0 0 16px;font-size:16px;color:#374151;line-height:1.6;">
-                                        {$invitedBy} has created your OrderWatch team account. You can now sign in to monitor orders, customer activity, and operational insights.
+                                        {$intro}
                                     </p>
                                     <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
                                         <tr>
                                             <td style="padding:16px 20px;font-size:14px;color:#374151;line-height:1.7;">
                                                 <strong>Email:</strong> {$email}<br />
-                                                <strong>Role:</strong> {$role}
+                                                <strong>Role:</strong> {$role}<br />
+                                                <strong>Account verified:</strong> {$verifiedAt}<br />
+                                                <strong>Credentials issued:</strong> {$issuedAt}
                                             </td>
                                         </tr>
                                     </table>
                                     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-                                        You have two secure ways to access your account:
+                                        Use these secure options to access your account:
                                     </p>
+
+                                    <!-- Primary: password -->
+                                    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+                                        <tr>
+                                            <td style="padding:18px 20px;font-size:14px;color:#374151;line-height:1.7;">
+                                                <strong>Option 1 (recommended): Sign in with password</strong><br />
+                                                1. Open the sign-in page below.<br />
+                                                2. Keep the <strong>Password</strong> tab selected.<br />
+                                                3. Enter your email and this suggested temporary password:
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td align="center" style="padding:0 20px 10px;">
+                                                <span style="display:inline-block;background-color:#ecfdf5;border:2px solid #16a34a;border-radius:8px;padding:14px 24px;font-size:22px;font-weight:700;letter-spacing:2px;color:#14532d;font-family:'Courier New',Courier,monospace;">
+                                                    {$password}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:0 20px 18px;font-size:12px;color:#6b7280;line-height:1.6;text-align:center;">
+                                                Change this password after your first sign-in from <strong>Profile → Update Password</strong>.
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                    <!-- Secondary: OTP -->
                                     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
                                         <tr>
                                             <td style="padding:18px 20px;font-size:14px;color:#374151;line-height:1.7;">
-                                                <strong>Option 1: Sign in now with this one-time password</strong><br />
-                                                1. Open the sign-in page below.<br />
-                                                2. Choose <strong>Login via OTP</strong> and enter your email address.<br />
-                                                3. Enter this code when prompted. It expires in <strong>15 minutes</strong> and can be used only once.
+                                                <strong>Option 2: Sign in with one-time code (OTP)</strong><br />
+                                                1. Open the sign-in page and choose <strong>Login via OTP</strong>.<br />
+                                                2. Enter your email, then this verification code.<br />
+                                                3. Code expires at <strong>{$otpExpiresAt}</strong> (15 minutes) and can be used only once.
                                             </td>
                                         </tr>
                                         <tr>
@@ -104,16 +152,18 @@ class TeamMemberAccountMail extends Mailable
                                             </td>
                                         </tr>
                                     </table>
-                                    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;">
+
+                                    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
                                         <tr>
-                                            <td style="padding:18px 20px;font-size:14px;color:#374151;line-height:1.7;">
-                                                <strong>Option 2: Set up a permanent password</strong><br />
-                                                1. First sign in using the OTP above.<br />
-                                                2. Open <strong>Profile</strong> from your account menu.<br />
-                                                3. Select <strong>Update Password</strong>. OrderWatch will email a new verification code before allowing the password change.
+                                            <td style="padding:14px 18px;font-size:13px;color:#92400e;line-height:1.6;">
+                                                <strong>Verification dates</strong><br />
+                                                Account verified: {$verifiedAt}<br />
+                                                Credentials issued: {$issuedAt}<br />
+                                                OTP valid until: {$otpExpiresAt}
                                             </td>
                                         </tr>
                                     </table>
+
                                     <table width="100%" cellpadding="0" cellspacing="0">
                                         <tr>
                                             <td align="center" style="padding:8px 0 12px;">
@@ -149,5 +199,18 @@ class TeamMemberAccountMail extends Mailable
         </body>
         </html>
         HTML;
+    }
+
+    private function formatDateTime(CarbonInterface|string|null $value): string
+    {
+        if ($value === null) {
+            return '—';
+        }
+
+        $carbon = $value instanceof CarbonInterface
+            ? Carbon::instance($value)->timezone(config('app.timezone', 'Africa/Nairobi'))
+            : Carbon::parse($value)->timezone(config('app.timezone', 'Africa/Nairobi'));
+
+        return $carbon->format('d M Y, H:i').' EAT';
     }
 }

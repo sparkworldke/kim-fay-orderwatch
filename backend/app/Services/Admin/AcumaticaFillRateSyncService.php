@@ -9,8 +9,13 @@ use App\Models\AcumaticaSalesOrder;
 use App\Models\AcumaticaSalesOrderLine;
 use App\Models\AcumaticaSyncLog;
 use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
+/**
+ * Syncs Acumatica sales order data into the OrderWatch fill-rate module (Tally).
+ * Partial-delivery reasons are parsed from SO payloads and line fulfillment data.
+ */
 class AcumaticaFillRateSyncService
 {
     use InteractsWithAcumaticaSyncRun;
@@ -23,6 +28,9 @@ class AcumaticaFillRateSyncService
         'lines_partial_shortage'       => 0,
         'lines_shipped_qty_fallback'   => 0,
         'lines_with_acumatica_reason'  => 0,
+        'lines_with_reason_notes'      => 0,
+        'lines_missing_price'          => 0,
+        'orders_incomplete_delivery'   => 0,
     ];
 
     public function __construct(
@@ -77,6 +85,9 @@ class AcumaticaFillRateSyncService
             'lines_partial_shortage'       => 0,
             'lines_shipped_qty_fallback'   => 0,
             'lines_with_acumatica_reason'  => 0,
+            'lines_with_reason_notes'      => 0,
+            'lines_missing_price'          => 0,
+            'orders_incomplete_delivery'   => 0,
         ];
 
         $total   = count($orders);
@@ -115,6 +126,8 @@ class AcumaticaFillRateSyncService
             'filters'       => array_merge($run->filters ?? [], $this->guardrailSummary),
         ]);
 
+        $this->logSyncSummary($run, $success, $failed);
+
         return $run;
     }
 
@@ -145,9 +158,11 @@ class AcumaticaFillRateSyncService
             $linePayloads[] = [
                 'inventory_id'      => $mapped['inventory_id'],
                 'order_qty'         => $mapped['order_qty'],
-                'qty_at_approval'   => $mapped['qty_at_approval'],
+                'shipped_qty'       => $mapped['shipped_qty'],
                 'qty_on_shipments'  => $mapped['qty_on_shipments'],
+                'qty_at_approval'   => $mapped['qty_at_approval'],
                 'unit_price'        => $mapped['unit_price'],
+                'unfilled_reason_code' => $mapped['unfilled_reason_code'],
             ];
         }
 
@@ -156,6 +171,10 @@ class AcumaticaFillRateSyncService
             $this->guardrailSummary['orders_computed_na']++;
         } else {
             $this->guardrailSummary['orders_computed']++;
+
+            if (($computed['fill_rate_pct'] ?? 0) < 100.0) {
+                $this->guardrailSummary['orders_incomplete_delivery']++;
+            }
         }
 
         $localOrder = AcumaticaSalesOrder::where('acumatica_order_nbr', $orderNbr)->first();
@@ -235,6 +254,15 @@ class AcumaticaFillRateSyncService
             $this->guardrailSummary['lines_with_acumatica_reason']++;
         }
 
+        $reasonNotes = trim((string) ($mapped['reason_notes'] ?? ''));
+        if ($reasonNotes !== '') {
+            $this->guardrailSummary['lines_with_reason_notes']++;
+        }
+
+        if (($mapped['unit_price'] ?? 0) <= 0) {
+            $this->guardrailSummary['lines_missing_price']++;
+        }
+
         $reason = $mapped['unfilled_reason_code'] ?? null;
         if ($reason === SalesOrderLineFulfillmentDeriver::UNFILLED_REASON_OUT_OF_STOCK
             && ($mapped['qty_on_shipments'] ?? 0) <= 0) {
@@ -242,6 +270,39 @@ class AcumaticaFillRateSyncService
         } elseif ($reason === SalesOrderLineFulfillmentDeriver::UNFILLED_REASON_PARTIAL_SHORTAGE) {
             $this->guardrailSummary['lines_partial_shortage']++;
         }
+    }
+
+    /**
+     * Write a structured summary log entry for the completed sync run.
+     *
+     * @param  AcumaticaSyncLog  $run
+     * @param  int  $success
+     * @param  int  $failed
+     * @return void
+     */
+    private function logSyncSummary(AcumaticaSyncLog $run, int $success, int $failed): void
+    {
+        $filters = $run->filters ?? [];
+
+        Log::info('Fill-rate sync completed', [
+            'sync_run_id'          => $run->id,
+            'status'               => $run->status,
+            'trigger_type'         => $run->trigger_type,
+            'date_from'            => $filters['date_from'] ?? null,
+            'date_to'              => $filters['date_to'] ?? null,
+            'total_orders'         => $run->record_count,
+            'success_count'        => $success,
+            'failed_count'         => $failed,
+            'orders_computed'      => $this->guardrailSummary['orders_computed'],
+            'orders_computed_na'   => $this->guardrailSummary['orders_computed_na'],
+            'lines_out_of_stock'   => $this->guardrailSummary['lines_out_of_stock'],
+            'lines_partial_shortage' => $this->guardrailSummary['lines_partial_shortage'],
+            'lines_shipped_qty_fallback' => $this->guardrailSummary['lines_shipped_qty_fallback'],
+            'lines_with_acumatica_reason' => $this->guardrailSummary['lines_with_acumatica_reason'],
+            'lines_with_reason_notes'    => $this->guardrailSummary['lines_with_reason_notes'],
+            'lines_missing_price'        => $this->guardrailSummary['lines_missing_price'],
+            'orders_incomplete_delivery' => $this->guardrailSummary['orders_incomplete_delivery'],
+        ]);
     }
 
     private function str(mixed $field): ?string

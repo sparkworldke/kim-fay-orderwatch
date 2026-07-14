@@ -47,6 +47,7 @@ class RunSyncMonitorAlerts extends Command
             'order-matching-3h',
             'sales-order-sync-3h',
             'sales-order-status-sync',
+            'sales-order-prune-missing',
             'inventory-sync-5h',
             'backorders-daily-4pm',
             'fill-rate-nightly',
@@ -61,7 +62,15 @@ class RunSyncMonitorAlerts extends Command
             ->whereIn('status', ['success', 'partial', 'failed'])
             ->orderBy('id')
             ->get()
-            ->filter(fn (CronRunLog $r) => $r->cronJob && in_array($r->cronJob->job_key, $syncJobKeys, true))
+            ->filter(function (CronRunLog $r) use ($syncJobKeys) {
+                if (! $r->cronJob) {
+                    return false;
+                }
+                $key = (string) $r->cronJob->job_key;
+
+                return in_array($key, $syncJobKeys, true)
+                    || str_starts_with($key, 'inventory-sync-');
+            })
             ->values();
 
         $successEvents = $newRuns

@@ -23,6 +23,7 @@ import { differenceInCalendarDays, subDays } from "date-fns";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { useSkuDetail } from "@/hooks/useSkuDetail";
 import {
+  formatBrandDisplay,
   formatCost,
   formatLastModified,
   mapValuationMethod,
@@ -109,24 +110,48 @@ export function SkuDetailPanel({ inventoryId, onClose }: SkuDetailPanelProps) {
     <Sheet open={inventoryId !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="w-full gap-0 p-0 sm:max-w-2xl"
+        className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
         // Prevent closing on pointer-down outside while date inputs are focused
         // from causing accidental dismissal — Radix handles overlay click via
         // onOpenChange above.
       >
-        <SheetHeader className="border-b p-5 pr-12">
+        <SheetHeader className="shrink-0 border-b p-5 pr-12">
           <SheetTitle className="flex items-center gap-2">
             <span>{item?.inventory_id ?? (isLoading ? "Loading…" : "SKU detail")}</span>
             {item?.item_status && (
               <Badge variant="outline" className="font-normal">{item.item_status}</Badge>
             )}
           </SheetTitle>
-          <SheetDescription className="truncate">
-            {item?.description ?? "Sales history, predictions and AI insights"}
+          <SheetDescription asChild>
+            <div className="min-w-0">
+              <div className="truncate">
+                {item?.description ?? "Sales history, predictions and AI insights"}
+              </div>
+              {item && (() => {
+                const { brandLine, subGroupLine } = formatBrandDisplay(
+                  item.brand,
+                  item.sub_trading_group,
+                );
+                return (
+                  <>
+                    {brandLine && (
+                      <div className="truncate font-medium text-foreground">
+                        {brandLine}
+                      </div>
+                    )}
+                    {subGroupLine && (
+                      <div className="truncate text-muted-foreground">
+                        {subGroupLine}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 space-y-6 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5">
           {/* Metadata header */}
           {isLoading ? (
             <div className="space-y-2">
@@ -137,6 +162,13 @@ export function SkuDetailPanel({ inventoryId, onClose }: SkuDetailPanelProps) {
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <Meta label="Warehouse" value={item.default_warehouse_id ?? "—"} />
               <Meta label="Item class" value={item.item_class ?? "—"} />
+              <Meta label="Posting class" value={item.posting_class ?? "—"} />
+              <Meta
+                label="Sub trading group"
+                value={item.sub_trading_group ?? "—"}
+              />
+              <Meta label="Brand" value={item.brand ?? "—"} />
+              <Meta label="Supplier" value={item.supplier ?? "—"} />
               <Meta
                 label="Valuation method"
                 value={mapValuationMethod(item.valuation_method ?? "")}

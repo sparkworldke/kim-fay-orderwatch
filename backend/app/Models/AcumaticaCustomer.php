@@ -20,6 +20,7 @@ class AcumaticaCustomer extends Model
         'payment_terms',
         'tax_zone',
         'shipping_zone_id',
+        'route_code',
         'billing_address',
         'shipping_address',
         'sync_run_id',
@@ -51,6 +52,16 @@ class AcumaticaCustomer extends Model
     public function shippingZone(): BelongsTo
     {
         return $this->belongsTo(AcumaticaShippingZone::class, 'shipping_zone_id', 'acumatica_id');
+    }
+
+    public function route(): BelongsTo
+    {
+        return $this->belongsTo(AcumaticaRoute::class, 'route_code', 'route_code');
+    }
+
+    public function customerData(): BelongsTo
+    {
+        return $this->belongsTo(CustomerData::class, 'acumatica_id', 'customer_acumatica_id');
     }
 
     public function branches(): HasMany

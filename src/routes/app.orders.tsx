@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Fragment, useState } from "react";
+import { MaskedCurrency } from "@/components/MaskedCurrency";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,8 +34,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-import { CustomerLink, DateLink, OrderLink, ViewDateButton } from "@/components/entity-links";
+import { CustomerLink, DateLink, DateWithActions, OrderLink } from "@/components/entity-links";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { useReasonTaxonomy } from "@/hooks/useOperations";
 import { useOrderStats, useOrders, useRefreshOrderStatuses, useUpdateOrder } from "@/hooks/useOrders";
 import { useMatchOrders } from "@/hooks/admin/useAdminSettings";
 import {
@@ -48,7 +50,11 @@ import {
   type MatchConflict,
 } from "@/lib/match-conflicts";
 import { useAuth } from "@/lib/auth";
-import { REJECTION_REASON_OPTIONS, rejectionReasonLabel } from "@/lib/order-reasons";
+import {
+  statusRequiresWorkflowReason,
+  workflowReasonLabel,
+  workflowReasonOptionsForStatus,
+} from "@/lib/order-reasons";
 import { formatPoLoadDuration } from "@/lib/po-load-time";
 import type { AcumaticaSalesOrder } from "@/types/admin";
 
@@ -134,9 +140,16 @@ function OrdersPage() {
   });
 
   const updateOrder = useUpdateOrder();
+  const reasonTaxonomy = useReasonTaxonomy();
   const orderStatusRefresh = useRefreshOrderStatuses();
   const matchOrders = useMatchOrders();
   const orderStats  = useOrderStats({ q: debouncedQ || undefined, order_type: "SO", date_from: dateFrom || undefined, date_to: dateTo || undefined });
+
+  const reasonOptions = workflowReasonOptionsForStatus(
+    draftStatus,
+    reasonTaxonomy.data?.parents,
+  );
+  const requiresWorkflowReason = statusRequiresWorkflowReason(draftStatus);
 
   const activeMatchCard = hasEmailFilter === "yes" ? "email_in" : matchStatus;
   const canEditRejections = session?.role === "Administrator"
@@ -192,15 +205,15 @@ function OrdersPage() {
   function openRejectionEditor(order: AcumaticaSalesOrder) {
     setEditingOrder(order);
     setDraftStatus(order.status ?? "Open");
-    setDraftRejectionCode(order.rejection_reason_code ?? "none");
+    setDraftRejectionCode(order.workflow_sub_reason_code ?? order.rejection_reason_code ?? "none");
     setDraftRejectionNotes(order.rejection_reason ?? "");
   }
 
   function saveOrderRejection() {
     if (!editingOrder) return;
 
-    if (draftStatus === "Rejected" && draftRejectionCode === "none") {
-      toast.error("Select a rejection reason before saving a rejected order.");
+    if (requiresWorkflowReason && draftRejectionCode === "none") {
+      toast.error("Select a standardized reason before saving this order status.");
       return;
     }
 
@@ -211,7 +224,7 @@ function OrdersPage() {
       rejection_reason: draftRejectionNotes.trim() || null,
     }, {
       onSuccess: () => {
-        toast.success("Order status and rejection reason saved.");
+        toast.success("Order status and workflow reason saved.");
         setEditingOrder(null);
       },
       onError: (error: Error) => toast.error(error.message),
@@ -425,7 +438,7 @@ function OrdersPage() {
 
                         {/* Total */}
                         <td className="px-3 py-3 text-right font-mono text-xs tabular-nums">
-                          {order.currency_id ?? "KES"} {Number(order.order_total).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                          <MaskedCurrency value={Number(order.order_total)} currency={order.currency_id ?? "KES"} />
                         </td>
                       </tr>
 
@@ -441,7 +454,7 @@ function OrdersPage() {
                               <div className="mb-3 flex justify-end">
                                 <Button variant="outline" size="sm" onClick={() => openRejectionEditor(order)}>
                                   <PencilLine className="mr-1 h-3.5 w-3.5" />
-                                  Edit status / rejection
+                                  Edit status / reason
                                 </Button>
                               </div>
                             )}
@@ -452,15 +465,15 @@ function OrdersPage() {
                                 empty="No email linked to this order"
                               />
                               <DetailCard
-                                label="Reason for Rejection"
-                                value={renderRejectionDetail(order)}
-                                empty="No rejection reason recorded"
+                                label="Workflow Reason"
+                                value={renderWorkflowReasonDetail(order)}
+                                empty="No workflow reason recorded"
                                 tone="red"
                               />
                               <DetailCard
-                                label="Reason for On Hold"
+                                label="On Hold Notes"
                                 value={order.on_hold_reason}
-                                empty="No on-hold reason recorded"
+                                empty="No on-hold notes recorded"
                                 tone="amber"
                               />
                             </div>
@@ -498,9 +511,9 @@ function OrdersPage() {
       <Dialog open={!!editingOrder} onOpenChange={(open) => !open && setEditingOrder(null)}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Update Order Rejection Tracking</DialogTitle>
+            <DialogTitle>Update Order Workflow Reason</DialogTitle>
             <DialogDescription>
-              Capture the rejection status, standardized reason, and optional notes for audit follow-up.
+              Set the order status, standardized reason, and optional notes. Reasons are saved locally until Acumatica capture is fixed.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -518,24 +531,26 @@ function OrdersPage() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Rejection reason</Label>
+              <Label>Standardized reason</Label>
               <Select
                 value={draftRejectionCode}
                 onValueChange={setDraftRejectionCode}
-                disabled={draftStatus !== "Rejected"}
+                disabled={!requiresWorkflowReason}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select rejection reason" />
+                  <SelectValue placeholder={requiresWorkflowReason ? "Select workflow reason" : "Not required for this status"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No rejection reason</SelectItem>
-                  {REJECTION_REASON_OPTIONS.map((option) => (
+                  <SelectItem value="none">No reason selected</SelectItem>
+                  {reasonOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {draftStatus === "Rejected" && draftRejectionCode === "none" && (
-                <p className="text-xs text-destructive">A rejection reason is required when status is Rejected.</p>
+              {requiresWorkflowReason && draftRejectionCode === "none" && (
+                <p className="text-xs text-destructive">
+                  A standardized reason is required for cancelled, rejected, and on-hold orders.
+                </p>
               )}
             </div>
             <div className="grid gap-2">
@@ -543,7 +558,7 @@ function OrdersPage() {
               <Textarea
                 id="rejection-notes"
                 rows={5}
-                placeholder="Document extra context for why the order was rejected..."
+                placeholder="Document extra context for this status change..."
                 value={draftRejectionNotes}
                 onChange={(event) => setDraftRejectionNotes(event.target.value)}
               />
@@ -553,7 +568,7 @@ function OrdersPage() {
             <Button variant="outline" onClick={() => setEditingOrder(null)}>Cancel</Button>
             <Button
               onClick={saveOrderRejection}
-              disabled={updateOrder.isPending || (draftStatus === "Rejected" && draftRejectionCode === "none")}
+              disabled={updateOrder.isPending || (requiresWorkflowReason && draftRejectionCode === "none")}
             >
               {updateOrder.isPending ? "Saving…" : "Save"}
             </Button>
@@ -1021,19 +1036,19 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
-function renderRejectionDetail(order: AcumaticaSalesOrder): React.ReactNode {
-  const codeLabel = rejectionReasonLabel(order.rejection_reason_code);
+function renderWorkflowReasonDetail(order: AcumaticaSalesOrder): React.ReactNode {
+  const label = workflowReasonLabel(order);
   const notes = order.rejection_reason?.trim();
 
-  if (!codeLabel && !notes) {
+  if (!label && !notes) {
     return null;
   }
 
   return (
     <div className="space-y-2">
-      {codeLabel && (
-        <Badge variant="destructive" className="w-fit">
-          {codeLabel}
+      {label && (
+        <Badge variant="destructive" className="w-fit max-w-full whitespace-normal text-left">
+          {label}
         </Badge>
       )}
       {notes && <p className="text-xs leading-relaxed">{notes}</p>}
@@ -1094,7 +1109,7 @@ function DateSlot({
       </div>
       {formatted ? (
         <div className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${valueCls}`}>
-          <DateLink value={value} showButton>{formatted}</DateLink>
+          <DateWithActions value={value} format="datetime" />
         </div>
       ) : (
         <div className="mt-0.5 text-xs italic text-muted-foreground/40">Not recorded</div>

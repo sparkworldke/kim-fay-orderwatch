@@ -18,6 +18,7 @@ return new class extends Migration
             $table->json('data_gaps')->nullable();
             $table->timestamp('generated_at');
             $table->timestamp('expires_at');
+            $table->timestamps();
 
             $table->unique(['inventory_id', 'date_from', 'date_to']);
         });

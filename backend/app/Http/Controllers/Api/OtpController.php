@@ -8,6 +8,8 @@ use App\Models\Otp;
 use App\Models\SignInLog;
 use App\Models\User;
 use App\Services\OtpService;
+use App\Services\Team\UserCapabilitiesService;
+use App\Services\Team\UserSessionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -165,8 +167,11 @@ class OtpController extends Controller
     /**
      * Verify an OTP submission and, on success, issue a Sanctum token.
      */
-    public function verify(Request $request): JsonResponse
-    {
+    public function verify(
+        Request $request,
+        UserSessionService $sessions,
+        UserCapabilitiesService $capabilities,
+    ): JsonResponse {
         $validated = $request->validate([
             'email'    => 'required|email',
             'otp'      => 'required|string|size:6',
@@ -240,6 +245,7 @@ class OtpController extends Controller
         $token = $user->createToken('api-token', ['*'], now()->addHours(8));
 
         $this->recordSignInLog($request, $user, $email, $loginMode, 'success');
+        $sessions->open($user, $request, 'otp');
 
         Log::info('otp_verify', [
             'email_hash' => hash('sha256', $email),
@@ -248,6 +254,8 @@ class OtpController extends Controller
             'outcome' => 'verified',
         ]);
 
+        $user->loadMissing('department');
+
         return response()->json([
             'token' => $token->plainTextToken,
             'user' => [
@@ -255,7 +263,13 @@ class OtpController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role ?? 'Administrator',
+                'rep_code' => $user->rep_code,
+                'employee_number' => $user->employee_number,
+                'department_id' => $user->department_id,
+                'department_role' => $user->department_role,
+                'is_consultant' => (bool) $user->is_consultant,
             ],
+            'capabilities' => $capabilities->forUser($user),
         ]);
     }
 
