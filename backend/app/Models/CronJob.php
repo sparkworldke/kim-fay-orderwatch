@@ -594,11 +594,11 @@ class CronJob extends Model
 
     public static function fixedDailyReport(): self
     {
-        return self::firstOrCreate(
+        $job = self::firstOrCreate(
             ['job_key' => 'daily-report-fixed-scheduler'],
             [
                 'name' => 'Daily Report Fixed Scheduler',
-                'description' => 'Sends the fixed daily management report from the scheduler.',
+                'description' => 'Sends the fixed daily management report (previous day). Hard-coded in routes/console.php Tue–Sat 07:00 Africa/Nairobi; this row is for admin visibility only and is NOT double-scheduled.',
                 'is_enabled' => true,
                 'frequency_label' => 'Tue-Sat at 7AM',
                 'cron_expression' => '0 7 * * 2-6',
@@ -606,8 +606,45 @@ class CronJob extends Model
                 'command' => 'php artisan orderwatch:send-daily-report-fixed --source=scheduler',
                 'status' => 'active',
                 'next_run_at' => now()->addDay(),
-                'settings' => [],
+                'settings' => [
+                    // Prevent accidental double-registration if bootstrap logic changes.
+                    'schedule_owner' => 'routes/console.php',
+                    'skip_dynamic_schedule' => true,
+                ],
             ],
         );
+
+        // Keep description/command aligned on existing installs.
+        $job->fill([
+            'name' => 'Daily Report Fixed Scheduler',
+            'description' => 'Sends the fixed daily management report (previous day). Hard-coded in routes/console.php Tue–Sat 07:00 Africa/Nairobi; this row is for admin visibility only and is NOT double-scheduled.',
+            'cron_expression' => '0 7 * * 2-6',
+            'command' => 'php artisan orderwatch:send-daily-report-fixed --source=scheduler',
+            'settings' => array_merge($job->settings ?? [], [
+                'schedule_owner' => 'routes/console.php',
+                'skip_dynamic_schedule' => true,
+            ]),
+        ])->save();
+
+        // Disable any legacy daily-report cron rows that would double-send if re-enabled.
+        $legacy = self::query()
+            ->where('job_key', '!=', 'daily-report-fixed-scheduler')
+            ->where(function ($q) {
+                $q->where('command', 'like', '%send-daily-report%')
+                    ->orWhere('job_key', 'like', '%daily-report%');
+            })
+            ->where('is_enabled', true)
+            ->get();
+
+        foreach ($legacy as $legacyJob) {
+            $note = 'Disabled automatically: daily report is owned by daily-report-fixed-scheduler / routes/console.php to prevent duplicate emails.';
+            $legacyJob->forceFill([
+                'is_enabled' => false,
+                'status' => 'paused',
+                'notes' => trim(implode(' ', array_filter([(string) $legacyJob->notes, $note]))),
+            ])->save();
+        }
+
+        return $job->fresh() ?? $job;
     }
 }

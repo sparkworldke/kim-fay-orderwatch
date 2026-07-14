@@ -6,6 +6,7 @@ use App\Models\DailyReportConfig;
 use App\Models\DailyReportRun;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class DailyReportRunnerService
@@ -31,13 +32,15 @@ class DailyReportRunnerService
 
         $reportDate = $now->copy()->subDay()->toDateString();
 
-        return ! DailyReportRun::query()
-            ->where('report_config_id', $config->id)
-            ->whereDate('report_date', $reportDate)
-            ->whereIn('status', ['completed', 'partial'])
-            ->exists();
+        return ! $this->hasSuccessfulSend($config->id, $reportDate);
     }
 
+    /**
+     * @param  bool  $force  When true, regenerate and resend even if already completed for the report date.
+     * @param  bool  $ignoreSendTimeWindow  When true, skip the config send_time window check
+     *                                       (used by the fixed Tue–Sat cron which has its own schedule).
+     *                                       Does NOT bypass the already-sent guard unless $force is also true.
+     */
     public function run(
         DailyReportConfig $config,
         string $trigger = 'scheduler',
@@ -45,96 +48,127 @@ class DailyReportRunnerService
         ?Carbon $asOf = null,
         ?array $overrideSendTo = null,
         ?array $overrideCc = null,
+        bool $ignoreSendTimeWindow = false,
     ): DailyReportRun {
         $started = hrtime(true);
         $timezone = $config->timezone ?: 'Africa/Nairobi';
         $asOf = ($asOf ?? now())->timezone($timezone);
         $reportDate = $asOf->copy()->subDay()->startOfDay();
+        $reportDateKey = $reportDate->toDateString();
 
-        if (! $force && $trigger === 'scheduler' && ! $this->shouldRunScheduled($config, $asOf)) {
-            return DailyReportRun::create([
-                'report_config_id' => $config->id,
-                'report_date' => $reportDate,
-                'started_at' => now(),
-                'completed_at' => now(),
-                'status' => 'skipped',
-                'error_summary' => 'Not scheduled to run at this time or already sent.',
-                'duration_ms' => 0,
-            ]);
+        // Soft pre-check (fast path). The authoritative check runs inside the lock.
+        if (! $force && $this->hasSuccessfulSend($config->id, $reportDateKey)) {
+            return $this->skippedRun(
+                $config,
+                $reportDate,
+                'Report already sent for this date. Use --force to regenerate and resend.',
+            );
         }
 
-        $lock = Cache::lock("daily-report:{$config->id}:{$reportDate->toDateString()}", 300);
+        if (
+            ! $force
+            && ! $ignoreSendTimeWindow
+            && $trigger === 'scheduler'
+            && ! $this->shouldRunScheduled($config, $asOf)
+        ) {
+            return $this->skippedRun(
+                $config,
+                $reportDate,
+                'Not scheduled to run at this time or already sent.',
+            );
+        }
+
+        $lock = Cache::lock($this->lockKey($config->id, $reportDateKey), 300);
         if (! $lock->get()) {
-            return DailyReportRun::create([
-                'report_config_id' => $config->id,
-                'report_date' => $reportDate,
-                'started_at' => now(),
-                'completed_at' => now(),
-                'status' => 'skipped',
-                'delivery_status' => 'skipped',
-                'error_summary' => 'Another daily report run is already in progress for this date.',
-                'duration_ms' => 0,
+            Log::info('daily_report_skipped_lock', [
+                'report_date' => $reportDateKey,
+                'trigger' => $trigger,
             ]);
-        }
 
-        $run = DailyReportRun::create([
-            'report_config_id' => $config->id,
-            'report_date' => $reportDate,
-            'started_at' => now(),
-            'status' => 'running',
-        ]);
+            return $this->skippedRun(
+                $config,
+                $reportDate,
+                'Another daily report run is already in progress for this date.',
+                deliveryStatus: 'skipped',
+            );
+        }
 
         try {
-            $payload = $this->report->buildPayload($asOf, $timezone);
+            // Authoritative idempotency: re-check under lock so concurrent schedule:run
+            // processes cannot both send after both passed the soft pre-check.
+            if (! $force && $this->hasSuccessfulSend($config->id, $reportDateKey)) {
+                Log::info('daily_report_skipped_already_sent_under_lock', [
+                    'report_date' => $reportDateKey,
+                    'trigger' => $trigger,
+                ]);
 
-            $aiInsights = $config->include_ai_insights
-                ? $this->insights->generate($payload, true)
-                : ['ai_status' => 'disabled', 'executive_summary' => '', 'performance_commentary' => '', 'improvements' => []];
-            $payload['insights'] = $aiInsights;
-
-            $sendConfig = clone $config;
-            if ($overrideSendTo !== null || $overrideCc !== null) {
-                $sendTo = $overrideSendTo ?? $config->replyTo();
-                $cc = $overrideCc ?? array_values(array_diff($config->recipients(), $sendTo));
-                $sendConfig->reply_to_json = $sendTo;
-                $sendConfig->recipients_json = array_values(array_unique(array_merge($sendTo, $cc)));
+                return $this->skippedRun(
+                    $config,
+                    $reportDate,
+                    'Report already sent for this date (detected under lock).',
+                    deliveryStatus: 'skipped',
+                );
             }
 
-            $delivery = $this->mailer->send($run, $sendConfig, $payload, $aiInsights);
-            $duration = (int) ((hrtime(true) - $started) / 1_000_000);
-
-            $status = match ($delivery['delivery_status']) {
-                'sent' => 'completed',
-                'partial' => 'partial',
-                'skipped' => 'completed',
-                default => 'failed',
-            };
-
-            $run->update([
-                'completed_at' => now(),
-                'sent_at' => in_array($delivery['delivery_status'], ['sent', 'partial'], true) ? now() : null,
-                'status' => $status,
-                'ai_status' => $aiInsights['ai_status'] ?? 'unknown',
-                'delivery_status' => $delivery['delivery_status'],
-                'recipient_count' => $delivery['sent_count'],
-                'duration_ms' => $duration,
-                'payload_json' => $payload,
-                'error_summary' => $delivery['errors'] !== [] ? implode("\n", $delivery['errors']) : null,
+            $run = DailyReportRun::create([
+                'report_config_id' => $config->id,
+                'report_date' => $reportDate,
+                'started_at' => now(),
+                'status' => 'running',
             ]);
 
-            return $run->fresh('deliveryLogs');
-        } catch (Throwable $e) {
-            $duration = (int) ((hrtime(true) - $started) / 1_000_000);
-            $run->update([
-                'completed_at' => now(),
-                'status' => 'failed',
-                'ai_status' => 'failed',
-                'delivery_status' => 'failed',
-                'duration_ms' => $duration,
-                'error_summary' => $e->getMessage(),
-            ]);
+            try {
+                $payload = $this->report->buildPayload($asOf, $timezone);
 
-            return $run->fresh('deliveryLogs');
+                $aiInsights = $config->include_ai_insights
+                    ? $this->insights->generate($payload, true)
+                    : ['ai_status' => 'disabled', 'executive_summary' => '', 'performance_commentary' => '', 'improvements' => []];
+                $payload['insights'] = $aiInsights;
+
+                $sendConfig = clone $config;
+                if ($overrideSendTo !== null || $overrideCc !== null) {
+                    $sendTo = $overrideSendTo ?? $config->replyTo();
+                    $cc = $overrideCc ?? array_values(array_diff($config->recipients(), $sendTo));
+                    $sendConfig->reply_to_json = $sendTo;
+                    $sendConfig->recipients_json = array_values(array_unique(array_merge($sendTo, $cc)));
+                }
+
+                $delivery = $this->mailer->send($run, $sendConfig, $payload, $aiInsights);
+                $duration = (int) ((hrtime(true) - $started) / 1_000_000);
+
+                $status = match ($delivery['delivery_status']) {
+                    'sent' => 'completed',
+                    'partial' => 'partial',
+                    'skipped' => 'completed',
+                    default => 'failed',
+                };
+
+                $run->update([
+                    'completed_at' => now(),
+                    'sent_at' => in_array($delivery['delivery_status'], ['sent', 'partial'], true) ? now() : null,
+                    'status' => $status,
+                    'ai_status' => $aiInsights['ai_status'] ?? 'unknown',
+                    'delivery_status' => $delivery['delivery_status'],
+                    'recipient_count' => $delivery['sent_count'],
+                    'duration_ms' => $duration,
+                    'payload_json' => $payload,
+                    'error_summary' => $delivery['errors'] !== [] ? implode("\n", $delivery['errors']) : null,
+                ]);
+
+                return $run->fresh('deliveryLogs');
+            } catch (Throwable $e) {
+                $duration = (int) ((hrtime(true) - $started) / 1_000_000);
+                $run->update([
+                    'completed_at' => now(),
+                    'status' => 'failed',
+                    'ai_status' => 'failed',
+                    'delivery_status' => 'failed',
+                    'duration_ms' => $duration,
+                    'error_summary' => $e->getMessage(),
+                ]);
+
+                return $run->fresh('deliveryLogs');
+            }
         } finally {
             $lock->release();
         }
@@ -199,5 +233,38 @@ class DailyReportRunnerService
 
             return $run->fresh('deliveryLogs');
         }
+    }
+
+    public function hasSuccessfulSend(int $configId, string $reportDate): bool
+    {
+        return DailyReportRun::query()
+            ->where('report_config_id', $configId)
+            ->whereDate('report_date', $reportDate)
+            ->whereIn('status', ['completed', 'partial'])
+            ->whereIn('delivery_status', ['sent', 'partial'])
+            ->exists();
+    }
+
+    private function lockKey(int $configId, string $reportDate): string
+    {
+        return "daily-report:{$configId}:{$reportDate}";
+    }
+
+    private function skippedRun(
+        DailyReportConfig $config,
+        Carbon $reportDate,
+        string $reason,
+        ?string $deliveryStatus = null,
+    ): DailyReportRun {
+        return DailyReportRun::create([
+            'report_config_id' => $config->id,
+            'report_date' => $reportDate,
+            'started_at' => now(),
+            'completed_at' => now(),
+            'status' => 'skipped',
+            'delivery_status' => $deliveryStatus,
+            'error_summary' => $reason,
+            'duration_ms' => 0,
+        ]);
     }
 }

@@ -89,8 +89,9 @@ class DailyReportMailerService
     /** @return array{to: list<string>, cc: list<string>} */
     private function resolveRouting(DailyReportConfig $config): array
     {
-        $to = $config->replyTo();
-        $cc = array_values(array_diff($config->recipients(), $to));
+        // One message, unique addresses only — never put the same email in both To and CC.
+        $to = array_values(array_unique($config->replyTo()));
+        $cc = array_values(array_unique(array_diff($config->recipients(), $to)));
 
         if ($to === [] && $cc !== []) {
             $to = [array_shift($cc)];

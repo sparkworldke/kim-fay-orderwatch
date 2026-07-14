@@ -191,7 +191,7 @@ class DailyReportController extends Controller
             'last_sent_status' => $latest?->status,
             'last_delivery_status' => $latest?->delivery_status,
             'last_run' => $latest ? $this->presentRun($latest) : null,
-            'command_reference' => 'php artisan orderwatch:send-daily-report',
+            'command_reference' => 'php artisan orderwatch:send-daily-report-fixed --source=manual',
             'scheduler_reference' => 'Runs every minute; sends at configured send_time in configured timezone.',
         ];
     }

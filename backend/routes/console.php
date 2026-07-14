@@ -20,10 +20,14 @@ Schedule::command(EvaluateOrderMatchNotifications::class)
     ->hourly()
     ->withoutOverlapping(15, releaseOnTerminationSignals: false);
 
+// Single owner of the daily management email schedule.
+// Do not also register this command from cron_jobs (see skip below) or system crontab
+// direct artisan calls — that was causing multiple emails per morning.
 Schedule::command('orderwatch:send-daily-report-fixed --source=scheduler')
     ->cron('0 7 * * 2-6')
     ->timezone((string) config('cron.timezone', config('app.timezone')))
-    ->withoutOverlapping(20, releaseOnTerminationSignals: false);
+    ->withoutOverlapping(30, releaseOnTerminationSignals: false)
+    ->name('orderwatch-daily-report-fixed');
 
 Schedule::command('orderwatch:sync-monitor --source=scheduler')
     ->everyMinute()
@@ -45,7 +49,13 @@ try {
         }
 
         // Registered explicitly above — avoid duplicate scheduler events.
-        if ($job->job_key === 'daily-report-fixed-scheduler') {
+        // Also block any legacy / renamed DB rows that still point at daily-report commands
+        // (those were causing multiple emails when both the hard-coded schedule and a
+        // cron_jobs row fired the same artisan command).
+        if (
+            $job->job_key === 'daily-report-fixed-scheduler'
+            || str_contains($command, 'send-daily-report')
+        ) {
             continue;
         }
 
