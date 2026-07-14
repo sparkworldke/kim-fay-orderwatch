@@ -39,6 +39,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class OperationsController extends Controller
 {
     private const EXPORT_LIMIT = 50000;
+    private const FILL_RATE_INTERACTIVE_EXPORT_LIMIT = 8000;
 
     public function __construct(
         private readonly FillRateCalculator $fillRateCalculator,
@@ -909,6 +910,12 @@ class OperationsController extends Controller
             if (! in_array($deliverySla, ['breach', 'warning'], true)) {
                 return response()->json(['message' => 'Invalid delivery_sla filter.'], 422);
             }
+
+            $baseCount = (clone $query)->count();
+            if ($limitResponse = $this->fillRateInteractiveExportLimitResponse($baseCount)) {
+                return $limitResponse;
+            }
+
             $snapshots = $query->get()
                 ->filter(fn (AcumaticaFillRateSnapshot $snapshot) => $this->deliverySlaForSnapshot($snapshot)['delivery_sla_status'] === $deliverySla)
                 ->values();
@@ -920,17 +927,10 @@ class OperationsController extends Controller
             if ($limitResponse = $this->exportLimitResponse($count)) {
                 return $limitResponse;
             }
+            if ($limitResponse = $this->fillRateInteractiveExportLimitResponse($count)) {
+                return $limitResponse;
+            }
             $snapshots = $query->get();
-        }
-
-        // Soft cap for interactive export: multi-sheet Excel on very large
-        // ranges is still too heavy for synchronous gateway timeouts.
-        if ($snapshots->count() > 8000) {
-            return response()->json([
-                'message' => 'Export is too large for an interactive download ('.$snapshots->count().' orders). Narrow the date range or filters and try again (recommended under 8,000 orders).',
-                'limit' => 8000,
-                'matched_rows' => $snapshots->count(),
-            ], 422);
         }
 
         $inventoryIds = $snapshots
@@ -2763,6 +2763,19 @@ class OperationsController extends Controller
         return response()->json([
             'message' => 'Export is too large. Narrow your filters and try again.',
             'limit' => self::EXPORT_LIMIT,
+            'matched_rows' => $count,
+        ], 422);
+    }
+
+    private function fillRateInteractiveExportLimitResponse(int $count): ?JsonResponse
+    {
+        if ($count <= self::FILL_RATE_INTERACTIVE_EXPORT_LIMIT) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => 'Fill rate export is too large for an interactive download ('.$count.' orders). Narrow the date range or filters and try again (recommended under '.number_format(self::FILL_RATE_INTERACTIVE_EXPORT_LIMIT).' orders).',
+            'limit' => self::FILL_RATE_INTERACTIVE_EXPORT_LIMIT,
             'matched_rows' => $count,
         ], 422);
     }
