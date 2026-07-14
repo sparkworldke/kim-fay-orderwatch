@@ -229,10 +229,22 @@ function FillRatePage() {
 
     setIsDownloading(true);
     try {
-      await downloadApiFile(`operations/fill-rate/export?${qs}`, `fill-rate-export-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.xlsx`, { timeoutMs: 180_000 });
+      await downloadApiFile(
+        `operations/fill-rate/export?${qs}`,
+        `fill-rate-export-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.xlsx`,
+        { timeoutMs: 300_000 },
+      );
       toast.success("Fill rate Excel download started.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to download fill rate.");
+      const message = error instanceof Error ? error.message : "Unable to download fill rate.";
+      if (message.includes("504") || /gateway time|timed out|timeout/i.test(message)) {
+        toast.error(
+          "Export timed out. Narrow the date range or filters (under ~8,000 orders) and try again.",
+          { duration: 8000 },
+        );
+      } else {
+        toast.error(message);
+      }
     } finally {
       setIsDownloading(false);
     }

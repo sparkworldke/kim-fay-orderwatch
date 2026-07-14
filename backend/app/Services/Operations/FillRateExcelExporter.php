@@ -74,9 +74,10 @@ class FillRateExcelExporter
         array $businessCategoryRows = [],
         array $reasonCaptureReport = [],
     ): StreamedResponse {
-        // Raise the memory limit for large datasets so Excel generation does
-        // not exhaust available memory or cause partial/corrupt downloads.
+        // Large multi-sheet workbooks can exceed gateway timeouts (504) if
+        // autosize/filter work runs on tens of thousands of rows.
         $this->raiseMemoryLimit();
+        $this->raiseTimeLimit();
 
         try {
             $spreadsheet = new Spreadsheet();
@@ -177,20 +178,28 @@ class FillRateExcelExporter
      */
     private function raiseMemoryLimit(): void
     {
-        $target = '512M';
+        $target = '1024M';
         $current = ini_get('memory_limit');
 
         if ($current === false || $current === '-1') {
             return; // unlimited already
         }
 
-        // Convert current to bytes and compare against target (512 MB).
+        // Convert current to bytes and compare against target.
         $currentBytes = $this->toBytes($current);
         $targetBytes = $this->toBytes($target);
 
         if ($currentBytes < $targetBytes) {
             @ini_set('memory_limit', $target);
         }
+    }
+
+    private function raiseTimeLimit(): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(300);
+        }
+        @ini_set('max_execution_time', '300');
     }
 
     private function toBytes(string $value): int
@@ -464,10 +473,8 @@ class FillRateExcelExporter
             $currentRow += 2; // +1 spacer row
         }
 
-        // ── Auto-size columns ─────────────────────────────────────────────────
-        foreach (range('A', $lastCol) as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
+        // ── Column sizing (skip autosize on large lost-sales sheets) ──────────
+        $this->applyColumnSizing($sheet, range('A', $lastCol), array_sum(array_map('count', $bySkuRows)));
 
         // ── Freeze header rows ────────────────────────────────────────────────
         $sheet->freezePane('A4');
@@ -588,11 +595,11 @@ class FillRateExcelExporter
                 ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2);
         }
 
-        foreach (range('A', 'J') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
+        $this->applyColumnSizing($sheet, range('A', 'J'), count($incompleteRows));
         $sheet->freezePane('A2');
-        $sheet->setAutoFilter($sheet->calculateWorksheetDimension());
+        if (count($incompleteRows) <= 500) {
+            $sheet->setAutoFilter($sheet->calculateWorksheetDimension());
+        }
     }
 
     /**
@@ -690,9 +697,7 @@ class FillRateExcelExporter
         $sheet->setCellValue("B{$r}", round($totalUnfilledQty, 4));
         $sheet->getStyle("A{$r}")->getFont()->setBold(true);
 
-        foreach (range('A', 'I') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
+        $this->applyColumnSizing($sheet, range('A', 'I'), count($missingRows));
         $sheet->freezePane('A2');
     }
 
@@ -1015,9 +1020,7 @@ class FillRateExcelExporter
             }
         }
 
-        foreach (['A', 'B', 'C', 'D'] as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
+        $this->applyColumnSizing($sheet, ['A', 'B', 'C', 'D'], 50);
     }
 
     /** Sheet 1 – Instructions */
@@ -1223,14 +1226,37 @@ class FillRateExcelExporter
             $r++;
         }
 
-        foreach (range('A', 'F') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
+        $this->applyColumnSizing(
+            $sheet,
+            range('A', 'F'),
+            count($report['flagged_records'] ?? []),
+        );
     }
 
     // ---------------------------------------------------------------------------
     // Low-level sheet helpers (same as controller's writeSheet / writeContributionSheet)
     // ---------------------------------------------------------------------------
+
+    /**
+     * AutoSize is O(rows × cols) and is the main timeout driver on large exports.
+     * Use fixed widths past a modest threshold.
+     *
+     * @param  list<string>  $columns
+     */
+    private function applyColumnSizing(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, array $columns, int $rowCount): void
+    {
+        if ($rowCount <= 500) {
+            foreach ($columns as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
+
+            return;
+        }
+
+        foreach ($columns as $col) {
+            $sheet->getColumnDimension($col)->setWidth(14);
+        }
+    }
 
     /** @param array<int, string> $headers  @param array<int, array<int, mixed>> $rows */
     private function writeSheet(Spreadsheet $ss, string $title, array $headers, array $rows): void
@@ -1245,7 +1271,13 @@ class FillRateExcelExporter
         $sheet->fromArray($headers, null, 'A1');
 
         if ($rows !== []) {
-            $sheet->fromArray($rows, null, 'A2');
+            // Chunk writes — large single fromArray calls are slower and peak-memory heavy.
+            $chunkSize = 1000;
+            $rowOffset = 2;
+            foreach (array_chunk($rows, $chunkSize) as $chunk) {
+                $sheet->fromArray($chunk, null, 'A'.$rowOffset);
+                $rowOffset += count($chunk);
+            }
         }
 
         $highestColumn = $sheet->getHighestColumn();
@@ -1253,10 +1285,19 @@ class FillRateExcelExporter
         $sheet->getStyle("A1:{$highestColumn}1")->getFill()
             ->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE5E7EB');
         $sheet->freezePane('A2');
-        $sheet->setAutoFilter($sheet->calculateWorksheetDimension());
 
-        for ($col = 1, $max = Coordinate::columnIndexFromString($highestColumn); $col <= $max; $col++) {
-            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setAutoSize(true);
+        $rowCount = count($rows);
+        // AutoFilter + autoSize on tens of thousands of rows is the main cause of
+        // 60–100s gateway 504s. Skip both for large sheets; keep for small ones.
+        if ($rowCount <= 500) {
+            $sheet->setAutoFilter($sheet->calculateWorksheetDimension());
+            for ($col = 1, $max = Coordinate::columnIndexFromString($highestColumn); $col <= $max; $col++) {
+                $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setAutoSize(true);
+            }
+        } else {
+            for ($col = 1, $max = Coordinate::columnIndexFromString($highestColumn); $col <= $max; $col++) {
+                $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setWidth(14);
+            }
         }
     }
 

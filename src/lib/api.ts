@@ -282,6 +282,9 @@ function extractErrorMessage(data: unknown, status: number, statusText: string):
   if (status === 403) {
     return "Your account is not active. Please contact an administrator.";
   }
+  if (status === 504 || status === 502) {
+    return `The request failed with HTTP ${status} (gateway timeout). The server took too long — try a smaller date range or fewer filters.`;
+  }
 
   return statusText || `The request failed with HTTP ${status}.`;
 }

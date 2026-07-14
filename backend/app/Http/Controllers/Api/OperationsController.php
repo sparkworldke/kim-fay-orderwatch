@@ -879,9 +879,17 @@ class OperationsController extends Controller
 
     public function exportFillRate(Request $request): JsonResponse|StreamedResponse
     {
+        // Export builds a multi-sheet XLSX in-process. Without raising limits,
+        // large date ranges hit nginx/Cloudflare 504 before the stream starts.
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(300);
+        }
+        @ini_set('max_execution_time', '300');
+        @ini_set('memory_limit', '1024M');
+
         $query = $this->fillRateFilteredQuery($request)
             ->with([
-                'order:id,acumatica_order_nbr,customer_acumatica_id,customer_name,order_date,approved_at,shipped_at,ship_date',
+                'order:id,acumatica_order_nbr,customer_acumatica_id,customer_name,order_date,approved_at,shipped_at,ship_date,status',
                 'order.customer:acumatica_id,shipping_zone_id',
                 'order.customer.shippingZone:acumatica_id,description,name,region',
                 'order.lines:id,sales_order_id,inventory_id,description,order_qty,shipped_qty,qty_on_shipments,open_qty,unit_price,uom,fill_rate_pct,qty_at_approval,unfilled_reason_code',
@@ -913,6 +921,16 @@ class OperationsController extends Controller
                 return $limitResponse;
             }
             $snapshots = $query->get();
+        }
+
+        // Soft cap for interactive export: multi-sheet Excel on very large
+        // ranges is still too heavy for synchronous gateway timeouts.
+        if ($snapshots->count() > 8000) {
+            return response()->json([
+                'message' => 'Export is too large for an interactive download ('.$snapshots->count().' orders). Narrow the date range or filters and try again (recommended under 8,000 orders).',
+                'limit' => 8000,
+                'matched_rows' => $snapshots->count(),
+            ], 422);
         }
 
         $inventoryIds = $snapshots
@@ -989,12 +1007,25 @@ class OperationsController extends Controller
             ];
         })->all();
 
-        // Compute KP/CS segment data for the Summary sheet.
+        // Compute KP/CS segment data for the Summary sheet once (not re-queried
+        // inside fillRateExcelSummary for the same work).
         $salesOrderIds = $snapshots->pluck('order.id')->filter()->unique()->values()->all();
         $segmentRows = $this->fillRateSegmentSummary($snapshots);
         $segmentReasonRows = $this->fillRateSegmentReasonSummary($request, $snapshots, $salesOrderIds);
 
-        $excelSummary = $this->fillRateExcelSummary($request, $snapshots, $salesOrderIds);
+        // Reuse line-level shortfall query once for reason / category / capture sheets.
+        $shortfallLines = $this->fillRateShortfallLines($request, $salesOrderIds);
+        $productTypes = $this->reasonCaptureReport->productTypesForOrderLines($salesOrderIds);
+
+        $excelSummary = $this->fillRateExcelSummaryFromPrepared(
+            $request,
+            $snapshots,
+            $salesOrderIds,
+            $shortfallLines,
+            $productTypes,
+            $segmentRows,
+            $segmentReasonRows,
+        );
 
         return $this->fillRateExporter->build(
             fillRateRows:       $fillRateRows,
@@ -1363,6 +1394,41 @@ class OperationsController extends Controller
 
     private function fillRateExcelSummary(Request $request, $snapshots, array $salesOrderIds = []): array
     {
+        $shortfallLines = $this->fillRateShortfallLines($request, $salesOrderIds);
+        $productTypes = $this->reasonCaptureReport->productTypesForOrderLines($salesOrderIds);
+
+        return $this->fillRateExcelSummaryFromPrepared(
+            $request,
+            $snapshots,
+            $salesOrderIds,
+            $shortfallLines,
+            $productTypes,
+            $this->fillRateSegmentSummary($snapshots),
+            $this->fillRateSegmentReasonSummary($request, $snapshots, $salesOrderIds),
+        );
+    }
+
+    /**
+     * Build excel_summary using pre-fetched shortfall lines / segment rows so export
+     * does not re-query the same order lines 3–4 times.
+     *
+     * @param  \Illuminate\Support\Collection<int, object>|\Illuminate\Database\Eloquent\Collection  $snapshots
+     * @param  list<int|string>  $salesOrderIds
+     * @param  \Illuminate\Support\Collection<int, object>  $shortfallLines
+     * @param  array<string, mixed>  $productTypes
+     * @param  list<array<string, mixed>>  $segmentRows
+     * @param  list<array<string, mixed>>  $segmentReasonRows
+     * @return array<string, mixed>
+     */
+    private function fillRateExcelSummaryFromPrepared(
+        Request $request,
+        $snapshots,
+        array $salesOrderIds,
+        $shortfallLines,
+        array $productTypes,
+        array $segmentRows,
+        array $segmentReasonRows,
+    ): array {
         $eligible = $snapshots->where('fill_rate_status', '!=', 'na');
         $actualQty = round((float) $eligible->sum('total_shipped_qty'), 4);
         $orderedQty = round((float) $eligible->sum('total_ordered_qty'), 4);
@@ -1385,15 +1451,15 @@ class OperationsController extends Controller
                 fn ($group) => (float) $group->sum('revenue_not_shipped'),
                 fn ($group) => $group->count(),
             ),
-            'by_reason' => $this->fillRateReasonSummary($request, $salesOrderIds),
+            'by_reason' => $this->fillRateReasonSummaryFromLines($shortfallLines),
             'by_department' => $this->unassignedDepartmentDistribution($undershippedValue, $snapshots->count(), 'Undershipped Value'),
             'by_customer_group' => $this->fillRateCustomerGroupSummary($request, $snapshots),
             'top_customers' => $this->fillRateTopCustomers($request, $snapshots),
             'top_products' => $this->fillRateTopProducts($request, $salesOrderIds),
-            'by_segment' => $this->fillRateSegmentSummary($snapshots),
-            'by_segment_reason' => $this->fillRateSegmentReasonSummary($request, $snapshots, $salesOrderIds),
-            'by_business_category' => $this->fillRateBusinessCategorySummary($request, $snapshots, $salesOrderIds),
-            'reason_capture_report' => $this->fillRateReasonCaptureReport($request, $salesOrderIds),
+            'by_segment' => $segmentRows,
+            'by_segment_reason' => $segmentReasonRows,
+            'by_business_category' => $this->fillRateBusinessCategorySummaryFromLines($shortfallLines, $productTypes),
+            'reason_capture_report' => $this->reasonCaptureReport->build($shortfallLines, $productTypes),
         ];
     }
 
@@ -1405,6 +1471,16 @@ class OperationsController extends Controller
         $lines = $this->fillRateShortfallLines($request, $salesOrderIds);
         $productTypes = $this->reasonCaptureReport->productTypesForOrderLines($salesOrderIds);
 
+        return $this->fillRateBusinessCategorySummaryFromLines($lines, $productTypes);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, object>  $lines
+     * @param  array<string, mixed>  $productTypes
+     * @return list<array<string, mixed>>
+     */
+    private function fillRateBusinessCategorySummaryFromLines($lines, array $productTypes): array
+    {
         $buckets = [
             FillRateBusinessCategory::MANUFACTURED => [
                 'business_category' => FillRateBusinessCategory::MANUFACTURED,
@@ -1482,27 +1558,38 @@ class OperationsController extends Controller
         $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
         $dateTo = $request->input('date_to', now()->toDateString());
 
-        $rowsQuery = AcumaticaSalesOrderLine::query()
-            ->join('acumatica_sales_orders as o', 'o.id', '=', 'acumatica_sales_order_lines.sales_order_id')
-            ->select([
-                'acumatica_sales_order_lines.sales_order_id',
-                'acumatica_sales_order_lines.inventory_id',
-                'acumatica_sales_order_lines.unfilled_reason_code',
-                'acumatica_sales_order_lines.qty_at_approval',
-                'acumatica_sales_order_lines.order_qty',
-                'acumatica_sales_order_lines.qty_on_shipments',
-                'acumatica_sales_order_lines.unit_price',
-                'o.acumatica_order_nbr as order_nbr',
-                'o.customer_acumatica_id',
-            ]);
+        $select = [
+            'acumatica_sales_order_lines.sales_order_id',
+            'acumatica_sales_order_lines.inventory_id',
+            'acumatica_sales_order_lines.unfilled_reason_code',
+            'acumatica_sales_order_lines.qty_at_approval',
+            'acumatica_sales_order_lines.order_qty',
+            'acumatica_sales_order_lines.shipped_qty',
+            'acumatica_sales_order_lines.qty_on_shipments',
+            'acumatica_sales_order_lines.unit_price',
+            'o.acumatica_order_nbr as order_nbr',
+            'o.customer_acumatica_id',
+        ];
 
-        if ($salesOrderIds !== []) {
-            $rowsQuery->whereIn('o.id', $salesOrderIds);
+        if ($salesOrderIds === []) {
+            $rows = AcumaticaSalesOrderLine::query()
+                ->join('acumatica_sales_orders as o', 'o.id', '=', 'acumatica_sales_order_lines.sales_order_id')
+                ->select($select)
+                ->whereBetween('o.order_date', [$dateFrom, $dateTo.' 23:59:59'])
+                ->get();
         } else {
-            $rowsQuery->whereBetween('o.order_date', [$dateFrom, $dateTo.' 23:59:59']);
+            // Chunk whereIn to avoid oversized SQL packets on large exports.
+            $rows = collect();
+            foreach (array_chunk($salesOrderIds, 500) as $chunk) {
+                $rows = $rows->merge(
+                    AcumaticaSalesOrderLine::query()
+                        ->join('acumatica_sales_orders as o', 'o.id', '=', 'acumatica_sales_order_lines.sales_order_id')
+                        ->select($select)
+                        ->whereIn('o.id', $chunk)
+                        ->get(),
+                );
+            }
         }
-
-        $rows = $rowsQuery->get();
 
         // When "include out of stock" is off, drop OOS shortfall lines from fill-rate summaries.
         if (! $this->includeOutOfStock($request)) {
@@ -1510,6 +1597,39 @@ class OperationsController extends Controller
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, object>  $lines
+     * @return list<array<string, mixed>>
+     */
+    private function fillRateReasonSummaryFromLines($lines): array
+    {
+        $total = $lines->sum(function ($line) {
+            $demand = max((float) ($line->qty_at_approval ?? 0), (float) ($line->order_qty ?? 0));
+
+            return max($demand - (float) ($line->qty_on_shipments ?? 0), 0) * (float) ($line->unit_price ?? 0);
+        });
+
+        return $lines
+            ->groupBy(fn ($line) => $line->unfilled_reason_code ?: 'Unassigned')
+            ->map(function ($group, $reason) use ($total) {
+                $value = $group->sum(function ($line) {
+                    $demand = max((float) ($line->qty_at_approval ?? 0), (float) ($line->order_qty ?? 0));
+
+                    return max($demand - (float) ($line->qty_on_shipments ?? 0), 0) * (float) ($line->unit_price ?? 0);
+                });
+
+                return [
+                    'reason' => (string) $reason,
+                    'line_count' => $group->count(),
+                    'undershipped_value' => round((float) $value, 2),
+                    'contribution_pct' => $total > 0 ? round(((float) $value / (float) $total) * 100, 1) : 0.0,
+                ];
+            })
+            ->sortByDesc('undershipped_value')
+            ->values()
+            ->all();
     }
 
     /**
