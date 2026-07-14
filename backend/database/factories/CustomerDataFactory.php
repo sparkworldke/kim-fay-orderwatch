@@ -11,6 +11,8 @@ use Illuminate\Support\Carbon;
  */
 class CustomerDataFactory extends Factory
 {
+    protected $model = CustomerData::class;
+
     /**
      * Define the model's default state.
      *

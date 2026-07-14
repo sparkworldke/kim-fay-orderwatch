@@ -1132,8 +1132,8 @@ function GoodsLostInTransitPanel({
 
 const ZONE_ROUTE_COLS: { key: keyof ZoneRouteData; label: string; tone: string }[] = [
   { key: "open", label: "Open", tone: "text-sky-700" },
-  { key: "pending_approval", label: "Pending", tone: "text-amber-700" },
-  { key: "shipping", label: "Shipping", tone: "text-purple-700" },
+  { key: "pending_approval", label: "Pending Approval", tone: "text-amber-700" },
+  { key: "shipping", label: "In Shipment", tone: "text-purple-700" },
   { key: "completed", label: "Completed", tone: "text-green-700" },
   { key: "rejected", label: "Rejected", tone: "text-red-700" },
   { key: "on_hold", label: "On Hold", tone: "text-orange-700" },
@@ -1181,11 +1181,11 @@ function ZoneRoutesPanel({
         <div className="flex flex-wrap items-center justify-between gap-1">
           <h2 className="flex items-center gap-1 text-[10px] font-semibold">
             <BarChart2 className="h-3 w-3 text-indigo-600" />
-            Zones & Routes
+            Zone Names & Routes
           </h2>
           <p className="text-[8px] text-muted-foreground">
             {data.zones.length} zone{data.zones.length !== 1 ? "s" : ""} /{" "}
-            {data.total.toLocaleString()} total orders
+            {data.total.toLocaleString()} orders / shipments by status
           </p>
         </div>
       </div>
@@ -1402,7 +1402,7 @@ function DashboardPage() {
           </TabsTrigger>
           <TabsTrigger value="zone-routes" className="h-6 gap-1 px-2 text-[8px]">
             <BarChart2 className="h-3 w-3" />
-            Zones & Routes
+            Zone Names & Routes
           </TabsTrigger>
         </TabsList>
 

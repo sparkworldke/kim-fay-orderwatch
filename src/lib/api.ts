@@ -236,12 +236,38 @@ function filenameFromResponse(res: Response): string | null {
 
 function extractErrorMessage(data: unknown, status: number, statusText: string): string {
   if (data && typeof data === "object") {
-    if ("message" in data && (data as { message?: unknown }).message) {
-      return String((data as { message: unknown }).message);
+    const record = data as Record<string, unknown>;
+
+    // Prefer Laravel / app message when it is specific (not the generic bag title).
+    if (typeof record.message === "string" && record.message.trim()) {
+      const msg = record.message.trim();
+      const isGenericValidation =
+        msg === "The given data was invalid." ||
+        msg === "The given data was invalid";
+      if (!isGenericValidation) {
+        return msg;
+      }
     }
 
-    if ("error" in data && (data as { error?: unknown }).error) {
-      return String((data as { error: unknown }).error);
+    // Flatten first entry from Laravel validation errors bag.
+    if (record.errors && typeof record.errors === "object" && record.errors !== null) {
+      const bag = record.errors as Record<string, unknown>;
+      for (const value of Object.values(bag)) {
+        if (Array.isArray(value) && value.length > 0 && value[0] != null) {
+          return String(value[0]);
+        }
+        if (typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+    }
+
+    if (typeof record.message === "string" && record.message.trim()) {
+      return record.message.trim();
+    }
+
+    if (typeof record.error === "string" && record.error.trim()) {
+      return record.error.trim();
     }
   }
 
@@ -249,7 +275,29 @@ function extractErrorMessage(data: unknown, status: number, statusText: string):
     return data.trim();
   }
 
+  // Sensible defaults for common auth statuses when body is empty.
+  if (status === 401 || status === 422) {
+    return "Invalid credentials. Please check your email and password.";
+  }
+  if (status === 403) {
+    return "Your account is not active. Please contact an administrator.";
+  }
+
   return statusText || `The request failed with HTTP ${status}.`;
+}
+
+/** Human-readable message from any thrown API / network error. */
+export function getErrorMessage(err: unknown, fallback = "Something went wrong."): string {
+  if (err instanceof ApiError) {
+    return err.message || fallback;
+  }
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  if (typeof err === "string" && err.trim()) {
+    return err.trim();
+  }
+  return fallback;
 }
 
 function safeJson(text: string): unknown {

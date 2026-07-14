@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class AcumaticaCustomerFactory extends Factory
 {
+    protected $model = AcumaticaCustomer::class;
+
     /**
      * Define the model's default state.
      *

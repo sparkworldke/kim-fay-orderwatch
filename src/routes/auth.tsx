@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { setSession, setToken } from "@/lib/auth";
 import type { Role } from "@/lib/auth";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getErrorMessage } from "@/lib/api";
 import { LogoImage } from "@/components/logo-image";
 
 export const Route = createFileRoute("/auth")({
@@ -76,6 +76,8 @@ function AuthPage() {
   const [secondsLeft, setSecondsLeft] = useState(900);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  /** Inline form error (mirrors toast so login failures stay visible). */
+  const [formError, setFormError] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const validationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -119,8 +121,14 @@ function AuthPage() {
     };
   }
 
+  function showAuthError(message: string) {
+    setFormError(message);
+    toast.error(message, { duration: 7000 });
+  }
+
   function handleEmailChange(value: string) {
     setEmail(value);
+    setFormError(null);
     const normalizedEmail = value.trim().toLowerCase();
     latestEmailRef.current = normalizedEmail;
 
@@ -162,6 +170,7 @@ function AuthPage() {
 
   async function handleEmailStepSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!EMAIL_RE.test(normalizedEmail)) {
@@ -170,14 +179,28 @@ function AuthPage() {
         message: "Please enter a valid email address",
       };
       setEmailValidation(result);
-      toast.error(result.message);
+      showAuthError(result.message);
+      return;
+    }
+
+    // Surface inactive / not-registered from the live email check before password POST.
+    if (
+      emailValidation.status === "inactive" ||
+      emailValidation.status === "not-registered" ||
+      emailValidation.status === "error"
+    ) {
+      const message =
+        "message" in emailValidation && emailValidation.message
+          ? emailValidation.message
+          : "Unable to sign in with this email.";
+      showAuthError(message);
       return;
     }
 
     // Password mode: sign in directly, no OTP needed
     if (loginMode === "otp-and-password") {
-      if (!password) {
-        toast.error("Enter your password");
+      if (!password.trim()) {
+        showAuthError("Enter your password");
         return;
       }
       setLoading(true);
@@ -189,6 +212,7 @@ function AuthPage() {
           method: "POST",
           body: { email: normalizedEmail, password },
         });
+        setFormError(null);
         setToken(data.token);
         setSession({
           id: data.user.id,
@@ -202,7 +226,9 @@ function AuthPage() {
         toast.success("Welcome to OrderWatch");
         navigate({ to: "/app" });
       } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : "Invalid credentials");
+        showAuthError(
+          getErrorMessage(err, "Invalid credentials. Please check your email and password."),
+        );
       } finally {
         setLoading(false);
       }
@@ -217,7 +243,7 @@ function AuthPage() {
         setEmailValidation(result);
 
         if (result.status !== "valid") {
-          toast.error("message" in result ? result.message : "Email validation failed");
+          showAuthError("message" in result ? result.message : "Email validation failed");
           return;
         }
       } catch {
@@ -226,7 +252,7 @@ function AuthPage() {
           message: "Unable to verify this email right now. Check your connection and try again.",
         };
         setEmailValidation(result);
-        toast.error(result.message);
+        showAuthError(result.message);
         return;
       }
     }
@@ -244,7 +270,7 @@ function AuthPage() {
       setStep("otp");
       startCountdown();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to send code");
+      showAuthError(getErrorMessage(err, "Failed to send verification code"));
     } finally {
       setLoading(false);
     }
@@ -252,6 +278,7 @@ function AuthPage() {
 
   async function resendOtp() {
     setResending(true);
+    setFormError(null);
     try {
       await apiFetch("auth/otp/request", {
         method: "POST",
@@ -260,7 +287,7 @@ function AuthPage() {
       toast.success("New code sent");
       startCountdown();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to resend code");
+      showAuthError(getErrorMessage(err, "Failed to resend code"));
     } finally {
       setResending(false);
     }
@@ -268,8 +295,9 @@ function AuthPage() {
 
   async function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
     if (otp.length !== 6) {
-      toast.error("Enter the 6-digit code");
+      showAuthError("Enter the 6-digit code");
       return;
     }
     setLoading(true);
@@ -281,6 +309,7 @@ function AuthPage() {
         method: "POST",
         body: { email: email.trim().toLowerCase(), otp, login_mode: "otp-only" },
       });
+      setFormError(null);
       setToken(data.token);
       setSession({
         id: data.user.id,
@@ -295,7 +324,7 @@ function AuthPage() {
       toast.success("Welcome to OrderWatch");
       navigate({ to: "/app" });
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Verification failed");
+      showAuthError(getErrorMessage(err, "Verification failed"));
     } finally {
       setLoading(false);
     }
@@ -315,8 +344,15 @@ function AuthPage() {
     emailValidation.status === "inactive" ||
     emailValidation.status === "error";
 
+  // Allow password attempt whenever email format looks valid + password present.
+  // Do not hard-block on email check so wrong-password / inactive responses always reach the API toast.
+  const emailFormatOk = EMAIL_RE.test(email.trim().toLowerCase());
   const canRequestOtp = emailValidation.status === "valid" && !loading;
-  const canSignInWithPassword = emailValidation.status === "valid" && password.trim().length > 0 && !loading;
+  const canSignInWithPassword =
+    emailFormatOk &&
+    password.trim().length > 0 &&
+    emailValidation.status !== "checking" &&
+    !loading;
 
   return (
     <div className="relative grid min-h-screen lg:grid-cols-2">
@@ -369,7 +405,10 @@ function AuthPage() {
               <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/40 p-1">
                 <button
                   type="button"
-                  onClick={() => setLoginMode("otp-and-password")}
+                  onClick={() => {
+                    setLoginMode("otp-and-password");
+                    setFormError(null);
+                  }}
                   className={`rounded-md px-3 py-2 text-sm font-medium transition-all ${
                     loginMode === "otp-and-password"
                       ? "bg-background text-foreground shadow-sm"
@@ -380,7 +419,10 @@ function AuthPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLoginMode("otp-only")}
+                  onClick={() => {
+                    setLoginMode("otp-only");
+                    setFormError(null);
+                  }}
                   className={`rounded-md px-3 py-2 text-sm font-medium transition-all ${
                     loginMode === "otp-only"
                       ? "bg-background text-foreground shadow-sm"
@@ -390,6 +432,15 @@ function AuthPage() {
                   Login via OTP
                 </button>
               </div>
+
+              {formError && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+                >
+                  {formError}
+                </div>
+              )}
 
               {/* Email field with real-time validation */}
               <div className="space-y-1.5">
@@ -436,9 +487,13 @@ function AuthPage() {
                       type={showPassword ? "text" : "password"}
                       required
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (formError) setFormError(null);
+                      }}
                       placeholder="Your account password"
                       className="pr-10"
+                      aria-invalid={!!formError}
                     />
                     <button
                       type="button"
@@ -485,11 +540,23 @@ function AuthPage() {
                 </p>
               </div>
 
+              {formError && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+                >
+                  {formError}
+                </div>
+              )}
+
               {/* OTP input — full-width single row */}
               <InputOTP
                 maxLength={6}
                 value={otp}
-                onChange={setOtp}
+                onChange={(value) => {
+                  setOtp(value);
+                  if (formError) setFormError(null);
+                }}
                 autoFocus
                 containerClassName="w-full"
               >
