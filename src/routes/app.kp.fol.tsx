@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { FilePlus2, RefreshCw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,22 @@ import { FOL_STATUS_CLASS, FOL_STATUS_LABEL, formatFolDate } from "@/lib/fol";
 
 export const Route = createFileRoute("/app/kp/fol")({
   head: () => ({ meta: [{ title: "KP FOL - Kim-Fay OrderWatch" }] }),
-  component: FolListPage,
+  component: FolRoute,
 });
+
+/**
+ * Parent layout for /app/kp/fol and children (/new, /calendar, /$id).
+ * Without an Outlet on child paths, those pages never render (same pattern as PCR).
+ */
+function FolRoute() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  if (pathname !== "/app/kp/fol") {
+    return <Outlet />;
+  }
+
+  return <FolListPage />;
+}
 
 const TABS = [
   { value: "my", label: "My Requests" },
