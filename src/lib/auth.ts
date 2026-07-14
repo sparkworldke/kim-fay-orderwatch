@@ -167,9 +167,10 @@ export function nameFromEmail(email: string) {
 }
 
 export function useAuth() {
-  const [session, setSessionState] = useState<Session | null>(() => getSession());
+  const [session, setSessionState] = useState<Session | null>(null);
   useEffect(() => {
     const update = () => setSessionState(getSession());
+    update();
     window.addEventListener("kf_session_change", update);
     window.addEventListener("storage", update);
     return () => {

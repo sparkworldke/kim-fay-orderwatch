@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
-import { Eye, Mail, Pencil, Trash2, UserPlus, Users, History, Clock, RotateCcw } from "lucide-react";
+import { Eye, Mail, Pencil, Trash2, UserPlus, Users, History, Clock, RotateCcw, CheckCircle2, X } from "lucide-react";
 import { UserSessionsSheet } from "@/components/admin/UserSessionsSheet";
 import {
   OrgConfigFields,
@@ -45,6 +45,7 @@ import {
   useResendWelcomeEmail,
   useToggleUserStatus,
   useDeleteUser,
+  useBulkActivateUsers,
   useRepCodeHistory,
   useRestoreRepCode,
 } from "@/hooks/admin/useAdminSettings";
@@ -699,7 +700,10 @@ function TeamMembersPanel() {
   const create = useCreateTeamMember();
   const resendWelcome = useResendWelcomeEmail();
   const toggleStatus = useToggleUserStatus();
+  const bulkActivate = useBulkActivateUsers();
   const deleteUser = useDeleteUser();
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkBar, setShowBulkBar] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -904,10 +908,85 @@ function TeamMembersPanel() {
           </TabsList>
 
           <TabsContent value="directory">
+            {showBulkBar && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2 mb-2">
+                <span className="text-xs font-medium">{selectedIds.size} selected</span>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={bulkActivate.isPending || selectedIds.size === 0}
+                  onClick={() => {
+                    const ids = [...selectedIds];
+                    if (confirm(`Activate ${ids.length} user(s) and set their email verified date to now?`)) {
+                      bulkActivate.mutate(
+                        { user_ids: ids, set_verified_date: true },
+                        {
+                          onSuccess: () => {
+                            setSelectedIds(new Set());
+                            setShowBulkBar(false);
+                          },
+                        },
+                      );
+                    }
+                  }}
+                >
+                  <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Activate + Set Verified
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={bulkActivate.isPending || selectedIds.size === 0}
+                  onClick={() => {
+                    const ids = [...selectedIds];
+                    if (confirm(`Activate ${ids.length} user(s) (without changing verified date)?`)) {
+                      bulkActivate.mutate(
+                        { user_ids: ids, set_verified_date: false },
+                        {
+                          onSuccess: () => {
+                            setSelectedIds(new Set());
+                            setShowBulkBar(false);
+                          },
+                        },
+                      );
+                    }
+                  }}
+                >
+                  <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Activate Only
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setSelectedIds(new Set());
+                    setShowBulkBar(false);
+                  }}
+                >
+                  <X className="mr-1 h-3.5 w-3.5" /> Cancel
+                </Button>
+              </div>
+            )}
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
               <tr>
+                {showBulkBar && (
+                  <th className="px-3 py-2 text-left w-8">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 cursor-pointer"
+                      checked={teamMembers.length > 0 && selectedIds.size === teamMembers.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds(new Set(teamMembers.map((m) => m.id)));
+                        } else {
+                          setSelectedIds(new Set());
+                        }
+                      }}
+                    />
+                  </th>
+                )}
                 <th className="px-3 py-2 text-left">Name</th>
                 <th className="px-3 py-2 text-left">Email</th>
                 <th className="px-3 py-2 text-left">Role</th>
@@ -922,6 +1001,26 @@ function TeamMembersPanel() {
             <tbody>
               {teamMembers.map((member) => (
                 <tr key={member.id} className="border-t">
+                  {showBulkBar && (
+                    <td className="px-3 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer"
+                        checked={selectedIds.has(member.id)}
+                        onChange={(e) => {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) {
+                              next.add(member.id);
+                            } else {
+                              next.delete(member.id);
+                            }
+                            return next;
+                          });
+                        }}
+                      />
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-xs font-medium">{member.name}</td>
                   <td className="px-3 py-2 text-xs">{member.email}</td>
                   <td className="px-3 py-2 text-xs">{member.role}</td>
@@ -955,6 +1054,17 @@ function TeamMembersPanel() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex justify-end gap-1">
+                      {!showBulkBar && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => setShowBulkBar(true)}
+                          title="Select multiple users for bulk activation"
+                        >
+                          <CheckCircle2 className="mr-1 h-3 w-3" /> Select
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"

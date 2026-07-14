@@ -52,6 +52,22 @@ function shiftMonth(ym: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function eatToday(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Nairobi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
+}
+
+function currentEatMonth(): string {
+  return eatToday().slice(0, 7);
+}
+
 function daysInMonthGrid(ym: string): Array<{ date: string | null; inMonth: boolean }> {
   const [y, m] = ym.split("-").map(Number);
   const first = new Date(y, (m ?? 1) - 1, 1);
@@ -78,18 +94,13 @@ function FolTechnicianCalendarPage() {
   const canManage = permissions.includes("kp.fol.install.manage");
   const canView = permissions.includes("kp.fol.view");
 
-  const [month, setMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [month, setMonth] = useState(currentEatMonth);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [techFilter, setTechFilter] = useState<string>("me");
 
   const technicians = useFolTechnicians(canManage);
   const techId =
-    canManage && techFilter !== "me" && techFilter !== "all"
-      ? Number(techFilter)
-      : undefined;
+    canManage && techFilter !== "me" && techFilter !== "all" ? Number(techFilter) : undefined;
 
   const calendar = useFolTechnicianCalendar({
     month,
@@ -140,7 +151,8 @@ function FolTechnicianCalendarPage() {
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Technician calendar</h1>
           <p className="text-sm text-muted-foreground">
-            Your allocated accounts and installs — open work to resolve, and how many you have completed.
+            Your allocated accounts and installs — open work to resolve, and how many you have
+            completed.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -198,11 +210,27 @@ function FolTechnicianCalendarPage() {
         {/* Month calendar */}
         <div className="rounded-lg border bg-card p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setMonth(shiftMonth(month, -1)); setSelectedDate(null); }}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => {
+                setMonth(shiftMonth(month, -1));
+                setSelectedDate(null);
+              }}
+            >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <div className="text-sm font-semibold">{monthLabel(month)}</div>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setMonth(shiftMonth(month, 1)); setSelectedDate(null); }}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => {
+                setMonth(shiftMonth(month, 1));
+                setSelectedDate(null);
+              }}
+            >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -215,7 +243,9 @@ function FolTechnicianCalendarPage() {
 
           <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase text-muted-foreground">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-              <div key={d} className="py-1">{d}</div>
+              <div key={d} className="py-1">
+                {d}
+              </div>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1">
@@ -227,7 +257,7 @@ function FolTechnicianCalendarPage() {
               const open = day?.open ?? 0;
               const resolved = day?.resolved ?? 0;
               const selected = selectedDate === cell.date;
-              const isToday = cell.date === new Date().toISOString().slice(0, 10);
+              const isToday = cell.date === eatToday();
               return (
                 <button
                   key={cell.date}
@@ -276,18 +306,28 @@ function FolTechnicianCalendarPage() {
               <Skeleton className="h-10 w-full" />
             </div>
           ) : accounts.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No accounts allocated yet.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No accounts allocated yet.
+            </p>
           ) : (
             <div className="max-h-[420px] space-y-2 overflow-y-auto">
               {accounts.map((acc) => (
                 <div key={acc.customer_acumatica_id} className="rounded-md border px-3 py-2">
                   <div className="font-medium text-sm">{acc.customer_name}</div>
-                  <div className="font-mono text-[11px] text-muted-foreground">{acc.customer_acumatica_id}</div>
+                  <div className="font-mono text-[11px] text-muted-foreground">
+                    {acc.customer_acumatica_id}
+                  </div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[10px] text-amber-800">
+                    <Badge
+                      variant="outline"
+                      className="border-amber-300 bg-amber-50 text-[10px] text-amber-800"
+                    >
                       {acc.open} open
                     </Badge>
-                    <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-[10px] text-emerald-800">
+                    <Badge
+                      variant="outline"
+                      className="border-emerald-300 bg-emerald-50 text-[10px] text-emerald-800"
+                    >
                       {acc.resolved} resolved
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">
@@ -324,12 +364,24 @@ function FolTechnicianCalendarPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">FOL</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Account</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Location</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Status</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Assigned</th>
-                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase text-muted-foreground">Action</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
+                  FOL
+                </th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
+                  Account
+                </th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
+                  Location
+                </th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
+                  Status
+                </th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
+                  Assigned
+                </th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase text-muted-foreground">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -416,7 +468,9 @@ function AllocationRow({ item, canResolve }: { item: FolCalendarItem; canResolve
       </td>
       <td className="px-4 py-2.5">
         <div className="font-medium">{item.customer_name}</div>
-        <div className="font-mono text-[11px] text-muted-foreground">{item.customer_acumatica_id}</div>
+        <div className="font-mono text-[11px] text-muted-foreground">
+          {item.customer_acumatica_id}
+        </div>
       </td>
       <td className="px-4 py-2.5 text-xs text-muted-foreground">
         {item.installation_location ? (

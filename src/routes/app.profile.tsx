@@ -27,6 +27,8 @@ interface ProfileData {
   email: string;
   role: string;
   phone_number: string | null;
+  rep_code: string | null;
+  employee_number: string | null;
   updated_at: string;
 }
 
@@ -66,6 +68,7 @@ interface UserSessionsResponse {
 interface ProfileErrors {
   name?: string[];
   phone_number?: string[];
+  rep_code?: string[];
 }
 
 interface PasswordUpdateResponse {
@@ -130,6 +133,7 @@ function ProfilePage() {
   // Local form state
   const [name, setName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [repCode, setRepCode] = useState("");
   const [fieldErrors, setFieldErrors] = useState<ProfileErrors>({});
   const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
   const [passwordOtp, setPasswordOtp] = useState("");
@@ -145,6 +149,7 @@ function ProfilePage() {
     if (profile) {
       setName(profile.name);
       setPhoneNumber(profile.phone_number ?? "");
+      setRepCode(profile.rep_code ?? "");
     }
   }, [profile]);
 
@@ -162,7 +167,11 @@ function ProfilePage() {
     mutationFn: () =>
       apiFetch("profile", {
         method: "PATCH",
-        body: { name, phone_number: phoneNumber || null },
+        body: {
+          name,
+          phone_number: phoneNumber || null,
+          rep_code: profile?.role === "Sales Consultant" ? (repCode.trim() || null) : undefined,
+        },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
@@ -340,6 +349,36 @@ function ProfilePage() {
                   <Badge variant="secondary">{profile?.role ?? "—"}</Badge>
                 </div>
               </div>
+
+              {/* Employee number — read-only */}
+              {profile?.employee_number && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="profile-employee-number">Employee number</Label>
+                  <Input
+                    id="profile-employee-number"
+                    value={profile.employee_number}
+                    readOnly
+                    disabled
+                    className="text-muted-foreground"
+                  />
+                </div>
+              )}
+
+              {/* Rep code — editable for Sales Consultant only */}
+              {profile?.role === "Sales Consultant" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="profile-rep-code">Rep code</Label>
+                  <Input
+                    id="profile-rep-code"
+                    value={repCode}
+                    onChange={(e) => setRepCode(e.target.value)}
+                    placeholder="e.g. KF-001"
+                  />
+                  {fieldErrors.rep_code && (
+                    <p className="text-xs text-destructive">{fieldErrors.rep_code[0]}</p>
+                  )}
+                </div>
+              )}
 
               <Separator />
 

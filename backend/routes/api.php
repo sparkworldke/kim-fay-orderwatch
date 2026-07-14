@@ -283,6 +283,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('users', [UserController::class, 'store']);
         // Dynamic reports-to options (create form — any active user)
         Route::get('users/reports-to-options', [UserController::class, 'reportsToOptions']);
+        // Bulk activate users + set email_verified_at
+        Route::post('users/bulk-activate', [UserController::class, 'bulkActivate']);
         Route::patch('users/{user}', [UserController::class, 'update']);
         Route::post('users/{user}/resend-welcome', [UserController::class, 'resendWelcomeEmail']);
         Route::post('users/{user}/password', [UserController::class, 'updatePassword']);

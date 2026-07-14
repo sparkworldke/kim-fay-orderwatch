@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
 import type React from "react";
 import { useState } from "react";
 import { FilePlus2, RefreshCw, Search } from "lucide-react";
@@ -8,12 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { usePcrDashboard, usePcrList, type PriceChangeRequest } from "@/hooks/usePriceChangeRequests";
+import {
+  usePcrDashboard,
+  usePcrList,
+  type PriceChangeRequest,
+} from "@/hooks/usePriceChangeRequests";
 import { money, PCR_STATUS_CLASS, PCR_STATUS_LABEL, shortDate } from "@/lib/price-change";
 
 export const Route = createFileRoute("/app/price-change-requests")({
   head: () => ({ meta: [{ title: "Price Change Requests - Kim-Fay OrderWatch" }] }),
-  component: PriceChangeListPage,
+  component: PriceChangeRequestsRoute,
 });
 
 const TABS = [
@@ -23,13 +27,25 @@ const TABS = [
   { value: "all", label: "All PCR" },
 ];
 
+function PriceChangeRequestsRoute() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  if (pathname !== "/app/price-change-requests") {
+    return <Outlet />;
+  }
+
+  return <PriceChangeListPage />;
+}
+
 function PriceChangeListPage() {
   const caps = useCapabilities();
   const permissions = caps.permissions ?? [];
   const canCreate = permissions.includes("pricing.pcr.create");
   const canApprove = permissions.includes("pricing.pcr.approve");
   const canApplyErp = permissions.includes("pricing.pcr.apply_erp");
-  const canSeeAll = permissions.includes("pricing.pcr.approve_escalated") || permissions.includes("pricing.pcr.config");
+  const canSeeAll =
+    permissions.includes("pricing.pcr.approve_escalated") ||
+    permissions.includes("pricing.pcr.config");
   const [view, setView] = useState("my");
   const [q, setQ] = useState("");
   const list = usePcrList({ view, q });
@@ -47,7 +63,9 @@ function PriceChangeListPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Price Change Requests</h1>
-          <p className="text-sm text-muted-foreground">Customer-scoped SKU price changes with approval and ERP handoff.</p>
+          <p className="text-sm text-muted-foreground">
+            Customer-scoped SKU price changes with approval and ERP handoff.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => list.refetch()}>
@@ -73,12 +91,21 @@ function PriceChangeListPage() {
       <div className="flex flex-wrap items-center gap-3">
         <Tabs value={view} onValueChange={setView}>
           <TabsList className="flex h-auto flex-wrap justify-start">
-            {visibleTabs.map((tab) => <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
+            {visibleTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
         <div className="relative ml-auto min-w-[220px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search ref, customer, SKU" className="h-9 pl-8" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search ref, customer, SKU"
+            className="h-9 pl-8"
+          />
         </div>
       </div>
 
@@ -96,13 +123,24 @@ function PriceChangeListPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {list.isLoading && Array.from({ length: 6 }).map((_, index) => (
-              <tr key={index}><td colSpan={7} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>
-            ))}
+            {list.isLoading &&
+              Array.from({ length: 6 }).map((_, index) => (
+                <tr key={index}>
+                  <td colSpan={7} className="px-4 py-3">
+                    <Skeleton className="h-5 w-full" />
+                  </td>
+                </tr>
+              ))}
             {!list.isLoading && (list.data?.data ?? []).length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">No price change requests found.</td></tr>
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  No price change requests found.
+                </td>
+              </tr>
             )}
-            {(list.data?.data ?? []).map((row) => <PcrRow key={row.id} row={row} />)}
+            {(list.data?.data ?? []).map((row) => (
+              <PcrRow key={row.id} row={row} />
+            ))}
           </tbody>
         </table>
       </div>
@@ -114,31 +152,49 @@ function PcrRow({ row }: { row: PriceChangeRequest }) {
   return (
     <tr className="hover:bg-muted/20">
       <td className="px-4 py-2.5">
-        <Link to="/app/price-change-requests/$id" params={{ id: String(row.id) }} className="font-medium text-primary hover:underline">
+        <Link
+          to="/app/price-change-requests/$id"
+          params={{ id: String(row.id) }}
+          className="font-medium text-primary hover:underline"
+        >
           {row.public_ref}
         </Link>
-        {row.duplicate_ack_required && !row.duplicate_acked_at && <div className="text-[11px] text-amber-700">Duplicate warning</div>}
+        {row.duplicate_ack_required && !row.duplicate_acked_at && (
+          <div className="text-[11px] text-amber-700">Duplicate warning</div>
+        )}
       </td>
       <td className="px-4 py-2.5">
         <div className="font-medium">{row.customer_name ?? row.customer_acumatica_id}</div>
-        <div className="font-mono text-[11px] text-muted-foreground">{row.customer_acumatica_id}</div>
+        <div className="font-mono text-[11px] text-muted-foreground">
+          {row.customer_acumatica_id}
+        </div>
       </td>
       <td className="px-4 py-2.5">
         <div className="font-mono text-xs">{row.inventory_id}</div>
-        <div className="max-w-[240px] truncate text-[11px] text-muted-foreground">{row.product_description}</div>
+        <div className="max-w-[240px] truncate text-[11px] text-muted-foreground">
+          {row.product_description}
+        </div>
       </td>
       <td className="px-4 py-2.5 text-xs">{money(row.current_selling_price)}</td>
       <td className="px-4 py-2.5 text-xs font-medium">{money(row.proposed_selling_price)}</td>
       <td className="px-4 py-2.5">
-        <Badge variant="outline" className={PCR_STATUS_CLASS[row.status]}>{PCR_STATUS_LABEL[row.status]}</Badge>
+        <Badge variant="outline" className={PCR_STATUS_CLASS[row.status]}>
+          {PCR_STATUS_LABEL[row.status]}
+        </Badge>
       </td>
-      <td className="px-4 py-2.5 text-xs text-muted-foreground">{shortDate(row.submitted_at ?? row.created_at)}</td>
+      <td className="px-4 py-2.5 text-xs text-muted-foreground">
+        {shortDate(row.submitted_at ?? row.created_at)}
+      </td>
     </tr>
   );
 }
 
 function Head({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">{children}</th>;
+  return (
+    <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
+      {children}
+    </th>
+  );
 }
 
 function Metric({ label, value }: { label: string; value: number }) {

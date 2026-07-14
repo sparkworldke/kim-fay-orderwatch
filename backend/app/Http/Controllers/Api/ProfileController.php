@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\OtpMail;
 use App\Models\Otp;
 use App\Models\PasswordChangeLog;
+use App\Models\UserRepCodeHistory;
 use App\Services\Admin\AuditLogger;
 use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 
 class ProfileController extends Controller
 {
@@ -29,43 +31,85 @@ class ProfileController extends Controller
         $user = $request->user();
 
         return response()->json([
-            'id'           => $user->id,
-            'name'         => $user->name,
-            'email'        => $user->email,
-            'role'         => $user->role,
-            'phone_number' => $user->phone_number,
-            'updated_at'   => $user->updated_at,
+            'id'              => $user->id,
+            'name'            => $user->name,
+            'email'           => $user->email,
+            'role'            => $user->role,
+            'phone_number'    => $user->phone_number,
+            'rep_code'        => $user->rep_code,
+            'employee_number' => $user->employee_number,
+            'updated_at'      => $user->updated_at,
         ]);
     }
 
     /**
-     * Update the authenticated user's profile (name and/or phone_number).
+     * Update the authenticated user's profile (name, phone_number, and/or rep_code).
      */
     public function update(Request $request): JsonResponse
     {
+        $user = $request->user();
+
         $validated = $request->validate(
             [
                 'name'         => 'sometimes|string|min:2|max:100',
                 'phone_number' => ['sometimes', 'nullable', 'regex:/^\+[1-9]\d{6,14}$/'],
+                'rep_code'     => [
+                    'sometimes',
+                    'nullable',
+                    'string',
+                    'max:50',
+                    'regex:/^[A-Za-z0-9 ._\\-\/]+$/',
+                    Rule::unique('users', 'rep_code')->ignore($user->id)->where('role', 'Sales Consultant'),
+                ],
             ],
             [
                 'name.min'            => 'Name must be between 2 and 100 characters.',
                 'name.max'            => 'Name must be between 2 and 100 characters.',
                 'phone_number.regex'  => 'Phone number must be in international format (e.g., +254712345678).',
+                'rep_code.regex'      => 'Rep code may only contain letters, numbers, spaces, dots, hyphens, underscores, and slashes.',
+                'rep_code.unique'     => 'This rep code is already assigned to another Sales Consultant.',
+                'rep_code.max'        => 'Rep code must not exceed 50 characters.',
             ]
         );
 
-        $user = $request->user();
+        // Normalise + track rep code history on self-service edits
+        $newRepCode = array_key_exists('rep_code', $validated)
+            ? (($validated['rep_code'] !== null && $validated['rep_code'] !== '')
+                ? strtoupper(trim((string) $validated['rep_code']))
+                : null)
+            : null;
+
+        $repCodeChanged = array_key_exists('rep_code', $validated)
+            && $newRepCode !== $user->rep_code;
+
+        if ($repCodeChanged) {
+            UserRepCodeHistory::create([
+                'user_id'         => $user->id,
+                'rep_code'        => $user->rep_code,
+                'changed_by_name' => $user->name,
+                'changed_by'      => $user->id,
+                'change_reason'   => 'Self-service profile update',
+                'changed_at'      => now(),
+            ]);
+
+            $validated['rep_code'] = $newRepCode;
+        } else {
+            unset($validated['rep_code']);
+        }
+
+        // employee_number is read-only from profile — never mass-assigned here
         $user->fill($validated);
         $user->save();
 
         return response()->json([
-            'id'           => $user->id,
-            'name'         => $user->name,
-            'email'        => $user->email,
-            'role'         => $user->role,
-            'phone_number' => $user->phone_number,
-            'updated_at'   => $user->updated_at,
+            'id'              => $user->id,
+            'name'            => $user->name,
+            'email'           => $user->email,
+            'role'            => $user->role,
+            'phone_number'    => $user->phone_number,
+            'rep_code'        => $user->rep_code,
+            'employee_number' => $user->employee_number,
+            'updated_at'      => $user->updated_at,
         ]);
     }
 

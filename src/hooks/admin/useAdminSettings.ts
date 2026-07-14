@@ -439,6 +439,24 @@ export function useToggleUserStatus() {
   });
 }
 
+export function useBulkActivateUsers() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ user_ids, set_verified_date }: { user_ids: number[]; set_verified_date: boolean }) =>
+      apiFetch<{ message: string; activated_count: number }>(`admin/users/bulk-activate`, {
+        method: "POST",
+        body: { user_ids, set_verified_date },
+      }),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "team-members"] });
+      queryClient.invalidateQueries({ queryKey: [...adminKey, "audit-logs"] });
+    },
+    onError: showError,
+  });
+}
+
 export function useDeleteUser() {
   const queryClient = useQueryClient();
 

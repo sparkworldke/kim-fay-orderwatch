@@ -441,6 +441,65 @@ class UserController extends Controller
         ]);
     }
 
+    /**
+     * Bulk-activate multiple users and set their email_verified_at timestamp.
+     */
+    public function bulkActivate(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'user_ids'          => ['required', 'array', 'min:1', 'max:200'],
+            'user_ids.*'        => ['integer', 'exists:users,id'],
+            'set_verified_date' => ['sometimes', 'boolean'],
+        ]);
+
+        $actor = $request->user();
+        $setVerifiedDate = $validated['set_verified_date'] ?? false;
+
+        $users = User::whereIn('id', $validated['user_ids'])->get();
+        $activatedCount = 0;
+
+        foreach ($users as $user) {
+            if ($user->id === $actor?->id) {
+                continue; // never activate self via bulk
+            }
+
+            if (! $this->canManageUser($actor, $user)) {
+                continue; // skip users the actor can't manage
+            }
+
+            $changed = false;
+
+            if (! $user->is_active) {
+                $user->is_active = true;
+                $changed = true;
+            }
+
+            if ($setVerifiedDate && ! $user->email_verified_at) {
+                $user->email_verified_at = now();
+                $changed = true;
+            }
+
+            if ($changed) {
+                $user->save();
+                $activatedCount++;
+            }
+
+            $this->audit->log(
+                'team_member_reactivated',
+                'user',
+                (string) $user->id,
+                ['email' => $user->email, 'bulk' => true],
+                $actor?->id,
+                $request->ip(),
+            );
+        }
+
+        return response()->json([
+            'message'         => $activatedCount . ' user(s) activated successfully.',
+            'activated_count' => $activatedCount,
+        ]);
+    }
+
     public function destroy(User $user, Request $request): JsonResponse
     {
         if ($user->id === $request->user()?->id) {
