@@ -89,6 +89,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboard/trend',             [DashboardController::class, 'trend']);
     Route::get('dashboard/orders-by-status',  [DashboardController::class, 'ordersByStatus']);
     Route::get('dashboard/goods-lost-in-transit', [DashboardController::class, 'goodsLostInTransit']);
+    Route::get('dashboard/zone-routes',          [DashboardController::class, 'zoneRoutes']);
 
     // Customer Feed — grouped customer performance
     Route::get('customer-feed',                    [CustomerFeedController::class, 'index']);

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcumaticaRoute;
 use App\Models\AcumaticaSalesOrder;
+use App\Models\AcumaticaShippingZone;
 use App\Models\User;
 use App\Services\Admin\SalesOrderLineFulfillmentDeriver;
 use App\Services\Operations\OperationsCatalogResolver;
@@ -233,6 +235,106 @@ class DashboardController extends Controller
                 'order_date'    => $order->order_date?->toDateString(),
                 'status'        => $order->status,
             ])->values(),
+        ]);
+    }
+
+    /**
+     * Zone routes accordion: returns shipping zones with their routes and
+     * per-route order/shipment counts broken down by dashboard status buckets.
+     */
+    public function zoneRoutes(Request $request): JsonResponse
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
+        $dateTo   = $request->input('date_to',   now()->toDateString());
+        $user     = $request->user();
+
+        // -- Shipping zones (with their routes) --------------------------------
+        $zones = AcumaticaShippingZone::query()
+            ->orderBy('acumatica_id')
+            ->get(['acumatica_id', 'description', 'name', 'region']);
+
+        $routesByZone = AcumaticaRoute::query()
+            ->orderBy('shipping_zone_id')
+            ->orderBy('route_code')
+            ->get(['route_code', 'route_name', 'shipping_zone_id', 'customer_zone'])
+            ->groupBy('shipping_zone_id');
+
+        // -- Order counts grouped by zone_id + route_code + status -------------
+        // Join orders → customers to pick up route_code and shipping_zone_id.
+        $rows = $this->excludeSpecialCustomers(
+            DataScope::applyOrderScope(
+                AcumaticaSalesOrder::salesOrdersOnly(),
+                $user,
+            ),
+        )
+            ->whereDate('acumatica_sales_orders.order_date', '>=', $dateFrom)
+            ->whereDate('acumatica_sales_orders.order_date', '<=', $dateTo)
+            ->join(
+                'acumatica_customers as cust',
+                'cust.acumatica_id',
+                '=',
+                'acumatica_sales_orders.customer_acumatica_id',
+            )
+            ->whereNotNull('cust.route_code')
+            ->where('cust.route_code', '!=', '')
+            ->select(
+                'cust.shipping_zone_id',
+                'cust.route_code',
+                DB::raw('LOWER(TRIM(acumatica_sales_orders.status)) as status_key'),
+                DB::raw('COUNT(*) as cnt'),
+            )
+            ->groupBy('cust.shipping_zone_id', 'cust.route_code', 'status_key')
+            ->get();
+
+        // Index the counts for fast lookup: [zone_id][route_code][status_key] = cnt
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[$row->shipping_zone_id][$row->route_code][$row->status_key] = (int) $row->cnt;
+        }
+
+        // -- Assemble the response --------------------------------------------
+        $zonesData = $zones->map(function ($zone) use ($routesByZone, $counts) {
+            $zoneRoutes = ($routesByZone[$zone->acumatica_id] ?? collect())->map(function ($route) use ($counts, $zone) {
+                $rc = $route->route_code;
+                $sc = $counts[$zone->acumatica_id][$rc] ?? [];
+
+                $total = array_sum($sc);
+
+                return [
+                    'route_code'        => $rc,
+                    'route_name'        => $route->route_name,
+                    'customer_zone'     => $route->customer_zone,
+                    'total'             => $total,
+                    'open'              => $sc['open']             ?? 0,
+                    'pending_approval'  => $sc['pending approval'] ?? 0,
+                    'shipping'          => $sc['shipping']         ?? 0,
+                    'completed'         => $sc['completed']        ?? 0,
+                    'rejected'          => $sc['rejected']         ?? 0,
+                    'on_hold'           => ($sc['on hold'] ?? 0) + ($sc['credit hold'] ?? 0),
+                    'back_order'        => $sc['back order']       ?? 0,
+                ];
+            })->values();
+
+            $zoneTotal = $zoneRoutes->sum('total');
+
+            return [
+                'shipping_zone_id' => $zone->acumatica_id,
+                'name'             => $zone->name ?? $zone->acumatica_id,
+                'description'      => $zone->description,
+                'region'           => $zone->region,
+                'total'            => $zoneTotal,
+                'routes'           => $zoneRoutes,
+            ];
+        });
+
+        // Keep only zones that have at least one route (with or without orders).
+        $zonesData = $zonesData->filter(fn ($z) => count($z['routes']) > 0)->values();
+
+        return response()->json([
+            'date_from' => $dateFrom,
+            'date_to'   => $dateTo,
+            'total'     => $zonesData->sum('total'),
+            'zones'     => $zonesData,
         ]);
     }
 

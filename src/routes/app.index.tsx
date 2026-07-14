@@ -125,6 +125,36 @@ interface DashboardStatusOrdersResponse {
   orders: DashboardStatusOrder[];
 }
 
+interface ZoneRouteData {
+  route_code: string;
+  route_name: string;
+  customer_zone: string | null;
+  total: number;
+  open: number;
+  pending_approval: number;
+  shipping: number;
+  completed: number;
+  rejected: number;
+  on_hold: number;
+  back_order: number;
+}
+
+interface ZoneRoutesZone {
+  shipping_zone_id: string;
+  name: string;
+  description: string | null;
+  region: string | null;
+  total: number;
+  routes: ZoneRouteData[];
+}
+
+interface ZoneRoutesResponse {
+  date_from: string;
+  date_to: string;
+  total: number;
+  zones: ZoneRoutesZone[];
+}
+
 // -------------------------------------------------------------------------
 // Hooks
 // -------------------------------------------------------------------------
@@ -165,6 +195,16 @@ function useGoodsLostInTransit(dateFrom: string, dateTo: string, enabled: boolea
       apiFetch<GoodsLostInTransitResponse>(
         `dashboard/goods-lost-in-transit?date_from=${dateFrom}&date_to=${dateTo}`,
       ),
+    enabled,
+  });
+}
+
+function useZoneRoutes(dateFrom: string, dateTo: string, enabled: boolean) {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+
+  return useQuery({
+    queryKey: ["dashboard-zone-routes", dateFrom, dateTo],
+    queryFn: () => apiFetch<ZoneRoutesResponse>(`dashboard/zone-routes?${params.toString()}`),
     enabled,
   });
 }
@@ -1090,12 +1130,157 @@ function GoodsLostInTransitPanel({
   );
 }
 
+const ZONE_ROUTE_COLS: { key: keyof ZoneRouteData; label: string; tone: string }[] = [
+  { key: "open", label: "Open", tone: "text-sky-700" },
+  { key: "pending_approval", label: "Pending", tone: "text-amber-700" },
+  { key: "shipping", label: "Shipping", tone: "text-purple-700" },
+  { key: "completed", label: "Completed", tone: "text-green-700" },
+  { key: "rejected", label: "Rejected", tone: "text-red-700" },
+  { key: "on_hold", label: "On Hold", tone: "text-orange-700" },
+  { key: "back_order", label: "Back Order", tone: "text-pink-700" },
+];
+
+function ZoneRoutesPanel({
+  dateFrom,
+  dateTo,
+  enabled,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  enabled: boolean;
+}) {
+  const zr = useZoneRoutes(dateFrom, dateTo, enabled);
+  const data = zr.data;
+
+  if (!enabled) return null;
+
+  if (zr.isLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (zr.isError) {
+    return <p className="text-[8px] text-destructive">Could not load zone / route data.</p>;
+  }
+
+  if (!data || data.zones.length === 0) {
+    return (
+      <p className="text-[8px] text-muted-foreground">
+        No orders with assigned routes in this date range.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded border bg-card p-2 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-1">
+          <h2 className="flex items-center gap-1 text-[10px] font-semibold">
+            <BarChart2 className="h-3 w-3 text-indigo-600" />
+            Zones & Routes
+          </h2>
+          <p className="text-[8px] text-muted-foreground">
+            {data.zones.length} zone{data.zones.length !== 1 ? "s" : ""} /{" "}
+            {data.total.toLocaleString()} total orders
+          </p>
+        </div>
+      </div>
+
+      <Accordion type="multiple" className="rounded border bg-card shadow-sm">
+        {data.zones.map((zone) => (
+          <AccordionItem key={zone.shipping_zone_id} value={zone.shipping_zone_id} className="border-b px-2 last:border-b-0">
+            <AccordionTrigger className="py-1.5 text-[9px] font-semibold hover:no-underline">
+              <div className="flex flex-1 items-center justify-between gap-2 pr-1">
+                <span className="flex items-center gap-1">
+                  <span className="font-mono">{zone.shipping_zone_id}</span>
+                  <span>{zone.name}</span>
+                  {zone.description && (
+                    <span className="text-[7px] font-normal text-muted-foreground">
+                      ({zone.description})
+                    </span>
+                  )}
+                </span>
+                <Badge variant="secondary" className="h-3.5 px-1 text-[8px] tabular-nums">
+                  {zone.routes.length} route{zone.routes.length !== 1 ? "s" : ""} /{" "}
+                  {zone.total.toLocaleString()} orders
+                </Badge>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pb-1.5">
+              <div className="overflow-x-auto rounded border bg-muted/10">
+                <table className="w-full text-[8px]">
+                  <thead>
+                    <tr className="border-b bg-muted/40 text-left">
+                      <th className="px-1.5 py-1 font-semibold text-muted-foreground">Route</th>
+                      <th className="px-1.5 py-1 font-semibold text-muted-foreground">Name</th>
+                      {ZONE_ROUTE_COLS.map((col) => (
+                        <th key={col.key} className="px-1.5 py-1 text-right font-semibold text-muted-foreground whitespace-nowrap">
+                          {col.label}
+                        </th>
+                      ))}
+                      <th className="px-1.5 py-1 text-right font-semibold text-muted-foreground">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {zone.routes.map((route) => (
+                      <tr key={route.route_code} className="border-b last:border-0 hover:bg-muted/20">
+                        <td className="px-1.5 py-0.5 font-mono font-medium">{route.route_code}</td>
+                        <td className="px-1.5 py-0.5">{route.route_name ?? "-"}</td>
+                        {ZONE_ROUTE_COLS.map((col) => (
+                          <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
+                            {(route[col.key] as number) > 0 ? (
+                              <span className={col.tone}>{(route[col.key] as number).toLocaleString()}</span>
+                            ) : (
+                              <span className="text-muted-foreground">0</span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="px-1.5 py-0.5 text-right font-semibold tabular-nums">
+                          {route.total.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t bg-muted/30 font-semibold">
+                      <td className="px-1.5 py-0.5" colSpan={2}>
+                        {zone.shipping_zone_id} Total
+                      </td>
+                      {ZONE_ROUTE_COLS.map((col) => {
+                        const sum = zone.routes.reduce((acc, r) => acc + (r[col.key] as number), 0);
+                        return (
+                          <td key={col.key} className="px-1.5 py-0.5 text-right tabular-nums">
+                            {sum > 0 ? (
+                              <span className={col.tone}>{sum.toLocaleString()}</span>
+                            ) : (
+                              <span className="text-muted-foreground">0</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-1.5 py-0.5 text-right tabular-nums">
+                        {zone.total.toLocaleString()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </div>
+  );
+}
+
 function DashboardPage() {
   const navigate = useNavigate();
   const [dateFrom, setDateFrom] = useState(startOfMonth);
   const [dateTo, setDateTo]     = useState(today);
   const [compare, setCompare]   = useState(false);
-  const [tab, setTab] = useState<"sales-orders" | "goods-lost">("sales-orders");
+  const [tab, setTab] = useState<"sales-orders" | "goods-lost" | "zone-routes">("sales-orders");
   const [activeStats, setActiveStats] = useState<StatKey[]>(
     ["total", "open", "completed", "pending_approval", "shipping", "rejected", "on_hold"]
   );
@@ -1200,7 +1385,7 @@ function DashboardPage() {
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "sales-orders" | "goods-lost")} className="space-y-2">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "sales-orders" | "goods-lost" | "zone-routes")} className="space-y-2">
         <TabsList className="h-7 gap-0.5 p-0.5">
           <TabsTrigger value="sales-orders" className="h-6 gap-1 px-2 text-[8px]">
             <Package className="h-3 w-3" />
@@ -1214,6 +1399,10 @@ function DashboardPage() {
                 {kpi.goods_lost_in_transit.total}
               </Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="zone-routes" className="h-6 gap-1 px-2 text-[8px]">
+            <BarChart2 className="h-3 w-3" />
+            Zones & Routes
           </TabsTrigger>
         </TabsList>
 
@@ -1372,6 +1561,14 @@ function DashboardPage() {
             dateFrom={dateFrom}
             dateTo={dateTo}
             enabled={tab === "goods-lost"}
+          />
+        </TabsContent>
+
+        <TabsContent value="zone-routes" className="mt-0 space-y-2">
+          <ZoneRoutesPanel
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            enabled={tab === "zone-routes"}
           />
         </TabsContent>
       </Tabs>
