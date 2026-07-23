@@ -37,7 +37,7 @@ Quick status of the four major enablement features: customer matching, price cha
 - Create / submit FOL for portfolio customers
 - Multi-stage **approve/reject** (HOD → CCO, admin-configurable)
 - SO / PO link, attachments, notifications
-- **Admin FOL Settings** (stages, mail, attachments)
+- **KP CRM FOL Settings** (stages, mail, attachments)
 - **Technician assign** on FOL
 - **Technician calendar**: allocations, accounts, open vs **resolved** counts, mark resolved
 - FOL list tabs for techs: My Allocations / Resolved by me

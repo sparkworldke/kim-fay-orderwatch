@@ -286,6 +286,6 @@ Avoid `$select` until all listed fields are confirmed in `$adHocSchema`. Add fie
 
 ## Contact / references
 
-- OrderWatch production API: `https://dating.sparkworld.co.ke/backend/public/api`
+- Sight production API: `https://datacontroller.fayshop.co.ke/backend/public/api`
 - Internal integration notes: `acumatica-integration-guide(1-09).md` (Section: OData KeyNotFoundException)
 - OrderWatch sync types: `inventory`, `backorders`, `sales_orders`, `fill_rate`

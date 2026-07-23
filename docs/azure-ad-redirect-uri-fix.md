@@ -47,7 +47,7 @@ wrong callback URL to Azure.
 
 **Before (wrong):**
 ```env
-APP_URL=https://dating.sparkworld.co.ke/backend/public
+APP_URL=https://datacontroller.fayshop.co.ke/backend/public
 MICROSOFT_REDIRECT_URI="${APP_URL}/api/admin/mailboxes/oauth/callback"
 ```
 

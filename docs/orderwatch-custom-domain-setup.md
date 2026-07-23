@@ -1,6 +1,9 @@
-# OrderWatch Custom Domain Setup
+# Sight Custom Domain Setup
 
-Connect `orderwatch.fayshop.co.ke` (currently managed in cPanel) to the Cloudflare Worker `orderwatchkimfay` so users visit your branded domain instead of `https://orderwatchkimfay.nairobidental.workers.dev`.
+> **Rename (2026):** product domain is now **`sight.fayshop.co.ke`**.  
+> Legacy **`orderwatch.fayshop.co.ke`** stays on the Worker and **301-redirects** to Sight (`src/server.ts`).
+
+Connect `sight.fayshop.co.ke` (and keep `orderwatch.fayshop.co.ke` for redirects) to the Cloudflare Worker `orderwatchkimfay` so users visit your branded domain instead of `https://orderwatchkimfay.nairobidental.workers.dev`.
 
 ---
 
@@ -9,7 +12,7 @@ Connect `orderwatch.fayshop.co.ke` (currently managed in cPanel) to the Cloudfla
 | Component | Host | Role |
 |-----------|------|------|
 | Frontend (React / TanStack Start) | `orderwatch.fayshop.co.ke` | Cloudflare Worker `orderwatchkimfay` |
-| API (Laravel) | `https://dating.sparkworld.co.ke/backend/public/api` | Separate server — not on cPanel for this subdomain |
+| API (Laravel) | `https://datacontroller.fayshop.co.ke/backend/public/api` | Separate host — Worker proxies `/api` here |
 
 The Worker serves the UI only. API calls go directly to the Laravel backend configured in `VITE_API_BASE_URL`.
 
@@ -17,7 +20,7 @@ The Worker serves the UI only. API calls go directly to the Laravel backend conf
 flowchart LR
   User -->|orderwatch.fayshop.co.ke| CF[Cloudflare DNS - Proxied]
   CF --> Worker[orderwatchkimfay Worker]
-  Worker -->|API calls| Laravel[dating.sparkworld.co.ke/backend]
+  Worker -->|API calls| Laravel[datacontroller.fayshop.co.ke/backend]
 ```
 
 ---
@@ -140,23 +143,24 @@ npx wrangler deploy
 
 1. **CORS** — Add `https://orderwatch.fayshop.co.ke` to `backend/config/cors.php` allowed origins if not already present.
 
-2. **Frontend API URL** — Production build uses `VITE_API_BASE_URL` from `.env`:
+2. **Frontend API URL** — Production build uses `.env.production` (Worker proxies `/api`):
    ```env
-   VITE_API_BASE_URL=https://dating.sparkworld.co.ke/backend/public/api
+   VITE_API_BASE_URL=/api
+   VITE_API_UPSTREAM=https://datacontroller.fayshop.co.ke/backend/public/api
+   VITE_API_BASE_URL_SSR=https://datacontroller.fayshop.co.ke/backend/public/api
    ```
    Rebuild and redeploy after any change:
    ```bash
-   npm run build
-   npx wrangler deploy
+   npm run deploy:production
    ```
 
 3. **Azure OAuth (Outlook mailbox connect)** — If used, register this redirect URI in Azure AD → App registrations → Authentication:
    ```
-   https://orderwatch.fayshop.co.ke/api/admin/mailboxes/oauth/callback
+   https://sight.fayshop.co.ke/api/admin/mailboxes/oauth/callback
    ```
-   > **Note:** The Laravel API currently lives on `dating.sparkworld.co.ke`. OAuth callbacks must match where the API actually runs. If the callback is on the Laravel server, use:
+   > **Note:** The Laravel API lives on `datacontroller.fayshop.co.ke`. OAuth callbacks must match where the API actually runs. If the callback is on the Laravel server, use:
    ```
-   https://dating.sparkworld.co.ke/backend/public/api/admin/mailboxes/oauth/callback
+   https://datacontroller.fayshop.co.ke/backend/public/api/admin/mailboxes/oauth/callback
    ```
    The URI in Azure AD and `MICROSOFT_REDIRECT_URI` in backend `.env` must be **character-for-character identical**.
 
@@ -254,8 +258,8 @@ These are Kenyan hosting DNS (`noc254.com` / `rcnoc.com`). To use Cloudflare Wor
 | Workers.dev URL | `https://orderwatchkimfay.nairobidental.workers.dev` |
 | Target custom domain | `https://orderwatch.fayshop.co.ke` |
 | Cloudflare account | `sparkworldke@gmail.com` |
-| Production API | `https://dating.sparkworld.co.ke/backend/public/api` |
-| Deploy commands | `npm run build` then `npx wrangler deploy` |
+| Production API | `https://datacontroller.fayshop.co.ke/backend/public/api` |
+| Deploy commands | `npm run deploy:production` |
 
 ---
 

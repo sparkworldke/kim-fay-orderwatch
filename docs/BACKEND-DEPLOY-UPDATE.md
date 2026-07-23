@@ -6,8 +6,11 @@ For a **first-time** server install, use [`DEPLOY-VPS.md`](./DEPLOY-VPS.md) inst
 
 | Layer | Where | Deploy method |
 |-------|--------|----------------|
-| **Frontend** | Cloudflare Worker (`orderwatch.fayshop.co.ke`) | `npm run build` + `npx wrangler deploy` |
-| **Backend** | VPS (`api.orderwatch.fayshop.co.ke`) | rsync/git + `composer` + `migrate` + cache clear |
+| **Frontend (prod)** | Cloudflare Worker `orderwatchkimfay` → `sight.fayshop.co.ke` | `npm run deploy:production` |
+| **Frontend (staging)** | Cloudflare Worker `sight-staging` → `staging.sight.fayshop.co.ke` | `npm run deploy:staging` |
+| **Backend** | VPS (prod + optional staging install) | rsync/git + `composer` + `migrate` + cache clear |
+
+Full env split: [`STAGING-AND-PRODUCTION.md`](./STAGING-AND-PRODUCTION.md).
 
 ---
 
@@ -103,22 +106,27 @@ Fill-rate OOS / SKU breakdown endpoints remain under operations (see Admin / Fil
 From the **monorepo root** on your machine (not the VPS):
 
 ```bash
-# Ensure API base URL points at production
-# .env / .env.production should include e.g.:
-#   VITE_API_BASE_URL=https://api.orderwatch.fayshop.co.ke/api
+# Staging (recommended first)
+# Edit .env.staging → VITE_API_UPSTREAM = staging Laravel /api
+npm run deploy:staging
 
-npm run build
-npx wrangler deploy
+# Production
+# Edit .env.production → VITE_API_UPSTREAM = prod Laravel /api
+npm run deploy:production
 ```
 
-Worker name: `orderwatchkimfay`  
-Route: `orderwatch.fayshop.co.ke` (custom domain)
+| Env | Worker | Domain |
+|-----|--------|--------|
+| Staging | `sight-staging` | `staging.sight.fayshop.co.ke` |
+| Production | `orderwatchkimfay` | `sight.fayshop.co.ke` (+ legacy `orderwatch.fayshop.co.ke` redirect) |
 
 Confirm:
 
 ```bash
 npx wrangler whoami
-curl -sI https://orderwatch.fayshop.co.ke
+curl -sI https://staging.sight.fayshop.co.ke
+curl -sI https://sight.fayshop.co.ke
+curl -sI https://orderwatch.fayshop.co.ke   # should 301 → sight
 ```
 
 ---

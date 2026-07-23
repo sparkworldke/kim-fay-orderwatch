@@ -372,3 +372,8 @@ No request body required. Identity from auth session. Response: `matchLogId`, `o
 ---
 
 *PRD v1.0.0 — Order Match | Acumatica Integration Platform | June 2026*
+
+root@server:/home/kimfaydev/web/datacontroller.fayshop.co.ke/public_html/backend# php artisan orderwatch:sales-orders-sync \
+  --date-from=2026-05-12 \
+  --date-to=2026-06-30 \
+  --source=manual
