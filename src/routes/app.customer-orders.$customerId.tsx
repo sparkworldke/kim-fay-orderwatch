@@ -44,6 +44,28 @@ const WHITESPOT_PAGE_SIZE = 8;
 const DOCUMENTS_PAGE_SIZE = 15;
 const COMMON_PRODUCTS_PAGE_SIZE = 20;
 
+function CustomerProfile({ customer }: { customer: AcumaticaCustomer }) {
+  const extra = customer.customer_data;
+  const fields: Array<[string, unknown]> = [
+    ["Customer ID", customer.acumatica_id], ["Status", customer.status], ["Customer class", customer.customer_class],
+    ["Customer group", extra?.customer_group], ["Category", extra?.category], ["Region", extra?.customer_region],
+    ["Parent", customer.parent ? `${customer.parent.name} (${customer.parent.acumatica_id})` : customer.parent_acumatica_id],
+    ["Terms", customer.payment_terms], ["Credit limit", extra?.credit_limit ? `${extra.currency_id ?? "KES"} ${Number(extra.credit_limit).toLocaleString()}` : null],
+    ["Price class", [extra?.price_class_id, extra?.price_class_name].filter(Boolean).join(" — ")],
+    ["Statement", [extra?.statement_type, extra?.statement_cycle].filter(Boolean).join(" / ")], ["Shipping rule", extra?.shipping_rule],
+    ["Delivery", extra?.delivery], ["Sage code", extra?.sage_code], ["Business account ID", extra?.business_account_id],
+    ["Tax registration ID", extra?.tax_registration_id], ["Main A/C owner", extra?.main_ac_owner],
+    ["Rep / Sales rep", [extra?.rep_code, extra?.sales_rep].filter(Boolean).join(" — ")],
+    ["Sight consultant", customer.servicing_consultant ? `${customer.servicing_consultant.name}${customer.servicing_consultant.rep_code ? ` (${customer.servicing_consultant.rep_code})` : ""}` : null],
+    ["Route", [extra?.route_code, customer.route?.route_name].filter(Boolean).join(" — ")],
+    ["Zone", [extra?.shipping_zone_id, extra?.customer_zone].filter(Boolean).join(" — ")],
+    ["Address", [extra?.address_line_1, extra?.address_line_2, extra?.address_line_3, extra?.city, extra?.country].filter(Boolean).join(", ")],
+    ["Company email", extra?.email ?? customer.email], ["Company phone", customer.phone],
+    ["Source", extra?.source], ["Last synced", extra?.synced_at ? new Date(extra.synced_at).toLocaleString() : customer.synced_at ? new Date(customer.synced_at).toLocaleString() : null],
+  ];
+  return <Card className="rounded-lg shadow-sm"><CardHeader className="pb-3"><CardTitle className="text-base">Customer profile</CardTitle></CardHeader><CardContent className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">{fields.map(([label, value]) => <div key={label}><p className="text-xs font-medium uppercase text-muted-foreground">{label}</p><p className="text-sm">{String(value || "—")}</p></div>)}</CardContent></Card>;
+}
+
 /** Local (non-UTC) date string in YYYY-MM-DD, matching <input type="date">. */
 function toDateInputValue(date: Date): string {
   const year = date.getFullYear();
@@ -143,12 +165,14 @@ function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
           </h1>
           <p className="font-mono text-xs text-muted-foreground">{customerId}</p>
         </div>
-        {customer.data?.customer_class && <Badge variant="secondary">{customer.data.customer_class}</Badge>}
+        <div className="flex gap-2">{customer.data?.customer_data?.customer_group && <Badge>{customer.data.customer_data.customer_group}</Badge>}{customer.data?.customer_class && <Badge variant="secondary">{customer.data.customer_class}</Badge>}</div>
       </div>
 
       {branches.length > 0 && <BranchesCard customerId={customerId} branches={branches} />}
 
-      <CustomerContactsCard customerId={customerId} />
+      {customer.data && <CustomerProfile customer={customer.data} />}
+
+      <CustomerContactsCard customerId={customerId} health={customer.data?.contact_health ? { hasPhone: customer.data.contact_health.has_phone, hasEmail: customer.data.contact_health.has_email, hasPrimary: customer.data.contact_health.has_primary } : undefined} />
 
       <MetricsGrid summary={summary} loading={orders.isLoading} />
 

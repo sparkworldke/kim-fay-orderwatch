@@ -546,6 +546,7 @@ export type BackordersValueSummary = ValueSummaryTotals & {
 export type BackordersSummary = {
   open_lines: number;
   open_orders: number;
+  open_customers: number;
   revenue_at_risk: number;
   total_open_qty: number;
   last_synced_at: string | null;
@@ -577,6 +578,9 @@ export type BackordersSummary = {
     rar_true_stockout: number;
     rar_partial_cover: number;
     rar_stock_available_not_shipped: number;
+    true_stockout_lines: number;
+    partial_cover_lines: number;
+    stock_available_lines: number;
     fgs_synced_at: string | null;
   };
   data_quality: {

@@ -109,6 +109,21 @@ export interface AcumaticaCustomer extends AcumaticaCustomerSummary {
   synced_at: string | null;
   branches?: AcumaticaCustomer[];
   branch_count?: number;
+  route?: { route_code: string; route_name: string | null } | null;
+  parent?: { acumatica_id: string; name: string } | null;
+  servicing_consultant?: { id: number; name: string; email: string; rep_code: string | null } | null;
+  contact_health?: { has_phone: boolean; has_email: boolean; has_primary: boolean };
+  customer_data?: {
+    customer_group: string | null; category: string | null; customer_region: string | null;
+    currency_id: string | null; credit_limit: string | null; price_class_id: string | null;
+    price_class_name: string | null; main_ac_owner: string | null; rep_code: string | null;
+    sales_rep: string | null; route_code: string | null; shipping_zone_id: string | null;
+    customer_zone: string | null; country: string | null; city: string | null;
+    address_line_1: string | null; address_line_2: string | null; address_line_3: string | null;
+    email: string | null; sage_code: string | null; business_account_id: string | null;
+    tax_registration_id: string | null; statement_type: string | null; statement_cycle: string | null;
+    shipping_rule: string | null; delivery: string | null; source: string | null; synced_at: string | null;
+  } | null;
 }
 
 export interface AcumaticaSalesOrderLine {

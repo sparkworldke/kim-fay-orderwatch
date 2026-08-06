@@ -14,7 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { KpAccountsTable } from "@/components/kp-accounts-table";
-import { useKpAccountsByRep } from "@/hooks/useKpAccounts";
+import { useKpAccountsByRep, type KpAccountsByRepResponse } from "@/hooks/useKpAccounts";
 import { CustomerLink, OrderLink } from "@/components/entity-links";
 import { InfoTip } from "@/components/info-tip";
 import { MaskedKES } from "@/components/MaskedCurrency";
@@ -89,6 +89,8 @@ function PortfolioDashboardPage() {
   // "auto" needs to fall back to whatever the backend actually picked (self vs team).
   const effectiveMode = mode === "auto" ? s?.scope.mode : mode;
   const showTeamAccordion = effectiveMode === "team" && Boolean(s?.scope.can_toggle_team);
+  const teamByRep = useKpAccountsByRep({ all_classes: true, month: `${year}-${String(month).padStart(2, "0")}` }, showTeamAccordion);
+  const teamSummary = teamByRep.data?.summary;
   // Only force "self" scoping when the viewer actually has a personal sales book — otherwise
   // (e.g. a sector-scoped non-sales viewer) leave the table on its normal DataScope behavior.
   const accountsTableMode =
@@ -250,6 +252,13 @@ function PortfolioDashboardPage() {
             <Skeleton key={i} className="h-28 rounded-lg" />
           ))}
         </div>
+      ) : k && showTeamAccordion ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard icon={TrendingUp} label="Revenue MTD" value={<MaskedKES value={teamSummary?.revenue_mtd ?? k.revenue_mtd} />} sub="Ordered sales value" tip="Team sales this month." tone="emerald" />
+          <KpiCard icon={Target} label="Target progress" value={teamSummary?.target ? `${Math.round((teamSummary.revenue_mtd / teamSummary.target) * 100)}%` : "No targets"} sub={teamSummary?.target ? `${teamSummary.targeted_reportees} reportees targeted` : "Assign monthly targets"} tip="Combined progress for reportees with targets." tone="violet" />
+          <KpiCard icon={AlertTriangle} label="Need attention" value={String(teamSummary?.reportees_needing_attention ?? 0)} sub="Reportees requiring action" tip="Missing targets, pace, dormancy or backorder risk." tone="amber" />
+          <KpiCard icon={Wallet} label="Backorder risk" value={<MaskedKES value={teamSummary?.backorder_revenue_at_risk ?? k.backorder_revenue_at_risk} />} sub="Team customer value at risk" tip="Open backorder value across the team." tone="red" onClick={() => setTab("backorders")} />
+        </div>
       ) : k ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
@@ -290,7 +299,7 @@ function PortfolioDashboardPage() {
       ) : null}
 
       {/* Top movers */}
-      {s && !s.scope.empty_portfolio && (
+      {s && !s.scope.empty_portfolio && !showTeamAccordion && (
         <div className="grid gap-3 lg:grid-cols-2">
           <section className="rounded-lg border bg-card p-4 shadow-sm">
             <h2 className="mb-1 text-sm font-semibold">Top customers this month</h2>
@@ -399,7 +408,7 @@ function PortfolioDashboardPage() {
 
         <TabsContent value="overview" className="mt-4">
           {showTeamAccordion ? (
-            <TeamAccountsAccordion allClasses />
+            <TeamAccountsAccordion allClasses response={teamByRep.data} loading={teamByRep.isLoading} error={teamByRep.error} />
           ) : (
             <KpAccountsTable
               title="Accounts in your portfolio"
@@ -712,17 +721,19 @@ function PortfolioDashboardPage() {
 function TeamAccountsAccordion({
   excludeClass,
   allClasses = false,
+  response,
+  loading,
+  error,
 }: {
   excludeClass?: string;
   allClasses?: boolean;
+  response?: KpAccountsByRepResponse;
+  loading: boolean;
+  error: Error | null;
 }) {
-  const byRep = useKpAccountsByRep({
-    exclude_class: excludeClass,
-    all_classes: allClasses,
-  });
-  const groups = byRep.data?.groups ?? [];
+  const groups = response?.groups ?? [];
 
-  if (byRep.isLoading) {
+  if (loading) {
     return (
       <div className="space-y-2">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -732,11 +743,11 @@ function TeamAccountsAccordion({
     );
   }
 
-  if (byRep.isError) {
+  if (error) {
     return (
       <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
         Could not load team accounts.{" "}
-        {byRep.error instanceof Error ? byRep.error.message : ""}
+        {error instanceof Error ? error.message : ""}
       </div>
     );
   }
@@ -750,6 +761,8 @@ function TeamAccountsAccordion({
   }
 
   return (
+    <div className="space-y-3">
+      <div className="rounded-lg border bg-muted/20 p-3 text-sm"><strong>{response?.summary.reportees_needing_attention ?? 0} reportees need attention.</strong> Review missing targets, dormant accounts and backorder exposure first.</div>
     <Accordion type="multiple" className="rounded-lg border bg-card">
       {groups.map((g) => (
         <AccordionItem
@@ -765,6 +778,10 @@ function TeamAccountsAccordion({
                   {g.rep_code ?? "—"}
                   {g.employee_number ? ` / ${g.employee_number}` : ""}
                 </span>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <Badge variant={g.needs_attention ? "destructive" : "secondary"} className="capitalize">{g.pace_status.replace("_", " ")}</Badge>
+                  <span className={cn("text-xs", g.needs_attention ? "text-destructive" : "text-muted-foreground")}>{g.attention_reason}</span>
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <Badge variant="secondary" className="tabular-nums">
@@ -800,12 +817,16 @@ function TeamAccountsAccordion({
                     {g.time_gone_pct}% time gone
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">No target set · {g.time_gone_pct}% time gone</span>
+                  <span className="font-medium text-amber-700">No target · assign target</span>
                 )}
               </div>
             </div>
           </AccordionTrigger>
           <AccordionContent>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/30 p-3 text-xs">
+              <span>Last activity: {g.last_activity_at ?? "No recorded order"} · Backorder risk: <MaskedKES value={g.backorder_revenue_at_risk} /></span>
+              <div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><Link to="/app/sales-consultants/$id" params={{ id: String(g.user_id) }}>Open book</Link></Button><Button asChild size="sm" variant="outline"><Link to="/app/kp/dormant">View dormant</Link></Button><Button asChild size="sm"><Link to="/app/kp/commissions">{g.target == null ? "Assign target" : "Manage target"}</Link></Button></div>
+            </div>
             <KpAccountsTable
               title=""
               description=""
@@ -821,6 +842,7 @@ function TeamAccountsAccordion({
         </AccordionItem>
       ))}
     </Accordion>
+    </div>
   );
 }
 

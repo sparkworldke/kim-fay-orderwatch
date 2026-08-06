@@ -65,6 +65,10 @@ type SortKey =
 
 function SalesIntelligencePage() {
   const { channel = "MT" } = Route.useSearch();
+  return <SalesIntelligenceView channel={channel} />;
+}
+
+export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceChannel }) {
   const initialPeriod = useMemo(currentNairobiPeriod, []);
   const [from, setFrom] = useState(initialPeriod.from);
   const [to, setTo] = useState(initialPeriod.to);

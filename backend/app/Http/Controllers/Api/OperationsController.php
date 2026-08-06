@@ -370,11 +370,16 @@ class OperationsController extends Controller
             ->whereNotNull('acumatica_backorder_lines.order_nbr')
             ->distinct()
             ->count('acumatica_backorder_lines.order_nbr');
+        $openCustomers = (int) (clone $activeLines)
+            ->whereNotNull('acumatica_backorder_lines.customer_acumatica_id')
+            ->distinct()
+            ->count('acumatica_backorder_lines.customer_acumatica_id');
         $openLines = (int) (clone $activeLines)->count();
 
         return response()->json([
             'open_lines'        => $openLines,
             'open_orders'       => $openOrders,
+            'open_customers'    => $openCustomers,
             'open_skus'         => $openSkus,
             'revenue_at_risk'   => round((float) (clone $activeLines)->sum('acumatica_backorder_lines.revenue_at_risk'), 2),
             'total_open_qty'    => round((float) (clone $activeLines)->sum('acumatica_backorder_lines.open_qty'), 4),

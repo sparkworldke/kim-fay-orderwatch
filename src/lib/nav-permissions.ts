@@ -4,6 +4,7 @@ const ADMIN_ONLY_URLS = new Set(["/app/administration", "/app/roles", "/app/adop
 
 export const ALL_AUTHENTICATED_URLS = new Set([
   "/app",
+  "/app/executive",
   "/app/orders",
   "/app/products-not-delivered",
   "/app/business-optimization",
@@ -34,6 +35,8 @@ export const ALL_AUTHENTICATED_URLS = new Set([
   "/app/kp/fol/calendar",
   "/app/price-change-requests",
   "/app/sales-management",
+  "/app/gt/revenue-orders",
+  "/app/gt/sfa",
   "/app/kp/commissions",
   "/app/profile",
 ]);
@@ -78,6 +81,7 @@ export function isPrivilegedRole(role: Role | undefined): boolean {
 
 export const MENU_SLUG_BY_URL: Record<string, string> = {
   "/app": "dashboard",
+  "/app/executive": "executive-view",
   "/app/orders": "orders",
   "/app/products-not-delivered": "products-not-delivered",
   "/app/business-optimization": "business-optimization",
@@ -115,6 +119,8 @@ export const MENU_SLUG_BY_URL: Record<string, string> = {
   "/app/kp/fol/settings": "kp-fol-settings",
   "/app/price-change-requests": "price-change-requests",
   "/app/sales-management": "sales-management",
+  "/app/gt/revenue-orders": "gt",
+  "/app/gt/sfa": "gt",
   "/app/kp/commissions": "kp-commissions",
   "/app/profile": "profile",
   "/app/adoption": "adoption",

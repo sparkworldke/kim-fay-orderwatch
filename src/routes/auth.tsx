@@ -223,6 +223,7 @@ function AuthPage() {
         const data = await apiFetch<{
           token: string;
           user: { id: number; name: string; email: string; role: string; rep_code?: string | null };
+          capabilities?: { executive_view?: boolean };
         }>("auth/login", {
           method: "POST",
           body: { email: normalizedEmail, password },
@@ -239,7 +240,7 @@ function AuthPage() {
           token: data.token,
         });
         toast.success("Welcome to Sight");
-        navigate({ to: "/app" });
+        navigate({ to: data.capabilities?.executive_view && data.user.role === "Executive" ? "/app/executive" : "/app" });
       } catch (err: unknown) {
         showAuthError(
           getErrorMessage(err, "Invalid credentials. Please check your email and password."),
@@ -320,6 +321,7 @@ function AuthPage() {
       const data = await apiFetch<{
         token: string;
         user: { id: number; name: string; email: string; role: string; rep_code?: string | null };
+        capabilities?: { executive_view?: boolean };
       }>("auth/otp/verify", {
         method: "POST",
         body: { email: email.trim().toLowerCase(), otp, login_mode: "otp-only" },
@@ -337,7 +339,7 @@ function AuthPage() {
       });
       if (timerRef.current) clearInterval(timerRef.current);
       toast.success("Welcome to Sight");
-      navigate({ to: "/app" });
+      navigate({ to: data.capabilities?.executive_view && data.user.role === "Executive" ? "/app/executive" : "/app" });
     } catch (err: unknown) {
       showAuthError(getErrorMessage(err, "Verification failed"));
     } finally {

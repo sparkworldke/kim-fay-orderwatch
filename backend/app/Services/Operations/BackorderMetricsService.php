@@ -59,6 +59,9 @@ class BackorderMetricsService
             'rar_true_stockout' => 0.0,
             'rar_partial_cover' => 0.0,
             'rar_stock_available_not_shipped' => 0.0,
+            'true_stockout_lines' => 0,
+            'partial_cover_lines' => 0,
+            'stock_available_lines' => 0,
             'fgs_synced_at' => $active->pluck('fgs_synced_at')->filter()->max(),
         ];
         foreach ($active as $line) {
@@ -70,10 +73,16 @@ class BackorderMetricsService
             };
             if ($key !== null) {
                 $diagnosis[$key] += (float) $line->revenue_at_risk;
+                $countKey = match ($key) {
+                    'rar_true_stockout' => 'true_stockout_lines',
+                    'rar_partial_cover' => 'partial_cover_lines',
+                    default => 'stock_available_lines',
+                };
+                $diagnosis[$countKey]++;
             }
         }
         foreach (array_keys($diagnosis) as $key) {
-            if ($key !== 'fgs_synced_at') $diagnosis[$key] = round($diagnosis[$key], 2);
+            if ($key !== 'fgs_synced_at' && ! str_ends_with($key, '_lines')) $diagnosis[$key] = round($diagnosis[$key], 2);
         }
 
         $reasoned = $active->filter(fn ($line) => filled($line->reason_code ?? null))->count();

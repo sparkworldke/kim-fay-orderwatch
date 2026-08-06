@@ -109,6 +109,22 @@ function isUnassignedReason(line: Pick<BackorderLine, "reason_code">): boolean {
   return !code || code.toLowerCase() === "unassigned";
 }
 
+type Coverage = "full" | "partial" | "none" | "unknown";
+function coverageForLines(lines: BackorderLine[]): Coverage {
+  const signals = new Set(lines.map((line) => line.stock_signal));
+  if (signals.has("partial_cover") || (signals.has("true_stockout") && signals.has("stock_available_not_shipped"))) return "partial";
+  if (signals.has("stock_available_not_shipped")) return "full";
+  if (signals.has("true_stockout")) return "none";
+  return "unknown";
+}
+function ownerAndAction(lines: BackorderLine[], segment?: string | null) {
+  if (lines.some(isUnassignedReason)) return { owner: "Sales / CS", action: "Set reason" };
+  const coverage = coverageForLines(lines);
+  if (coverage === "full") return { owner: "Warehouse / CS", action: "Release / create shipment" };
+  if (coverage === "partial") return { owner: "Warehouse", action: "Transfer stock" };
+  return segment === "manufactured" ? { owner: "Production", action: "Produce" } : { owner: "Procurement", action: "Procure" };
+}
+
 function orderStatusLabel(status: string | null | undefined): string {
   if (!status?.trim()) return "—";
   return status.trim();
@@ -233,6 +249,8 @@ function BackordersPage() {
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearMode, setClearMode] = useState<"range" | "all">("range");
   const [view, setView] = useState<"active" | "resolved">("active");
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [coverageFilter, setCoverageFilter] = useState<"all" | Coverage>("all");
 
   // Fetch a large page so client-side InventoryID grouping is complete for the filter set.
   const [groupPage, setGroupPage] = useState(1);
@@ -541,13 +559,14 @@ function BackordersPage() {
     }
   }, [searchActive, allGroups]);
 
-  const totalGroups = allGroups.length;
+  const coverageGroups = useMemo(() => coverageFilter === "all" ? allGroups : allGroups.filter((group) => coverageForLines(group.lines) === coverageFilter), [allGroups, coverageFilter]);
+  const totalGroups = coverageGroups.length;
   const lastGroupPage = Math.max(1, Math.ceil(totalGroups / groupsPerPage));
   const safeGroupPage = Math.min(groupPage, lastGroupPage);
   const pagedGroups = useMemo(() => {
     const start = (safeGroupPage - 1) * groupsPerPage;
-    return allGroups.slice(start, start + groupsPerPage);
-  }, [allGroups, safeGroupPage, groupsPerPage]);
+    return coverageGroups.slice(start, start + groupsPerPage);
+  }, [coverageGroups, safeGroupPage, groupsPerPage]);
 
   const filteredSummary = analytics.data?.summary;
   const valueSummary = summary.data?.value_summary;
@@ -751,6 +770,7 @@ function BackordersPage() {
             </div>
           </div>
 
+          {showMoreFilters && <>
           <div>
             <Label>Product line</Label>
             <Select
@@ -886,7 +906,9 @@ function BackordersPage() {
               </SelectContent>
             </Select>
           </div>
+          </>}
         </div>
+        <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => setShowMoreFilters((value) => !value)}>{showMoreFilters ? "Hide additional filters" : "More filters"}</Button>
       </div>
 
       {/* Key guide — plain-English meanings for the value cards and terms */}
@@ -895,7 +917,7 @@ function BackordersPage() {
       {/* Revenue value cards: order vs invoiced vs backorder */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <ValueCard
-          label="Backorder value"
+          label="Revenue at risk"
           value={valueSummary?.backorder_value}
           loading={summary.isLoading}
           hint="Still not delivered · open qty × unit price"
@@ -903,23 +925,24 @@ function BackordersPage() {
           tip="Money still outstanding: open quantity × unit price on the same filtered shortfall lines as the table and Excel."
         />
         <ValueCard
-          label="Invoiced value"
-          value={valueSummary?.invoiced_value}
+          label="Ready to release"
+          value={(summary.data?.stock_diagnosis.rar_stock_available_not_shipped ?? 0) + (summary.data?.stock_diagnosis.rar_partial_cover ?? 0)}
           loading={summary.isLoading}
-          hint="Already shipped · shipped qty × unit price"
+          hint={`${(summary.data?.stock_diagnosis.stock_available_lines ?? 0) + (summary.data?.stock_diagnosis.partial_cover_lines ?? 0)} lines with full or partial stock cover`}
           tone="positive"
-          tip="Money already delivered on those same shortfall lines: shipped quantity × unit price."
+          tip="Exposure where available FGS stock can fully or partially cover the open quantity."
         />
         <ValueCard
-          label="Order value"
-          value={valueSummary?.order_value}
+          label="Blocked — no stock"
+          value={summary.data?.stock_diagnosis.rar_true_stockout}
           loading={summary.isLoading}
-          hint="What was ordered · ordered qty × unit price"
-          tip="Full ordered amount on those same shortfall lines: ordered quantity × unit price. Ideally close to Invoiced + Backorder."
+          hint={`${summary.data?.stock_diagnosis.true_stockout_lines ?? 0} lines require production or procurement`}
+          tone="destructive"
+          tip="Exposure where the latest FGS snapshot has no available stock."
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="hidden">
         <ValueCard
           label="Revenue at risk · true FGS stockout"
           value={summary.data?.stock_diagnosis.rar_true_stockout}
@@ -1047,10 +1070,10 @@ function BackordersPage() {
           tip="How many different products (Inventory IDs) are short under the current filters. One SKU can cover many open lines."
         />
         <Kpi
-          label="Open orders"
-          value={summary.data?.open_orders ?? filteredSummary?.open_orders}
+          label="Customers"
+          value={summary.data?.open_customers ?? 0}
           loading={summary.isLoading && analytics.isLoading}
-          tip="How many sales orders still have at least one product that is short."
+          tip="Distinct customers with at least one active backorder line."
         />
         <div className="rounded-lg border bg-card p-4 shadow-sm">
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -1131,6 +1154,10 @@ function BackordersPage() {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Select value={coverageFilter} onValueChange={(value) => { setCoverageFilter(value as typeof coverageFilter); setGroupPage(1); }}>
+              <SelectTrigger className="h-8 w-[170px]"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">All stock coverage</SelectItem><SelectItem value="full">Ready to release</SelectItem><SelectItem value="partial">Partial coverage</SelectItem><SelectItem value="none">Blocked — no stock</SelectItem><SelectItem value="unknown">Stock unknown</SelectItem></SelectContent>
+            </Select>
             {skuCount > 0 && (
               <Badge variant="secondary">
                 {formatNumber(skuCount)} SKU{skuCount !== 1 ? "s" : ""}
@@ -1168,12 +1195,14 @@ function BackordersPage() {
         ) : (
           <>
             {/* Simple summary header table */}
-            <div className="hidden border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1.6fr)_80px_90px_100px_110px] md:gap-3">
+            <div className="hidden border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1.5fr)_70px_80px_90px_105px_105px_130px] md:gap-3">
               <span>Inventory / Product</span>
               <span className="text-right">SOs</span>
               <span className="text-right">Customers</span>
               <span className="text-right">Open qty</span>
               <span className="text-right">Revenue at risk</span>
+              <span>Coverage</span>
+              <span>Owner / next action</span>
             </div>
 
             <Accordion
@@ -1189,7 +1218,7 @@ function BackordersPage() {
                   className="border-b px-4 last:border-b-0"
                 >
                   <AccordionTrigger className="hover:no-underline">
-                    <div className="grid w-full items-center gap-2 pr-2 text-left md:grid-cols-[minmax(0,1.6fr)_80px_90px_100px_110px] md:gap-3">
+                    <div className="grid w-full items-center gap-2 pr-2 text-left md:grid-cols-[minmax(0,1.5fr)_70px_80px_90px_105px_105px_130px] md:gap-3">
                       <div className="min-w-0">
                         <ProductListingCell
                           link={false}
@@ -1230,6 +1259,8 @@ function BackordersPage() {
                       <div className="text-sm font-medium md:text-right">
                         {kes(group.totalRevenueAtRisk)}
                       </div>
+                      {(() => { const coverage = coverageForLines(group.lines); return <Badge variant={coverage === "full" ? "default" : coverage === "none" ? "destructive" : "secondary"} className="w-fit capitalize">{coverage}</Badge>; })()}
+                      {(() => { const next = ownerAndAction(group.lines, group.lines[0]?.product_segment); return <div className="text-xs"><p className="font-medium">{next.owner}</p><p className="text-muted-foreground">{next.action}</p></div>; })()}
                     </div>
                   </AccordionTrigger>
 
@@ -1244,6 +1275,8 @@ function BackordersPage() {
                             <th className="px-3 py-2 font-medium text-right">Open qty</th>
                             <th className="px-3 py-2 font-medium text-right">Revenue at risk</th>
                             <th className="px-3 py-2 font-medium">Reason</th>
+                            <th className="px-3 py-2 font-medium">Coverage</th>
+                            <th className="px-3 py-2 font-medium">Owner / next action</th>
                             {canAssignReasons && (
                               <th className="px-3 py-2 font-medium text-right">Action</th>
                             )}
@@ -1368,6 +1401,8 @@ function BackordersPage() {
                                     </div>
                                   )}
                                 </td>
+                                <td className="px-3 py-2 align-top"><Badge variant={line.stock_signal === "stock_available_not_shipped" ? "default" : line.stock_signal === "true_stockout" ? "destructive" : "secondary"}>{line.stock_signal === "stock_available_not_shipped" ? "Full" : line.stock_signal === "partial_cover" ? "Partial" : line.stock_signal === "true_stockout" ? "None" : "Unknown"}</Badge></td>
+                                <td className="px-3 py-2 align-top text-xs">{(() => { const next = ownerAndAction([line], line.product_segment); return <><p className="font-medium">{next.owner}</p><p className="text-muted-foreground">{next.action}</p></>; })()}</td>
                                 {canAssignReasons && (
                                   <td className="px-3 py-2 text-right align-top">
                                     {unassigned ? (
@@ -1805,7 +1840,7 @@ function ResolvedBackordersPanel() {
 function BackorderKeyGuide() {
   return (
     <div className="rounded-lg border bg-muted/20 shadow-sm">
-      <Accordion type="single" collapsible defaultValue="key-guide">
+      <Accordion type="single" collapsible>
         <AccordionItem value="key-guide" className="border-0">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="text-left">

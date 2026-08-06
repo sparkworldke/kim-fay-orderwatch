@@ -42,6 +42,7 @@ use App\Http\Controllers\Api\Admin\TeamImportController;
 use App\Http\Controllers\Api\Admin\PortfolioAdministrationController;
 use App\Http\Controllers\Api\Admin\UserAssignmentController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\ExecutiveController;
 use App\Http\Controllers\Api\CustomerBrandController;
 use App\Http\Controllers\Api\CustomerFeedController;
 use App\Http\Controllers\Api\DashboardController;
@@ -236,8 +237,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middlewareFor(['index'], 'response.cache:orders,60');
 
     // KP CRM Accounts (portfolio of KP customers)
-    Route::get('kp/accounts', [\App\Http\Controllers\Api\KpAccountsController::class, 'index'])->middleware(['kp.crm', 'response.cache:customer-analytics,300']);
-    Route::get('kp/accounts/by-rep', [\App\Http\Controllers\Api\KpAccountsController::class, 'byRep'])->middleware(['kp.crm', 'response.cache:customer-analytics,300']);
+    Route::get('kp/accounts', [\App\Http\Controllers\Api\KpAccountsController::class, 'index'])->middleware('response.cache:customer-analytics,300');
+    Route::get('kp/accounts/by-rep', [\App\Http\Controllers\Api\KpAccountsController::class, 'byRep'])->middleware('response.cache:customer-analytics,300');
 
     // Sales consultant / HOD portfolio dashboard (PRD My Portfolio)
     Route::get('sales/portfolio/summary', [\App\Http\Controllers\Api\SalesPortfolioController::class, 'summary'])->middleware('response.cache:sales-portfolio,120');
@@ -246,6 +247,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('sales/portfolio/items-not-ordered', [\App\Http\Controllers\Api\SalesPortfolioController::class, 'itemsNotOrdered'])->middleware('response.cache:sales-portfolio,300');
     Route::get('sales/intelligence/metrics', [SalesIntelligenceController::class, 'metrics'])
         ->middleware('response.cache:sales-intelligence,120');
+    Route::get('executive/metrics', [ExecutiveController::class, 'metrics'])->middleware('response.cache:executive,300');
     Route::get('kp/dormant-customers', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'index'])->middleware(['kp.crm', 'response.cache:kp-crm,180']);
     Route::get('kp/dormant-customers/{customerId}/attempts', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'attempts'])->middleware(['kp.crm', 'response.cache:kp-crm,120']);
     Route::post('kp/dormant-customers/{customerId}/feedback', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'feedback'])->middleware('kp.crm');

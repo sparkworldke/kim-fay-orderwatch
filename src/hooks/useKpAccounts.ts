@@ -73,21 +73,32 @@ export type KpAccountsByRepGroup = {
   achieved_pct: number | null;
   time_gone_pct: number;
   variance_to_pace: number | null;
+  pace_status: "ahead" | "on_track" | "at_risk" | "off_track" | "no_target";
+  needs_attention: boolean;
+  attention_reason: string;
+  attention_reasons: string[];
+  dormant_share_pct: number;
+  backorder_lines: number;
+  backorder_revenue_at_risk: number;
+  last_activity_at: string | null;
+  top_at_risk_accounts: Array<{ customer_id: string; last_order_date: string | null }>;
 };
 
 export type KpAccountsByRepResponse = {
   period: { month_label: string; time_gone_pct: number; active_from: string };
   groups: KpAccountsByRepGroup[];
+  summary: { revenue_mtd: number; target: number; targeted_reportees: number; reportees_needing_attention: number; backorder_revenue_at_risk: number };
 };
 
 export function useKpAccountsByRep(
-  params: { customer_class?: string; exclude_class?: string; all_classes?: boolean },
+  params: { customer_class?: string; exclude_class?: string; all_classes?: boolean; month?: string },
   enabled = true,
 ) {
   const qs = new URLSearchParams();
   if (params.customer_class?.trim()) qs.set("customer_class", params.customer_class.trim());
   if (params.exclude_class?.trim()) qs.set("exclude_class", params.exclude_class.trim());
   if (params.all_classes) qs.set("all_classes", "1");
+  if (params.month) qs.set("month", params.month);
 
   return useQuery({
     queryKey: ["kp-accounts-by-rep", params],

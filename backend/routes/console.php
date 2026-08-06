@@ -32,6 +32,14 @@ Schedule::command('production:summaries-refresh --recent')
     ->withoutOverlapping(20, releaseOnTerminationSignals: false)
     ->name('production-summary-refresh');
 
+// Refresh customer master status and payment terms without touching manually
+// maintained CRM contacts.
+Schedule::command('acumatica:sync-customers')
+    ->dailyAt('02:30')
+    ->timezone((string) config('cron.timezone', config('app.timezone')))
+    ->withoutOverlapping(60, releaseOnTerminationSignals: false)
+    ->name('acumatica-customer-master-refresh');
+
 // Order-match notification emails (R5/R6) are paused — only System Health + Daily Report
 // remain active. Re-enable via cron_jobs row + notification_rules is_enabled when needed.
 // Schedule::command(EvaluateOrderMatchNotifications::class)

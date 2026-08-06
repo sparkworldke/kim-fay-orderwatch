@@ -27,6 +27,7 @@ import { Route as AppCustomerFeedRouteImport } from './routes/app.customer-feed'
 import { Route as AppCustomersRouteImport } from './routes/app.customers'
 import { Route as AppDiscrepanciesRouteImport } from './routes/app.discrepancies'
 import { Route as AppDownloadsRouteImport } from './routes/app.downloads'
+import { Route as AppExecutiveRouteImport } from './routes/app.executive'
 import { Route as AppFillRateRouteImport } from './routes/app.fill-rate'
 import { Route as AppInventoryRouteImport } from './routes/app.inventory'
 import { Route as AppMailboxRouteImport } from './routes/app.mailbox'
@@ -50,6 +51,8 @@ import { Route as ProductionPartnersRouteImport } from './routes/production/part
 import { Route as ProductionSalesRouteImport } from './routes/production/sales'
 import { Route as AppCustomerBrandsCustomerIdRouteImport } from './routes/app.customer-brands.$customerId'
 import { Route as AppCustomerOrdersCustomerIdRouteImport } from './routes/app.customer-orders.$customerId'
+import { Route as AppGtRevenueOrdersRouteImport } from './routes/app.gt.revenue-orders'
+import { Route as AppGtSfaRouteImport } from './routes/app.gt.sfa'
 import { Route as AppKpCalendarRouteImport } from './routes/app.kp.calendar'
 import { Route as AppKpCommissionsRouteImport } from './routes/app.kp.commissions'
 import { Route as AppKpContractCleanersRouteImport } from './routes/app.kp.contract-cleaners'
@@ -170,6 +173,11 @@ const AppDownloadsRoute = AppDownloadsRouteImport.update({
   path: '/downloads',
   getParentRoute: () => AppRoute,
 } as any)
+const AppExecutiveRoute = AppExecutiveRouteImport.update({
+  id: '/executive',
+  path: '/executive',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppFillRateRoute = AppFillRateRouteImport.update({
   id: '/fill-rate',
   path: '/fill-rate',
@@ -287,6 +295,16 @@ const AppCustomerOrdersCustomerIdRoute =
     path: '/customer-orders/$customerId',
     getParentRoute: () => AppRoute,
   } as any)
+const AppGtRevenueOrdersRoute = AppGtRevenueOrdersRouteImport.update({
+  id: '/gt/revenue-orders',
+  path: '/gt/revenue-orders',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGtSfaRoute = AppGtSfaRouteImport.update({
+  id: '/gt/sfa',
+  path: '/gt/sfa',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppKpCalendarRoute = AppKpCalendarRouteImport.update({
   id: '/kp/calendar',
   path: '/kp/calendar',
@@ -458,6 +476,7 @@ export interface FileRoutesByFullPath {
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
   '/app/downloads': typeof AppDownloadsRoute
+  '/app/executive': typeof AppExecutiveRoute
   '/app/fill-rate': typeof AppFillRateRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
@@ -482,6 +501,8 @@ export interface FileRoutesByFullPath {
   '/production/': typeof ProductionIndexRoute
   '/app/customer-brands/$customerId': typeof AppCustomerBrandsCustomerIdRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/gt/revenue-orders': typeof AppGtRevenueOrdersRoute
+  '/app/gt/sfa': typeof AppGtSfaRoute
   '/app/kp/calendar': typeof AppKpCalendarRoute
   '/app/kp/commissions': typeof AppKpCommissionsRouteWithChildren
   '/app/kp/contract-cleaners': typeof AppKpContractCleanersRoute
@@ -527,6 +548,7 @@ export interface FileRoutesByTo {
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
   '/app/downloads': typeof AppDownloadsRoute
+  '/app/executive': typeof AppExecutiveRoute
   '/app/fill-rate': typeof AppFillRateRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
@@ -550,6 +572,8 @@ export interface FileRoutesByTo {
   '/production': typeof ProductionIndexRoute
   '/app/customer-brands/$customerId': typeof AppCustomerBrandsCustomerIdRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/gt/revenue-orders': typeof AppGtRevenueOrdersRoute
+  '/app/gt/sfa': typeof AppGtSfaRoute
   '/app/kp/calendar': typeof AppKpCalendarRoute
   '/app/kp/commissions': typeof AppKpCommissionsRouteWithChildren
   '/app/kp/contract-cleaners': typeof AppKpContractCleanersRoute
@@ -598,6 +622,7 @@ export interface FileRoutesById {
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
   '/app/downloads': typeof AppDownloadsRoute
+  '/app/executive': typeof AppExecutiveRoute
   '/app/fill-rate': typeof AppFillRateRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
@@ -622,6 +647,8 @@ export interface FileRoutesById {
   '/production/': typeof ProductionIndexRoute
   '/app/customer-brands/$customerId': typeof AppCustomerBrandsCustomerIdRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/gt/revenue-orders': typeof AppGtRevenueOrdersRoute
+  '/app/gt/sfa': typeof AppGtSfaRoute
   '/app/kp/calendar': typeof AppKpCalendarRoute
   '/app/kp/commissions': typeof AppKpCommissionsRouteWithChildren
   '/app/kp/contract-cleaners': typeof AppKpContractCleanersRoute
@@ -671,6 +698,7 @@ export interface FileRouteTypes {
     | '/app/customers'
     | '/app/discrepancies'
     | '/app/downloads'
+    | '/app/executive'
     | '/app/fill-rate'
     | '/app/inventory'
     | '/app/mailbox'
@@ -695,6 +723,8 @@ export interface FileRouteTypes {
     | '/production/'
     | '/app/customer-brands/$customerId'
     | '/app/customer-orders/$customerId'
+    | '/app/gt/revenue-orders'
+    | '/app/gt/sfa'
     | '/app/kp/calendar'
     | '/app/kp/commissions'
     | '/app/kp/contract-cleaners'
@@ -740,6 +770,7 @@ export interface FileRouteTypes {
     | '/app/customers'
     | '/app/discrepancies'
     | '/app/downloads'
+    | '/app/executive'
     | '/app/fill-rate'
     | '/app/inventory'
     | '/app/mailbox'
@@ -763,6 +794,8 @@ export interface FileRouteTypes {
     | '/production'
     | '/app/customer-brands/$customerId'
     | '/app/customer-orders/$customerId'
+    | '/app/gt/revenue-orders'
+    | '/app/gt/sfa'
     | '/app/kp/calendar'
     | '/app/kp/commissions'
     | '/app/kp/contract-cleaners'
@@ -810,6 +843,7 @@ export interface FileRouteTypes {
     | '/app/customers'
     | '/app/discrepancies'
     | '/app/downloads'
+    | '/app/executive'
     | '/app/fill-rate'
     | '/app/inventory'
     | '/app/mailbox'
@@ -834,6 +868,8 @@ export interface FileRouteTypes {
     | '/production/'
     | '/app/customer-brands/$customerId'
     | '/app/customer-orders/$customerId'
+    | '/app/gt/revenue-orders'
+    | '/app/gt/sfa'
     | '/app/kp/calendar'
     | '/app/kp/commissions'
     | '/app/kp/contract-cleaners'
@@ -999,6 +1035,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDownloadsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/executive': {
+      id: '/app/executive'
+      path: '/executive'
+      fullPath: '/app/executive'
+      preLoaderRoute: typeof AppExecutiveRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/fill-rate': {
       id: '/app/fill-rate'
       path: '/fill-rate'
@@ -1158,6 +1201,20 @@ declare module '@tanstack/react-router' {
       path: '/customer-orders/$customerId'
       fullPath: '/app/customer-orders/$customerId'
       preLoaderRoute: typeof AppCustomerOrdersCustomerIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/gt/revenue-orders': {
+      id: '/app/gt/revenue-orders'
+      path: '/gt/revenue-orders'
+      fullPath: '/app/gt/revenue-orders'
+      preLoaderRoute: typeof AppGtRevenueOrdersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/gt/sfa': {
+      id: '/app/gt/sfa'
+      path: '/gt/sfa'
+      fullPath: '/app/gt/sfa'
+      preLoaderRoute: typeof AppGtSfaRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/kp/calendar': {
@@ -1484,6 +1541,7 @@ interface AppRouteChildren {
   AppCustomersRoute: typeof AppCustomersRoute
   AppDiscrepanciesRoute: typeof AppDiscrepanciesRoute
   AppDownloadsRoute: typeof AppDownloadsRoute
+  AppExecutiveRoute: typeof AppExecutiveRoute
   AppFillRateRoute: typeof AppFillRateRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppMailboxRoute: typeof AppMailboxRoute
@@ -1505,6 +1563,8 @@ interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppCustomerBrandsCustomerIdRoute: typeof AppCustomerBrandsCustomerIdRoute
   AppCustomerOrdersCustomerIdRoute: typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  AppGtRevenueOrdersRoute: typeof AppGtRevenueOrdersRoute
+  AppGtSfaRoute: typeof AppGtSfaRoute
   AppKpCalendarRoute: typeof AppKpCalendarRoute
   AppKpCommissionsRoute: typeof AppKpCommissionsRouteWithChildren
   AppKpContractCleanersRoute: typeof AppKpContractCleanersRoute
@@ -1533,6 +1593,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppCustomersRoute: AppCustomersRoute,
   AppDiscrepanciesRoute: AppDiscrepanciesRoute,
   AppDownloadsRoute: AppDownloadsRoute,
+  AppExecutiveRoute: AppExecutiveRoute,
   AppFillRateRoute: AppFillRateRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppMailboxRoute: AppMailboxRoute,
@@ -1555,6 +1616,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppCustomerBrandsCustomerIdRoute: AppCustomerBrandsCustomerIdRoute,
   AppCustomerOrdersCustomerIdRoute:
     AppCustomerOrdersCustomerIdRouteWithChildren,
+  AppGtRevenueOrdersRoute: AppGtRevenueOrdersRoute,
+  AppGtSfaRoute: AppGtSfaRoute,
   AppKpCalendarRoute: AppKpCalendarRoute,
   AppKpCommissionsRoute: AppKpCommissionsRouteWithChildren,
   AppKpContractCleanersRoute: AppKpContractCleanersRoute,

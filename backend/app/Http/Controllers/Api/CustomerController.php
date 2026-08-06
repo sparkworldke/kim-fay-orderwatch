@@ -47,6 +47,10 @@ class CustomerController extends Controller
             $query->where('shipping_zone_id', strtoupper(trim((string) $request->input('shipping_zone_id'))));
         }
 
+        if ($request->filled('customer_group')) {
+            $query->whereHas('customerData', fn ($qb) => $qb->where('customer_group', $request->input('customer_group')));
+        }
+
         return response()->json($query->paginate(min((int) $request->input('per_page', 50), 200)));
     }
 
@@ -266,7 +270,15 @@ class CustomerController extends Controller
 
     private function formatCustomer(AcumaticaCustomer $customer): array
     {
-        $customer->loadMissing('shippingZone');
+        $customer->loadMissing([
+            'shippingZone',
+            'route',
+            'customerData',
+            'parent:id,acumatica_id,name',
+            'assignments' => fn ($query) => $query
+                ->whereIn('assignment_type', ['servicing', 'primary'])
+                ->with('user:id,name,email,rep_code'),
+        ]);
         $data = $customer->toArray();
         $branches = $customer->branches()->orderBy('name')->get();
         $data['branches'] = $branches->toArray();
@@ -277,6 +289,18 @@ class CustomerController extends Controller
             'name' => $customer->shippingZone->name,
             'region' => $customer->shippingZone->region,
         ] : null;
+        $data['route'] = $customer->route?->only(['route_code', 'route_name']);
+        $data['customer_data'] = $customer->customerData?->toArray();
+        $data['parent'] = $customer->parent?->only(['acumatica_id', 'name']);
+        $data['servicing_consultant'] = $customer->assignments
+            ->sortByDesc('priority')
+            ->first()?->user?->only(['id', 'name', 'email', 'rep_code']);
+        $activeContacts = $customer->contacts()->active()->get(['phone', 'email', 'is_primary']);
+        $data['contact_health'] = [
+            'has_phone' => filled($customer->phone) || $activeContacts->contains(fn ($contact) => filled($contact->phone)),
+            'has_email' => filled($customer->email) || filled($customer->customerData?->email) || $activeContacts->contains(fn ($contact) => filled($contact->email)),
+            'has_primary' => $activeContacts->contains('is_primary', true),
+        ];
 
         return $data;
     }

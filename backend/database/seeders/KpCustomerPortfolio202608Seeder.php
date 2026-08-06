@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\AcumaticaCustomer;
 use App\Models\CustomerContact;
 use App\Models\CustomerData;
 use App\Models\User;
@@ -100,6 +101,21 @@ class KpCustomerPortfolio202608Seeder extends Seeder
                     $attributes['source'] = 'excel_upload';
                     $attributes['synced_at'] = now();
 
+                    AcumaticaCustomer::query()->updateOrCreate(
+                        ['acumatica_id' => $customerId],
+                        [
+                            'name' => $this->clean($row['Customer Name'] ?? null) ?? $customerId,
+                            'customer_class' => $this->clean($row['Customer Class'] ?? null),
+                            'payment_terms' => $this->clean($row['Terms'] ?? null),
+                            'status' => $this->clean($row['Customer Status'] ?? null),
+                            'parent_acumatica_id' => $this->clean($row['Parent Code'] ?? null),
+                            'route_code' => $attributes['route_code'],
+                            'shipping_zone_id' => $attributes['shipping_zone_id'],
+                            'email' => $attributes['email'],
+                            'synced_at' => now(),
+                        ],
+                    );
+
                     CustomerData::query()->updateOrCreate(
                         ['customer_acumatica_id' => $customerId],
                         $attributes,
@@ -176,7 +192,7 @@ class KpCustomerPortfolio202608Seeder extends Seeder
     /** @param list<string> $headers */
     private function assertRequiredHeaders(array $headers): void
     {
-        $required = ['Customer ID', 'Customer Name', 'Credit Limit', ...array_keys(self::FIELD_MAP)];
+        $required = ['Customer ID', 'Customer Name', 'Customer Class', 'Terms', 'Customer Status', 'Parent Code', 'Credit Limit', ...array_keys(self::FIELD_MAP)];
         $missing = array_values(array_diff(array_unique($required), $headers));
 
         if ($missing !== []) {

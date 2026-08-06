@@ -70,13 +70,14 @@ function validateContactForm(form: CustomerContactInput): string | null {
   if (form.designation_key === "custom" && !form.designation_label?.trim()) {
     return "Custom designation requires a job title.";
   }
+  if (!form.email?.trim() && !form.phone?.trim()) return "Add at least an email address or phone number.";
   if (form.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
     return "Enter a valid email address.";
   }
   return null;
 }
 
-export function CustomerContactsCard({ customerId }: { customerId: string }) {
+export function CustomerContactsCard({ customerId, health }: { customerId: string; health?: { hasPhone: boolean; hasEmail: boolean; hasPrimary: boolean } }) {
   const contacts = useCustomerContacts(customerId);
   const create = useCreateCustomerContact(customerId);
   const update = useUpdateCustomerContact(customerId);
@@ -158,6 +159,13 @@ export function CustomerContactsCard({ customerId }: { customerId: string }) {
         </Button>
       </CardHeader>
       <CardContent>
+        {health && (!health.hasPhone || !health.hasEmail || !health.hasPrimary) && (
+          <div className="mb-4 grid gap-2">
+            {!health.hasPhone && <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">Update company / contact phone numbers.</p>}
+            {!health.hasEmail && <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">No email on file — add a contact email.</p>}
+            {!health.hasPrimary && <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">Choose one primary contact for FOL and notifications.</p>}
+          </div>
+        )}
         {contacts.isLoading ? (
           <Skeleton className="h-20 w-full" />
         ) : contacts.isError ? (

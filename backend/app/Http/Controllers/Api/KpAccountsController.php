@@ -249,14 +249,21 @@ class KpAccountsController extends Controller
 
         $tz = 'Africa/Nairobi';
         $now = CarbonImmutable::now($tz);
-        $monthStart = $now->startOfMonth();
+        $month = trim((string) $request->input('month', $now->format('Y-m')));
+        abort_unless((bool) preg_match('/^\d{4}-\d{2}$/', $month), 422, 'Month must use YYYY-MM.');
+        $monthStart = CarbonImmutable::createFromFormat('Y-m-d', $month.'-01', $tz)->startOfMonth();
+        $periodEnd = $monthStart->isSameMonth($now) ? $now : $monthStart->endOfMonth();
         $activeFrom = $monthStart->subMonths(3);
-        $timeGonePct = $this->workingDayPacePct($monthStart, $now);
+        $timeGonePct = $this->workingDayPacePct($monthStart, $periodEnd);
 
-        $teamUserIds = $this->orgScope->effectiveScopeUserIds($user);
+        $teamUserIds = app(\App\Services\Team\OrgTreeService::class)->descendantIds($user->id);
         $teamUsers = User::query()
             ->whereIn('id', $teamUserIds)
             ->where('is_active', true)
+            ->when(
+                ! $user->is_super_admin && ! in_array(strtolower((string) $user->org_level), ['executive', 'c_suite'], true) && $user->department_id,
+                fn ($query) => $query->where('department_id', $user->department_id),
+            )
             ->orderBy('name')
             ->get();
         // Commission tables may not exist on every deploy — never fail the team view for it.
@@ -311,7 +318,7 @@ class KpAccountsController extends Controller
             $revenue = (float) DB::table('acumatica_sales_orders')
                 ->where('order_type', 'SO')
                 ->whereIn('customer_acumatica_id', $ids)
-                ->whereBetween('order_date', [$monthStart->toDateString(), $now->toDateString()])
+                ->whereBetween('order_date', [$monthStart->toDateString(), $periodEnd->toDateString()])
                 ->where(fn ($qw) => $qw->whereNull('status')->orWhereRaw("LOWER(status) NOT IN ('cancelled','canceled','rejected')"))
                 ->sum('order_total');
 
@@ -326,6 +333,26 @@ class KpAccountsController extends Controller
 
             $repCode = $teamUser->rep_code ?: $teamUser->acumaticaRepMappings()->where('is_primary', true)->value('acumatica_rep_code');
 
+            $backorder = DB::table('acumatica_backorder_lines')
+                ->whereIn('customer_acumatica_id', $ids)
+                ->selectRaw('COUNT(*) as line_count, COALESCE(SUM(revenue_at_risk), 0) as value_at_risk')
+                ->first();
+            $dormantShare = count($ids) > 0 ? round($dormant / count($ids) * 100, 1) : 0.0;
+            $achieved = $target !== null && $target > 0 ? round($revenue / $target * 100, 1) : null;
+            $paceStatus = $target === null || $target <= 0
+                ? 'no_target'
+                : ($achieved >= $timeGonePct + 10 ? 'ahead' : ($achieved >= $timeGonePct - 5 ? 'on_track' : ($achieved >= $timeGonePct - 20 ? 'at_risk' : 'off_track')));
+            $attentionReasons = [];
+            if ($paceStatus === 'no_target') $attentionReasons[] = 'Monthly target missing';
+            if (in_array($paceStatus, ['at_risk', 'off_track'], true)) $attentionReasons[] = 'Sales pace is behind target';
+            if ($dormantShare >= 40) $attentionReasons[] = "{$dormantShare}% of accounts are dormant";
+            if ((float) ($backorder->value_at_risk ?? 0) >= 100000) $attentionReasons[] = 'High backorder value at risk';
+
+            $atRiskAccounts = collect($ids)->map(fn ($cid) => [
+                'customer_id' => $cid,
+                'last_order_date' => $lastOrders[$cid] ?? null,
+            ])->sortBy('last_order_date')->take(3)->values()->all();
+
             $groups[] = [
                 'user_id' => $teamUser->id,
                 'rep_code' => $repCode,
@@ -337,13 +364,30 @@ class KpAccountsController extends Controller
                 'on_hold_count' => $onHold,
                 'revenue_mtd' => round($revenue, 2),
                 'target' => $target,
-                'achieved_pct' => $target !== null && $target > 0 ? round($revenue / $target * 100, 1) : null,
+                'achieved_pct' => $achieved,
                 'time_gone_pct' => $timeGonePct,
                 'variance_to_pace' => $expected !== null ? round($revenue - $expected, 2) : null,
+                'pace_status' => $paceStatus,
+                'needs_attention' => $attentionReasons !== [],
+                'attention_reason' => $attentionReasons[0] ?? 'On track',
+                'attention_reasons' => $attentionReasons,
+                'dormant_share_pct' => $dormantShare,
+                'backorder_lines' => (int) ($backorder->line_count ?? 0),
+                'backorder_revenue_at_risk' => round((float) ($backorder->value_at_risk ?? 0), 2),
+                'last_activity_at' => collect($lastOrders)->filter()->max(),
+                'top_at_risk_accounts' => $atRiskAccounts,
             ];
         }
 
-        usort($groups, fn ($a, $b) => $b['revenue_mtd'] <=> $a['revenue_mtd']);
+        usort($groups, fn ($a, $b) => [$b['needs_attention'], $b['revenue_mtd']] <=> [$a['needs_attention'], $a['revenue_mtd']]);
+
+        $summary = [
+            'revenue_mtd' => round((float) collect($groups)->sum('revenue_mtd'), 2),
+            'target' => round((float) collect($groups)->whereNotNull('target')->sum('target'), 2),
+            'targeted_reportees' => collect($groups)->whereNotNull('target')->count(),
+            'reportees_needing_attention' => collect($groups)->where('needs_attention', true)->count(),
+            'backorder_revenue_at_risk' => round((float) collect($groups)->sum('backorder_revenue_at_risk'), 2),
+        ];
 
         return response()->json([
             'period' => [
@@ -352,6 +396,7 @@ class KpAccountsController extends Controller
                 'active_from' => $activeFrom->toDateString(),
             ],
             'groups' => array_values($groups),
+            'summary' => $summary,
         ]);
     }
 
@@ -410,6 +455,10 @@ class KpAccountsController extends Controller
 
         // KP Accounts shares the KP CRM portfolio surface with FOL.
         if ($user->hasPermission('kp.fol.view') || $user->hasPermission('kp.accounts.view')) {
+            return;
+        }
+
+        if ($this->portfolio->hasSalesBook($user) || $this->portfolio->hasTeamVisibility($user)) {
             return;
         }
 

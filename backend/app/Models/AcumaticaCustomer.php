@@ -78,4 +78,9 @@ class AcumaticaCustomer extends Model
     {
         return $this->hasMany(CustomerContact::class, 'customer_acumatica_id', 'acumatica_id');
     }
+
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(UserCustomerAssignment::class, 'customer_acumatica_id', 'acumatica_id');
+    }
 }

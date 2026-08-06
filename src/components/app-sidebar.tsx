@@ -76,6 +76,21 @@ const NAV = [
     ],
   },
   {
+    group: "Leadership",
+    icon: TrendingUp,
+    executiveOnly: true,
+    items: [{ title: "Executive View", url: "/app/executive", icon: TrendingUp }],
+  },
+  {
+    group: "General Trade",
+    icon: ShoppingCart,
+    capability: "gt",
+    items: [
+      { title: "Revenue and Orders", url: "/app/gt/revenue-orders", icon: TrendingUp },
+      { title: "SFA Data", url: "/app/gt/sfa", icon: Radio },
+    ],
+  },
+  {
     group: "Sales Intelligence",
     icon: TrendingUp,
     items: [
@@ -96,13 +111,6 @@ const NAV = [
           { title: "MT1", url: "/app/sales-intelligence", search: { channel: "MT1" as const } },
           { title: "MT2", url: "/app/sales-intelligence", search: { channel: "MT2" as const } },
         ],
-      },
-      {
-        title: "General Trade",
-        url: "/app/sales-intelligence",
-        icon: ShoppingCart,
-        capability: "gt",
-        search: { channel: "GT" as const },
       },
       {
         title: "DTC / DTB",
@@ -268,6 +276,7 @@ export function AppSidebar() {
     hidden_menus: hiddenMenus,
     permissions,
     sales_intelligence_channels: salesIntelligenceChannels,
+    executive_view: executiveView,
   } = useCapabilities();
   const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
@@ -334,6 +343,10 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         {NAV.map((g) => {
+          if ("executiveOnly" in g && g.executiveOnly && !executiveView) return null;
+          if ("capability" in g && !salesIntelligenceChannels.includes(g.capability)) {
+            return null;
+          }
           // KP is a separately authorized operating area. Do not render even
           // the group heading for MT/GT portfolio users without KP access.
           if (g.group === "KP Operations" && !salesIntelligenceChannels.includes("kp")) {

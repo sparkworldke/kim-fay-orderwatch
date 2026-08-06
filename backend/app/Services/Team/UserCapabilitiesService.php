@@ -71,10 +71,22 @@ class UserCapabilitiesService
             'kp_crm_access' => $kpCrmAccess,
             'can_manage_users' => $canManageUsers,
             'unrestricted_business_access' => $unrestrictedBusinessAccess,
+            'executive_view' => $this->canViewExecutive($user),
             'can_manage_production_planning' => app(ProductionPlanningAccess::class)->canManage($user),
             'partner_brand_scope' => $this->partnerBrandScope($user),
             'idle_timeout_minutes' => config('departments.idle_timeout_minutes', 60),
         ];
+    }
+
+    private function canViewExecutive(User $user): bool
+    {
+        return $user->is_super_admin
+            || in_array(strtolower((string) $user->org_level), ['executive', 'c_suite'], true)
+            || strtolower((string) $user->department_role) === 'hod'
+            || in_array(strtolower(trim((string) $user->email)), [
+                'commercialtechlead@kimfay.com', 'rbains@kimfay.com', 'hbains@kimfay.com',
+                'djumani@kimfay.com', 'salesstrategy@kimfay.com',
+            ], true);
     }
 
     /** @return array{applies: bool, is_hod: bool, brands: list<string>, groups: list<array{id: int, name: string}>} */

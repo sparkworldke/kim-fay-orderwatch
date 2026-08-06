@@ -65,6 +65,9 @@ class CustomerContactService
     {
         $this->ensureCustomerAccessible($actor, $customerId);
         $payload = $this->normalizePayload($data);
+        if (! CustomerContact::query()->active()->where('customer_acumatica_id', $customerId)->where('is_primary', true)->exists()) {
+            $payload['is_primary'] = true;
+        }
 
         $contact = CustomerContact::create([
             ...$payload,
@@ -97,6 +100,15 @@ class CustomerContactService
             'notes' => $contact->notes,
         ], $data));
 
+        if (! $payload['is_primary'] && ! CustomerContact::query()
+            ->active()
+            ->where('customer_acumatica_id', $contact->customer_acumatica_id)
+            ->whereKeyNot($contact->id)
+            ->where('is_primary', true)
+            ->exists()) {
+            $payload['is_primary'] = true;
+        }
+
         $contact->forceFill($payload)->save();
 
         if ($contact->is_primary) {
@@ -120,6 +132,12 @@ class CustomerContactService
     {
         $this->ensureCustomerAccessible($actor, $contact->customer_acumatica_id);
         $contact->forceFill(['is_active' => false, 'is_primary' => false])->save();
+
+        CustomerContact::query()
+            ->active()
+            ->where('customer_acumatica_id', $contact->customer_acumatica_id)
+            ->orderBy('id')
+            ->first()?->forceFill(['is_primary' => true])->save();
 
         return $contact->fresh();
     }
@@ -212,6 +230,11 @@ class CustomerContactService
         if ($last === '') {
             $errors['last_name'] = ['Last name is required.'];
         }
+        $phone = trim((string) ($data['phone'] ?? ''));
+        $email = trim((string) ($data['email'] ?? ''));
+        if ($phone === '' && $email === '') {
+            $errors['contact_method'] = ['Add at least an email address or phone number.'];
+        }
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
         }
@@ -221,8 +244,8 @@ class CustomerContactService
             'designation_label' => $label,
             'first_name' => $first,
             'last_name' => $last,
-            'phone' => isset($data['phone']) ? (trim((string) $data['phone']) ?: null) : null,
-            'email' => isset($data['email']) ? (trim((string) $data['email']) ?: null) : null,
+            'phone' => $phone !== '' ? $phone : null,
+            'email' => $email !== '' ? $email : null,
             'is_primary' => (bool) ($data['is_primary'] ?? false),
             'notes' => isset($data['notes']) ? (trim((string) $data['notes']) ?: null) : null,
         ];

@@ -23,6 +23,7 @@ export type UserCapabilities = {
   can_manage_production_planning?: boolean;
   can_manage_users: boolean;
   unrestricted_business_access: boolean;
+  executive_view: boolean;
   idle_timeout_minutes: number;
 };
 
@@ -41,6 +42,7 @@ const FALLBACK: UserCapabilities = {
   can_manage_production_planning: false,
   can_manage_users: false,
   unrestricted_business_access: false,
+  executive_view: false,
   idle_timeout_minutes: 60,
 };
 
