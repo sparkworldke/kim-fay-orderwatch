@@ -114,7 +114,7 @@ function PortfolioDashboardPage() {
               <ModeChip
                 active={mode === "self" || (mode === "auto" && s.scope.mode === "self")}
                 onClick={() => setMode("self")}
-                label="My book"
+                label="My Portfolio"
               />
               <ModeChip
                 active={mode === "team" || (mode === "auto" && s.scope.mode === "team")}
@@ -236,7 +236,7 @@ function PortfolioDashboardPage() {
             <Badge variant="secondary">{s.windows.month_label}</Badge>
             {s.scope.rep_code && <Badge variant="outline">Rep {s.scope.rep_code}</Badge>}
             <Badge variant="outline" className="capitalize">
-              {s.scope.mode === "team" ? "Team portfolio" : "Personal book"}
+              {s.scope.mode === "team" ? "Team portfolio" : "My Portfolio"}
             </Badge>
           </div>
           <p className="mt-2 text-sm leading-relaxed text-foreground">{s.plain_language}</p>
@@ -254,102 +254,37 @@ function PortfolioDashboardPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             icon={Users}
-            label="Customers"
-            value={String(k.customers_total)}
-            sub={`${k.customers_active} active · ${k.customers_dormant} dormant`}
-            tip="Everyone attached via your rep code and assignments. Team mode includes your reports’ books."
+            label="Follow-ups"
+            value={String(k.customers_dormant)}
+            sub="Customers needing attention"
+            tip="Dormant customers in your portfolio that need a call or visit."
             tone="blue"
           />
           <KpiCard
             icon={TrendingUp}
-            label="Actively buying"
-            value={String(k.customers_active)}
-            sub={`Ordered since ${s?.windows.active_from ?? "—"}`}
-            tip={`Purchased within the last 3 months from month start. Cut-off: ${s?.windows.active_from}.`}
+            label="Sales This Month"
+            value={<MaskedKES value={k.revenue_mtd} />}
+            sub={k.revenue_change_pct != null ? `${k.revenue_change_pct >= 0 ? "▲" : "▼"} ${Math.abs(k.revenue_change_pct)}% ${s?.compare.label ?? "vs prior period"}` : "Month to date"}
+            tip="Successful sales orders in the selected month."
             tone="emerald"
           />
           <KpiCard
             icon={Moon}
-            label="Dormant"
-            value={String(k.customers_dormant)}
-            sub="No order in 3+ months"
-            tip={s?.windows.dormant_tooltip ?? "Quiet accounts needing a visit or call."}
-            tone="amber"
-            href="/app/kp/dormant"
+            label="Target Progress"
+            value={k.target != null ? <MaskedKES value={k.target} /> : "No target"}
+            sub={k.target && k.target > 0 ? `${Math.round((k.revenue_mtd / k.target) * 100)}% achieved · KES ${Math.max(0, k.target - k.revenue_mtd).toLocaleString()} remaining` : "Request a target in Commissions"}
+            tip="Actual sales against the monthly target."
+            tone="violet"
+            progress={k.target && k.target > 0 ? Math.min(100, Math.round((k.revenue_mtd / k.target) * 100)) : undefined}
           />
           <KpiCard
             icon={Wallet}
-            label={s?.windows.is_current_month === false ? "Revenue" : "Revenue MTD"}
-            value={<MaskedKES value={k.revenue_mtd} />}
-            sub={
-              k.revenue_change_pct != null
-                ? `${k.revenue_change_pct > 0 ? "▲" : k.revenue_change_pct < 0 ? "▼" : "—"} ${Math.abs(k.revenue_change_pct)}% ${s?.compare.label ?? "vs prior period"}`
-                : "Month to date (order total)"
-            }
-            tip={`Sum of sales order totals for ${s?.windows.month_label ?? "this month"} in your portfolio (${s?.compare.label ?? "vs prior period"}: ${s?.compare.prior_month_label ?? "—"}). Ordered value — not cash collected.`}
-            tone="emerald"
-            trend={
-              k.revenue_change_pct == null
-                ? undefined
-                : k.revenue_change_pct > 0
-                  ? "up"
-                  : k.revenue_change_pct < 0
-                    ? "down"
-                    : "flat"
-            }
-          />
-          <KpiCard
-            icon={Target}
-            label="Target vs pace"
-            value={
-              k.target != null ? (
-                <MaskedKES value={k.target} />
-              ) : (
-                <span className="text-base font-medium text-muted-foreground">Not set</span>
-              )
-            }
-            sub={
-              k.target != null && k.variance_to_pace != null
-                ? `${k.time_gone_pct}% of working days gone · ${k.variance_to_pace >= 0 ? "ahead" : "behind"} by KES ${Math.abs(k.variance_to_pace).toLocaleString()}`
-                : "Set target in Commissions"
-            }
-            tip={`Working days ${k.working_days_elapsed}/${k.working_days_total} this month. Expected so far: ${k.expected_revenue_to_date != null ? `KES ${k.expected_revenue_to_date.toLocaleString()}` : "—"}.`}
-            tone="violet"
-            progress={
-              k.target && k.target > 0
-                ? Math.min(100, Math.round((k.revenue_mtd / k.target) * 100))
-                : undefined
-            }
-          />
-          <KpiCard
-            icon={ShoppingCart}
-            label="My orders"
-            value={String(k.orders_count)}
-            sub={`${k.orders_open} open · ${k.orders_completed} completed/shipping`}
-            tip="Sales orders this month from portfolio customers (excludes cancelled/rejected)."
-            tone="sky"
-            onClick={() => setTab("orders")}
-          />
-          <KpiCard
-            icon={AlertTriangle}
             label="Backorders"
             value={String(k.backorder_lines)}
-            sub={
-              <>
-                At risk <MaskedKES value={k.backorder_revenue_at_risk} />
-              </>
-            }
-            tip="Open shortfall lines (open qty × unit price). This is value at risk — not confirmed lost sales."
+            sub={<>At risk <MaskedKES value={k.backorder_revenue_at_risk} /></>}
+            tip="Pending backorder lines and their sales value at risk."
             tone="red"
             onClick={() => setTab("backorders")}
-          />
-          <KpiCard
-            icon={Package}
-            label="Fill rate / predicted"
-            value={k.fill_rate_pct != null ? `${k.fill_rate_pct}%` : "—"}
-            sub={`~${k.predicted_remaining_orders} more orders · ~KES ${Math.round(k.predicted_remaining_value).toLocaleString()} est.`}
-            tip="Fill rate ≈ shipped ÷ ordered this month. Prediction uses last 3 months daily run-rate for the rest of the month — estimate only."
-            tone="cyan"
           />
         </div>
       ) : null}

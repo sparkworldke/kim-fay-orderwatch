@@ -5,6 +5,8 @@ namespace App\Services\Sales;
 use App\Models\AcumaticaCustomer;
 use App\Models\User;
 use App\Services\Team\OrgScopeService;
+use App\Services\Team\CustomerAttributionService;
+use App\Services\Team\KpReportingHierarchyService;
 use App\Support\DataScope;
 use App\Support\SalesConsultantScope;
 use Illuminate\Support\Carbon;
@@ -19,6 +21,8 @@ class SalesPortfolioService
 {
     public function __construct(
         private readonly OrgScopeService $orgScope,
+        private readonly CustomerAttributionService $attribution,
+        private readonly KpReportingHierarchyService $kpHierarchy,
     ) {}
 
     /**
@@ -27,6 +31,12 @@ class SalesPortfolioService
     public function customerIdsFor(User $user, string $mode = 'auto'): array
     {
         $mode = $this->resolveMode($user, $mode);
+
+        // My Portfolio is a KP product surface for Susan: retain her broad access
+        // elsewhere, but make this dashboard's totals and lists KP-only.
+        if ($this->kpHierarchy->requiresPrivilegedKpOverlay($user)) {
+            return $this->kpHierarchy->visibleKpCustomerIds($user);
+        }
 
         if ($mode === 'self') {
             return $this->personalBookCustomerIds($user);
@@ -99,30 +109,7 @@ class SalesPortfolioService
      */
     public function personalBookCustomerIds(User $user): array
     {
-        $ids = [];
-
-        foreach ($user->customerAssignments()->pluck('customer_acumatica_id') as $id) {
-            $id = trim((string) $id);
-            if ($id !== '') {
-                $ids[$id] = $id;
-            }
-        }
-
-        $rep = strtoupper(trim((string) ($user->rep_code ?? '')));
-        if ($rep === '') {
-            $mapped = $user->acumaticaRepMappings()
-                ->where('is_primary', true)
-                ->value('acumatica_rep_code');
-            $rep = $mapped ? strtoupper(trim((string) $mapped)) : '';
-        }
-
-        if ($rep !== '') {
-            foreach ($this->customerIdsFromRepCodeOnOrders($rep) as $id) {
-                $ids[$id] = $id;
-            }
-        }
-
-        return array_values($ids);
+        return $this->attribution->directCustomerIds($user->id);
     }
 
     /**

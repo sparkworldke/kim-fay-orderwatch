@@ -143,6 +143,41 @@ interface DashboardStatusOrder {
   quantity: number;
   order_date: string | null;
   status: string | null;
+  full_order_amount: number;
+  brand_scoped: boolean;
+  brand_line_count: number;
+  skipped_line_count: number;
+  skipped_qty: number;
+  skipped_amount: number;
+}
+
+interface DashboardOrderLine {
+  id: number;
+  inventory_id: string;
+  description: string | null;
+  brand: string | null;
+  order_qty: number;
+  shipped_qty: number;
+  open_qty: number;
+  cancelled_qty: number;
+  unit_price: number;
+  line_amount: number;
+  fulfillment_status: string | null;
+  skipped_qty: number;
+  amount_at_risk: number;
+  shortfall_kind: "skipped_sku" | "cancelled" | "qty_shortfall" | null;
+}
+
+interface DashboardOrderLinesResponse {
+  order_nbr: string;
+  brand_scoped: boolean;
+  brands: string[];
+  on_order: DashboardOrderLine[];
+  skipped: DashboardOrderLine[];
+  subtotal_qty: number;
+  subtotal_amount: number;
+  skipped_qty: number;
+  skipped_amount: number;
 }
 
 interface DashboardStatusOrdersResponse {
@@ -252,6 +287,17 @@ function useStatusOrders(statusKey: string, day: string, enabled: boolean, filte
   });
 }
 
+function useDashboardOrderLines(orderId: number, enabled: boolean, filters: DashboardFilters) {
+  const params = dashboardParams("", "", { ...filters, statuses: [] });
+  params.delete("date_from");
+  params.delete("date_to");
+  return useQuery({
+    queryKey: ["dashboard-order-lines", orderId, filters.brands, filters.segments],
+    queryFn: () => apiFetch<DashboardOrderLinesResponse>(`dashboard/orders/${orderId}/lines?${params.toString()}`),
+    enabled,
+  });
+}
+
 function useTrend(dateFrom: string, dateTo: string, compare: boolean, filters: DashboardFilters) {
   const params = dashboardParams(dateFrom, dateTo, filters);
   params.set("compare", compare ? "1" : "0");
@@ -263,9 +309,10 @@ function useTrend(dateFrom: string, dateTo: string, compare: boolean, filters: D
 
 function useDashboardFilterOptions() {
   return useQuery({
-    queryKey: ["dashboard-filter-options"],
+    queryKey: ["dashboard", "filter-options"],
     queryFn: () => apiFetch<DashboardFilterOptions>("dashboard/filter-options"),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 6 * 60 * 60 * 1000,
   });
 }
 
@@ -646,6 +693,7 @@ function StatusOrderList({
   filters: DashboardFilters;
 }) {
   const { data, isLoading, isError } = useStatusOrders(statusKey, day, enabled, filters);
+  const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
 
   if (!enabled) return null;
 
@@ -683,9 +731,15 @@ function StatusOrderList({
         </thead>
         <tbody>
           {orders.map((order) => (
-            <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/20">
+            <Fragment key={order.id}>
+            <tr className="border-b last:border-b-0 hover:bg-muted/20">
               <td className="px-1.5 py-0.5 font-mono font-medium">
+                <button type="button" className="mr-1 align-middle" onClick={() => setExpandedOrder((id) => id === order.id ? null : order.id)} aria-label={`Toggle ${order.order_nbr} lines`}>
+                  {expandedOrder === order.id ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                </button>
                 <OrderLink customerId={order.customer_acumatica_id} orderId={order.order_nbr} />
+                {order.brand_scoped && <Badge variant="outline" className="ml-1 px-1 py-0 text-[7px]">{order.brand_line_count} brand lines</Badge>}
+                {order.skipped_line_count > 0 && <Badge variant="outline" className="ml-1 border-amber-300 px-1 py-0 text-[7px] text-amber-700">{order.skipped_line_count} shortfall</Badge>}
               </td>
               <td className="px-1.5 py-0.5">
                 <CustomerLink
@@ -697,16 +751,44 @@ function StatusOrderList({
               </td>
               <td className="px-1.5 py-0.5 text-right font-mono tabular-nums">
                 <MaskedKES value={order.amount} />
+                {order.brand_scoped && order.full_order_amount !== order.amount && <div className="text-[7px] text-muted-foreground">Full <MaskedKES value={order.full_order_amount} /></div>}
               </td>
               <td className="px-1.5 py-0.5 text-right font-mono tabular-nums">
                 {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </td>
             </tr>
+            {expandedOrder === order.id && (
+              <tr className="border-b bg-muted/10">
+                <td colSpan={4} className="p-1.5"><DashboardOrderLineDetails order={order} filters={filters} /></td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+function DashboardOrderLineDetails({ order, filters }: { order: DashboardStatusOrder; filters: DashboardFilters }) {
+  const lines = useDashboardOrderLines(order.id, true, filters);
+  if (lines.isLoading) return <Skeleton className="h-16 w-full" />;
+  if (lines.isError || !lines.data) return <p className="text-[8px] text-destructive">Could not load SKU lines.</p>;
+  const data = lines.data;
+  const scope = data.brand_scoped ? data.brands.join(" + ") : "all brands";
+
+  return <div className="space-y-2 text-[8px]">
+    <section className="rounded border bg-background">
+      <div className="border-b px-2 py-1 font-semibold">SKUs on order ({scope}) · {data.on_order.length} lines</div>
+      {data.on_order.length === 0 ? <p className="p-2 text-muted-foreground">No {scope} lines on this SO.</p> : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-muted/30 text-muted-foreground"><tr><th className="p-1 text-left">Inventory</th><th className="p-1 text-left">Product / Brand</th><th className="p-1 text-right">Ordered</th><th className="p-1 text-right">Shipped</th><th className="p-1 text-right">Open</th><th className="p-1 text-right">Unit price</th><th className="p-1 text-right">Amount</th><th className="p-1 text-left">Status</th></tr></thead><tbody>{data.on_order.map((line) => <tr key={line.id} className="border-t"><td className="p-1 font-mono">{line.inventory_id}</td><td className="p-1">{line.description ?? "—"}<div className="text-muted-foreground">{line.brand ?? "Unclassified"}</div></td><td className="p-1 text-right">{line.order_qty.toLocaleString()}</td><td className="p-1 text-right">{line.shipped_qty.toLocaleString()}</td><td className="p-1 text-right">{line.open_qty.toLocaleString()}</td><td className="p-1 text-right"><MaskedKES value={line.unit_price} /></td><td className="p-1 text-right"><MaskedKES value={line.line_amount} /></td><td className="p-1">{line.fulfillment_status ?? "—"}</td></tr>)}</tbody></table></div>}
+      <div className="border-t px-2 py-1 text-right font-semibold">Subtotal {data.subtotal_qty.toLocaleString()} qty · <MaskedKES value={data.subtotal_amount} /></div>
+    </section>
+    <section className="rounded border border-amber-200 bg-amber-50/30 dark:border-amber-900">
+      <div className="border-b border-amber-200 px-2 py-1 font-semibold dark:border-amber-900">Skipped / shortfall vs original · {data.skipped.length} lines</div>
+      {data.skipped.length === 0 ? <p className="p-2 text-muted-foreground">No skipped SKUs or shortfall on this order.</p> : <div className="overflow-x-auto"><table className="w-full"><thead className="text-muted-foreground"><tr><th className="p-1 text-left">Inventory / Product</th><th className="p-1 text-left">Kind</th><th className="p-1 text-right">Original</th><th className="p-1 text-right">Shipped</th><th className="p-1 text-right">Skipped</th><th className="p-1 text-right">At risk</th></tr></thead><tbody>{data.skipped.map((line) => <tr key={line.id} className="border-t border-amber-200 dark:border-amber-900"><td className="p-1"><span className="font-mono">{line.inventory_id}</span><div>{line.description ?? "—"}</div></td><td className="p-1 capitalize">{line.shortfall_kind?.replaceAll("_", " ")}</td><td className="p-1 text-right">{line.order_qty.toLocaleString()}</td><td className="p-1 text-right">{line.shipped_qty.toLocaleString()}</td><td className="p-1 text-right">{line.skipped_qty.toLocaleString()}</td><td className="p-1 text-right"><MaskedKES value={line.amount_at_risk} /></td></tr>)}</tbody></table></div>}
+      <div className="border-t border-amber-200 px-2 py-1 text-right font-semibold dark:border-amber-900">Skipped {data.skipped_qty.toLocaleString()} qty · <MaskedKES value={data.skipped_amount} /></div>
+    </section>
+  </div>;
 }
 
 function DayRowOrdersPanel({ day, row, filters }: { day: string; row: TrendDay; filters: DashboardFilters }) {

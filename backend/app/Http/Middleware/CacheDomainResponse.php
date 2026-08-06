@@ -70,7 +70,14 @@ final class CacheDomainResponse
 
             return $store;
         } catch (\Throwable) {
-            return Cache::store((string) config('cache.dashboard_fallback_store', 'database'));
+            try {
+                $fallback = Cache::store((string) config('cache.dashboard_fallback_store', 'database'));
+                $fallback->get('dashboard-cache:fallback-healthcheck');
+
+                return $fallback;
+            } catch (\Throwable) {
+                return Cache::store('array');
+            }
         }
     }
 

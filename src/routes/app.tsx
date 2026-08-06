@@ -12,6 +12,8 @@ import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { usePageActivityTracker } from "@/hooks/usePageActivityTracker";
 import { FirstLoginOnboarding } from "@/components/first-login-onboarding";
 import { WhatsAppPromptDialog } from "@/components/whatsapp-prompt-dialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 export const Route = createFileRoute("/app")({
   beforeLoad: async () => {
@@ -52,6 +54,18 @@ export const Route = createFileRoute("/app")({
 function AppLayout() {
   useIdleLogout();
   usePageActivityTracker(true);
+  const queryClient = useQueryClient();
+
+  // Warm the small shared dashboard reference payload once after authentication.
+  // Dashboard navigation then renders filters immediately from React Query.
+  useEffect(() => {
+    void queryClient.prefetchQuery({
+      queryKey: ["dashboard", "filter-options"],
+      queryFn: () => apiFetch("dashboard/filter-options"),
+      staleTime: 30 * 60 * 1000,
+      gcTime: 6 * 60 * 60 * 1000,
+    });
+  }, [queryClient]);
 
   return (
     <SidebarProvider>

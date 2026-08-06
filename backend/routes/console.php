@@ -12,7 +12,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command(PruneExpiredOtps::class)
-    ->everyFifteenMinutes()
+    ->everyThirtyMinutes()
     ->withoutOverlapping(10, releaseOnTerminationSignals: false);
 
 Schedule::command('orderwatch:sync-dtc-prices --source=scheduler')
@@ -28,7 +28,7 @@ Schedule::command('orderwatch:send-consultant-inactivity-digests')
     ->name('sales-consultant-inactivity-digests');
 
 Schedule::command('production:summaries-refresh --recent')
-    ->everyFiveMinutes()
+    ->everyThirtyMinutes()
     ->withoutOverlapping(20, releaseOnTerminationSignals: false)
     ->name('production-summary-refresh');
 

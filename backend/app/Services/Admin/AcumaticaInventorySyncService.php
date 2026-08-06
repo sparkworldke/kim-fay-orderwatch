@@ -190,6 +190,7 @@ class AcumaticaInventorySyncService
                 DomainCache::INVENTORY,
                 DomainCache::BACKORDERS,
                 DomainCache::BUSINESS_OPTIMIZATION,
+                DomainCache::REFERENCES,
                 DomainCache::NOT_DELIVERED,
                 DomainCache::KP_OPERATIONS,
             );

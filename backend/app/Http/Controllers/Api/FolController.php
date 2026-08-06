@@ -293,10 +293,11 @@ class FolController extends Controller
         $this->fol->ensureCan($request->user(), 'kp.fol.view');
 
         $q = trim((string) $request->input('q', ''));
-        $query = DataScope::applyCustomerScope(
-            AcumaticaCustomer::query()->where('customer_class', 'like', 'KP%')->orderBy('name'),
-            $request->user(),
-        );
+        $query = AcumaticaCustomer::query()->where('customer_class', 'like', 'KP%')->orderBy('name');
+        $customerIds = $this->fol->folCustomerIdsFor($request->user());
+        if ($customerIds !== null) {
+            $query->whereIn('acumatica_id', $customerIds === [] ? ['__none__'] : $customerIds);
+        }
 
         if ($q !== '') {
             $query->where(function ($scoped) use ($q) {
@@ -398,9 +399,7 @@ class FolController extends Controller
         ]);
 
         $customer = AcumaticaCustomer::where('acumatica_id', $validated['customer_acumatica_id'])->firstOrFail();
-        if (! DataScope::customerAccessible($request->user(), $customer->acumatica_id, $customer->customer_class)) {
-            abort(403, 'Forbidden.');
-        }
+        $this->fol->ensureFolCustomerAllowed($request->user(), $customer);
 
         $inventoryIds = $validated['inventory_id'] ?? [];
         $metrics = $this->fol->metricsForCustomer(

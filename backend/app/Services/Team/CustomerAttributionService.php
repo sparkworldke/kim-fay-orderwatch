@@ -395,6 +395,38 @@ class CustomerAttributionService
         );
     }
 
+    /**
+     * Explicitly attached book used by FOL's hard authorization boundary.
+     * ERP/SO rep aliases and rule-derived suggestions intentionally do not enter
+     * this set until an administrator/import creates an assignment row.
+     *
+     * @return list<string>
+     */
+    public function folCustomerIds(int $userId, ?Carbon $asOf = null): array
+    {
+        $asOf ??= Carbon::now();
+
+        return UserCustomerAssignment::query()
+            ->where('user_id', $userId)
+            ->whereIn('assignment_type', self::SERVICING_TYPES)
+            ->where(function (Builder $q) use ($asOf) {
+                $q->whereNull('effective_from')->orWhere('effective_from', '<=', $asOf);
+            })
+            ->where(function (Builder $q) use ($asOf) {
+                $q->whereNull('effective_to')->orWhere('effective_to', '>=', $asOf);
+            })
+            ->where(function (Builder $q) {
+                $q->where('is_manual_override', true)
+                    ->orWhereIn('source', ['manual', 'admin_csv', 'portfolio_import', 'kp_customers_20260805']);
+            })
+            ->pluck('customer_acumatica_id')
+            ->map(fn (mixed $id) => trim((string) $id))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     /** @return list<string> */
     private function computeDirectCustomerIds(int $userId, Carbon $asOf): array
     {

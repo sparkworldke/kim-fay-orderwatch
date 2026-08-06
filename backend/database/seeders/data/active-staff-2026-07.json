@@ -1,0 +1,4723 @@
+{
+  "generated_from": "Active staff July 2026- HQ.xlsx",
+  "permanent_count": 188,
+  "stc_count": 336,
+  "staff": [
+    {
+      "employee_number": "P300",
+      "name": "Resham Singh Bains",
+      "name_key": "resham singh bains",
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Chairman",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P301",
+      "name": "Rajdeep Singh Bains",
+      "name_key": "rajdeep singh bains",
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Chief Executive Officer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P302",
+      "name": "Hartaj Singh Bains",
+      "name_key": "hartaj singh bains",
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Sales and Marketing Director",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P303",
+      "name": "Rajpreet Kaur Bains",
+      "name_key": "rajpreet kaur bains",
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P368",
+      "name": "Divya Sudhir Jumani",
+      "name_key": "divya sudhir jumani",
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P420",
+      "name": "Sartivinder Kaur Bains",
+      "name_key": "sartivinder kaur bains",
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P007",
+      "name": "Andrew Kungu Gichuki",
+      "name_key": "andrew kungu gichuki",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Maintenance Officer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P008",
+      "name": "Sarah Wamaitha Mainah",
+      "name_key": "sarah wamaitha mainah",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P010",
+      "name": "Samuel Mwaura Njung'e",
+      "name_key": "samuel mwaura njung'e",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P011",
+      "name": "John Kamau Kimani",
+      "name_key": "john kamau kimani",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P013",
+      "name": "Georgina Muthini Kiilu",
+      "name_key": "georgina muthini kiilu",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P014",
+      "name": "Beatrice Luteshi",
+      "name_key": "beatrice luteshi",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P016",
+      "name": "Alice Mukachi M'mbaya",
+      "name_key": "alice mukachi m'mbaya",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P017",
+      "name": "Linet Wavinya Nzioka",
+      "name_key": "linet wavinya nzioka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Quality Controller",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P022",
+      "name": "Lucy Gakii Rimberia",
+      "name_key": "lucy gakii rimberia",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P025",
+      "name": "Susan Ngina Mwathi",
+      "name_key": "susan ngina mwathi",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Business Development Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P028",
+      "name": "Jackson Musyoka Pius",
+      "name_key": "jackson musyoka pius",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P030",
+      "name": "Victor Ochieng Wamira",
+      "name_key": "victor ochieng wamira",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Chief Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P033",
+      "name": "Johnsam Kioko Musyoki",
+      "name_key": "johnsam kioko musyoki",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P034",
+      "name": "Edward Kidima Otwele",
+      "name_key": "edward kidima otwele",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P035",
+      "name": "Eliakim Ambuka Ochunju",
+      "name_key": "eliakim ambuka ochunju",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P040",
+      "name": "Dennis Kilonzo Musyoka",
+      "name_key": "dennis kilonzo musyoka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P041",
+      "name": "George Amollo Ondolo",
+      "name_key": "george amollo ondolo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Production Clerk",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P042",
+      "name": "Godfrey Mungoni Akhabale",
+      "name_key": "godfrey mungoni akhabale",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P043",
+      "name": "Hastings Odera Odhiambo",
+      "name_key": "hastings odera odhiambo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P044",
+      "name": "Joseph Mwaniki Muthui",
+      "name_key": "joseph mwaniki muthui",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P046",
+      "name": "Lilian Ethel Njagi",
+      "name_key": "lilian ethel njagi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Senior Packer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P048",
+      "name": "Robert Kimani Kamau",
+      "name_key": "robert kimani kamau",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P049",
+      "name": "Alice Gituto Mworia",
+      "name_key": "alice gituto mworia",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Head of People and Culture",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P050",
+      "name": "Philemon Odhiambo Otienoh",
+      "name_key": "philemon odhiambo otienoh",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P051",
+      "name": "Fredrick Omondi Dede",
+      "name_key": "fredrick omondi dede",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P055",
+      "name": "Reuben Thuita Githinji",
+      "name_key": "reuben thuita githinji",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Business Intelligence Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P063",
+      "name": "Patrick Kariuki Karanja",
+      "name_key": "patrick kariuki karanja",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Technical Projects Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P074",
+      "name": "Anthony Githaiga Mwangi",
+      "name_key": "anthony githaiga mwangi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P076",
+      "name": "Jane Kirigo Kuria",
+      "name_key": "jane kirigo kuria",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P079",
+      "name": "Jackson Irungu Mutune",
+      "name_key": "jackson irungu mutune",
+      "department": "Finance",
+      "division": "RMS",
+      "designation": "Forklift Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P084",
+      "name": "Francis Muhoro Thiong'o",
+      "name_key": "francis muhoro thiong'o",
+      "department": "Consumer Sales",
+      "division": "Export Sales",
+      "designation": "Export Sales Manager - East Africa",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P085",
+      "name": "Ann Brettah Karambu",
+      "name_key": "ann brettah karambu",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Credit Controller",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P086",
+      "name": "Anne Christine Muthoni",
+      "name_key": "anne christine muthoni",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Head of Partner Brands",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P089",
+      "name": "John Obai Okiki",
+      "name_key": "john obai okiki",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P096",
+      "name": "Doreen Mukami Mugwika",
+      "name_key": "doreen mukami mugwika",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P104",
+      "name": "Irene Naliaka Luketelo",
+      "name_key": "irene naliaka luketelo",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P106",
+      "name": "Judy Njoki Wambui",
+      "name_key": "judy njoki wambui",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P120",
+      "name": "George Amenya Morang'a",
+      "name_key": "george amenya morang'a",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Senior Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P130",
+      "name": "Beatrice Mbale Ahona",
+      "name_key": "beatrice mbale ahona",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P131",
+      "name": "Catherine Ndinda Mavua",
+      "name_key": "catherine ndinda mavua",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P133",
+      "name": "Emily Mmbone Kadenge",
+      "name_key": "emily mmbone kadenge",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P134",
+      "name": "Julius Kiplimo Koech",
+      "name_key": "julius kiplimo koech",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P141",
+      "name": "Seraphine Musanga",
+      "name_key": "seraphine musanga",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": "Logistics Coordinator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P142",
+      "name": "Victoria Mmboga Kagevela",
+      "name_key": "victoria mmboga kagevela",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P149",
+      "name": "Lilian Kalondu Kimeu",
+      "name_key": "lilian kalondu kimeu",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Senior Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P150",
+      "name": "Lilian Judy Muthoni Maina",
+      "name_key": "lilian judy muthoni maina",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P154",
+      "name": "Faith Wamaitha Muiya",
+      "name_key": "faith wamaitha muiya",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P158",
+      "name": "Melan Naliaka Khisa",
+      "name_key": "melan naliaka khisa",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P163",
+      "name": "Shadrack Ochieng Onyango",
+      "name_key": "shadrack ochieng onyango",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P169",
+      "name": "Thomas Kingori Wagaki",
+      "name_key": "thomas kingori wagaki",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": "Forklift Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P172",
+      "name": "Linet Adhiambo",
+      "name_key": "linet adhiambo",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P174",
+      "name": "Nollias Mamboleo Tai",
+      "name_key": "nollias mamboleo tai",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P175",
+      "name": "Qais Yunus Osman",
+      "name_key": "qais yunus osman",
+      "department": "Internal Audit",
+      "division": "Internal Audit",
+      "designation": "Internal Auditor",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P178",
+      "name": "Duncan Mwanzia Nguni",
+      "name_key": "duncan mwanzia nguni",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P193",
+      "name": "June Jemutai Chesire",
+      "name_key": "june jemutai chesire",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P201",
+      "name": "Florence Wanjiru Karaya",
+      "name_key": "florence wanjiru karaya",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P215",
+      "name": "Akbar Majid Alamkhan",
+      "name_key": "akbar majid alamkhan",
+      "department": "Finance",
+      "division": "Mombasa Depot",
+      "designation": "Store Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P227",
+      "name": "Nicodemus Muthini Kivuva",
+      "name_key": "nicodemus muthini kivuva",
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Supply Chain Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P230",
+      "name": "Kevin Werunga Barasa",
+      "name_key": "kevin werunga barasa",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Consumer Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P231",
+      "name": "Miraj Shantilal Jhankhariya",
+      "name_key": "miraj shantilal jhankhariya",
+      "department": "C-Suite",
+      "division": "C-Suite",
+      "designation": "Chief Operations Officer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P236",
+      "name": "Simon Onduso Migosi",
+      "name_key": "simon onduso migosi",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Personal Driver",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P241",
+      "name": "Caroline Jane Nyambura Macharia",
+      "name_key": "caroline jane nyambura macharia",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Performance Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P245",
+      "name": "Beryl Akinyi Muga",
+      "name_key": "beryl akinyi muga",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P248",
+      "name": "Mohamed Ahamed Maalim",
+      "name_key": "mohamed ahamed maalim",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": "Loader",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P250",
+      "name": "Adanoor Ibrahim Abdi",
+      "name_key": "adanoor ibrahim abdi",
+      "department": "HR & Administration",
+      "division": "Runda",
+      "designation": "General Worker",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P251",
+      "name": "Hussein Ibrahim Abdi",
+      "name_key": "hussein ibrahim abdi",
+      "department": "HR & Administration",
+      "division": "Runda",
+      "designation": "General Worker",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P254",
+      "name": "Adan Mohamed Hassan",
+      "name_key": "adan mohamed hassan",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P255",
+      "name": "Justo Wanda Otenyo",
+      "name_key": "justo wanda otenyo",
+      "department": "Operations",
+      "division": "Fleet",
+      "designation": "Mechanic",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P257",
+      "name": "Fred Omondi Opanda",
+      "name_key": "fred omondi opanda",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Production Shift Supervisor",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P258",
+      "name": "Stephen Onyiego Bogonko",
+      "name_key": "stephen onyiego bogonko",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Maintenance Officer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P265",
+      "name": "Amos Runji Mathagu",
+      "name_key": "amos runji mathagu",
+      "department": "Operations",
+      "division": "Maintenance",
+      "designation": "Senior Mechanical Technician",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P272",
+      "name": "Lawrence Amukhono Amukhono",
+      "name_key": "lawrence amukhono amukhono",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Executive",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P276",
+      "name": "Peter Kago Mburu",
+      "name_key": "peter kago mburu",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P277",
+      "name": "Vincent Matheka Musyoka",
+      "name_key": "vincent matheka musyoka",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": "Dispatch Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P278",
+      "name": "Martin Mwangi Mutune",
+      "name_key": "martin mwangi mutune",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P284",
+      "name": "Dickens Ozengo",
+      "name_key": "dickens ozengo",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P293",
+      "name": "Dennis Mutwiri Kimathi",
+      "name_key": "dennis mutwiri kimathi",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P295",
+      "name": "Emmanuel Abwako Omongin",
+      "name_key": "emmanuel abwako omongin",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Messenger",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P313",
+      "name": "Simon Ouma Oduya",
+      "name_key": "simon ouma oduya",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Electrical Technician",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P317",
+      "name": "Yvonne Achieng Otieno",
+      "name_key": "yvonne achieng otieno",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P320",
+      "name": "Vignesh Ramachandran",
+      "name_key": "vignesh ramachandran",
+      "department": "C-Suite",
+      "division": "C-Suite",
+      "designation": "Chief Commercial Officer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P321",
+      "name": "Lucy Wanjiru Munene",
+      "name_key": "lucy wanjiru munene",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P322",
+      "name": "Ann Christine Njeri Kahira",
+      "name_key": "ann christine njeri kahira",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P323",
+      "name": "Simon Macharia Mwaniki",
+      "name_key": "simon macharia mwaniki",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Repsentantive",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P330",
+      "name": "Philimeon Mung'au John",
+      "name_key": "philimeon mung'au john",
+      "department": "Operations",
+      "division": "Fleet",
+      "designation": "Mechanic",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P335",
+      "name": "James Fundi Njeru",
+      "name_key": "james fundi njeru",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Tuk Tuk Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P337",
+      "name": "Maurine Ayoti Sarange",
+      "name_key": "maurine ayoti sarange",
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Demand Planner",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P339",
+      "name": "Jonathan Mwasi",
+      "name_key": "jonathan mwasi",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative-Lake",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P342",
+      "name": "Samson Kiwoi Vorogha",
+      "name_key": "samson kiwoi vorogha",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P343",
+      "name": "Rebecca Kananu",
+      "name_key": "rebecca kananu",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P344",
+      "name": "Purity Wanjira Gichohi",
+      "name_key": "purity wanjira gichohi",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P345",
+      "name": "Dan Kaberia Mutiga",
+      "name_key": "dan kaberia mutiga",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P346",
+      "name": "Lucy Wanjiru Kamau",
+      "name_key": "lucy wanjiru kamau",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P348",
+      "name": "Pitwel Mwakulegwa Beja",
+      "name_key": "pitwel mwakulegwa beja",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P355",
+      "name": "Willington Wanyama Simiyu",
+      "name_key": "willington wanyama simiyu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P356",
+      "name": "Phillip Mwanzia Kitaka",
+      "name_key": "phillip mwanzia kitaka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P357",
+      "name": "Dennis Matundura Moemi",
+      "name_key": "dennis matundura moemi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P358",
+      "name": "Silvester Mutie Kaviti",
+      "name_key": "silvester mutie kaviti",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P360",
+      "name": "Sosteen Madwale Ong'unya",
+      "name_key": "sosteen madwale ong'unya",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P361",
+      "name": "Adan Issak Ibren",
+      "name_key": "adan issak ibren",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P362",
+      "name": "Kelvin Kyalo Musyoki",
+      "name_key": "kelvin kyalo musyoki",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P364",
+      "name": "Gidraf Abiero",
+      "name_key": "gidraf abiero",
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "MROs Coordinator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P369",
+      "name": "Maurice Okinyi Odhiambo",
+      "name_key": "maurice okinyi odhiambo",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P370",
+      "name": "Victoria Munanie Kyalo Ndetei",
+      "name_key": "victoria munanie kyalo ndetei",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Account Developer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P373",
+      "name": "Everlyne Awiti Otiende",
+      "name_key": "everlyne awiti otiende",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P376",
+      "name": "Collins Ouma Opiyo",
+      "name_key": "collins ouma opiyo",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Stock Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P380",
+      "name": "Nicholas Muriuki",
+      "name_key": "nicholas muriuki",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Medical Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P385",
+      "name": "Grace Njeri Gatonye",
+      "name_key": "grace njeri gatonye",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P391",
+      "name": "Kunal Harsadrai Thakar",
+      "name_key": "kunal harsadrai thakar",
+      "department": "NPD",
+      "division": "NPD",
+      "designation": "NPD & Special Projects Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P395",
+      "name": "Johnson Muthiga Mbatia",
+      "name_key": "johnson muthiga mbatia",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P396",
+      "name": "Imran Cocker",
+      "name_key": "imran cocker",
+      "department": "Operations",
+      "division": "Fleet",
+      "designation": "Fleet Workshop Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P397",
+      "name": "Lydiah Chepng'eno Cheruyoit",
+      "name_key": "lydiah chepng'eno cheruyoit",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Medical Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P398",
+      "name": "George Odhiambo Oketch",
+      "name_key": "george odhiambo oketch",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Inventory Controller",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P399",
+      "name": "Immaculate Kaminika Manjanga",
+      "name_key": "immaculate kaminika manjanga",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Senior Payables Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P400",
+      "name": "Peris Wanjiku Kariuki",
+      "name_key": "peris wanjiku kariuki",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Pharmarcy Channel Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P409",
+      "name": "Hudson Shisoga Otengo",
+      "name_key": "hudson shisoga otengo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P413",
+      "name": "Peter Muuo Nzuki",
+      "name_key": "peter muuo nzuki",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P414",
+      "name": "Daisy Adhiambo Agwingwi",
+      "name_key": "daisy adhiambo agwingwi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Assistant Quality Controller",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P415",
+      "name": "Titus Kaleli Mutiso",
+      "name_key": "titus kaleli mutiso",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Commercial Tech Lead",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P419",
+      "name": "Brenda Gati Werema",
+      "name_key": "brenda gati werema",
+      "department": "Partner Brands",
+      "division": "Danone",
+      "designation": "Regulatory Affairs Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P421",
+      "name": "Hannah Mwelu Mutisya",
+      "name_key": "hannah mwelu mutisya",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P424",
+      "name": "Manan Anilkumar Shah",
+      "name_key": "manan anilkumar shah",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Chief Financial Officer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P426",
+      "name": "Mercy Mumo",
+      "name_key": "mercy mumo",
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Logistics Coordinator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P427",
+      "name": "Lawrence Kipkemoi",
+      "name_key": "lawrence kipkemoi",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P428",
+      "name": "Kathleen Karimi Mutua",
+      "name_key": "kathleen karimi mutua",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P429",
+      "name": "Siham Ahmed Mohamed",
+      "name_key": "siham ahmed mohamed",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Coordinator - Modern Trade",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P430",
+      "name": "Bernadette Mghoi Waleghwa",
+      "name_key": "bernadette mghoi waleghwa",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P431",
+      "name": "Timothy Piwa",
+      "name_key": "timothy piwa",
+      "department": "Consumer Sales",
+      "division": "Export Sales",
+      "designation": "Consumer Sales Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P434",
+      "name": "Victor Karanja Irungu",
+      "name_key": "victor karanja irungu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P436",
+      "name": "Joyce Njeri",
+      "name_key": "joyce njeri",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Brands Operations Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P437",
+      "name": "Isaya Omondi Kobe",
+      "name_key": "isaya omondi kobe",
+      "department": "Consumer Sales",
+      "division": "Trade Marketing",
+      "designation": "Data Analyst",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P438",
+      "name": "Brian Basweti ChirChir",
+      "name_key": "brian basweti chirchir",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Trade Marketing Lead - Dabur",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P440",
+      "name": "Phinnas Ngunjiri Mumbi",
+      "name_key": "phinnas ngunjiri mumbi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Assistant Electrical Technician",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P443",
+      "name": "Zipporah Wangeci Muiruri",
+      "name_key": "zipporah wangeci muiruri",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P450",
+      "name": "Dorcus Mawuda Mwandawiro",
+      "name_key": "dorcus mawuda mwandawiro",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Compliance and Safety Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P452",
+      "name": "Esther Wanjiru Karanja",
+      "name_key": "esther wanjiru karanja",
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Packaging Stocks Planner",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P455",
+      "name": "Moses Mwaka Daniel",
+      "name_key": "moses mwaka daniel",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative - Wholesale and Van Operations",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P456",
+      "name": "Adan Gulleid Ibrahim",
+      "name_key": "adan gulleid ibrahim",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Brands Operations Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P457",
+      "name": "Joseph Omondi Obonyo",
+      "name_key": "joseph omondi obonyo",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Stock Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P458",
+      "name": "John Gichuki Wairimu",
+      "name_key": "john gichuki wairimu",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Payables Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P460",
+      "name": "Berna Piwang Abondo",
+      "name_key": "berna piwang abondo",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P461",
+      "name": "Fredrick Juma Wesonga",
+      "name_key": "fredrick juma wesonga",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative - Rift",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P463",
+      "name": "Kelvin Emoli Musonye",
+      "name_key": "kelvin emoli musonye",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P464",
+      "name": "Patrick Ngare Mudiali",
+      "name_key": "patrick ngare mudiali",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P465",
+      "name": "Wycliffe Sikoko Mbale",
+      "name_key": "wycliffe sikoko mbale",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P466",
+      "name": "Peter Musembi Mutiso",
+      "name_key": "peter musembi mutiso",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Attendant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P467",
+      "name": "Duncan Mochama Mogeni",
+      "name_key": "duncan mochama mogeni",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P468",
+      "name": "Kelvin Kongo Kiluu",
+      "name_key": "kelvin kongo kiluu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Attendant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P469",
+      "name": "Jabez Owino  Odoyo",
+      "name_key": "jabez owino odoyo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P470",
+      "name": "Brian Muteti Muema",
+      "name_key": "brian muteti muema",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P471",
+      "name": "Daniel Njukia Kambo",
+      "name_key": "daniel njukia kambo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Attendant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P472",
+      "name": "Jackson Wambua Musyoka",
+      "name_key": "jackson wambua musyoka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P474",
+      "name": "Dauglas Raini Nyagaka",
+      "name_key": "dauglas raini nyagaka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Attendant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P475",
+      "name": "Laureen Wangari Maingi",
+      "name_key": "laureen wangari maingi",
+      "department": "Internal Audit",
+      "division": "Internal Audit",
+      "designation": "Internal Audit Assistant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P473",
+      "name": "Tom Jumba Obiri",
+      "name_key": "tom jumba obiri",
+      "department": "Partner Brands",
+      "division": "Dabur",
+      "designation": "Business Manager - Dabur",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P476",
+      "name": "Thadius Omondi Ogutu",
+      "name_key": "thadius omondi ogutu",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Payables Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P478",
+      "name": "Mayur Hitesh Rabadia",
+      "name_key": "mayur hitesh rabadia",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": "Warehouse & Dispatch Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P479",
+      "name": "Maximillian Otieno Odhiambo",
+      "name_key": "maximillian otieno odhiambo",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Debtors Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P480",
+      "name": "Mercy Nyagano",
+      "name_key": "mercy nyagano",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Debtors Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P481",
+      "name": "Stephanie Kerubo Ayieni",
+      "name_key": "stephanie kerubo ayieni",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Territory Supervisor- Coast Region",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P483",
+      "name": "Mercyline Kemunto Moranga",
+      "name_key": "mercyline kemunto moranga",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Profesional Sales Consultant - Hygiene Innovations",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P484",
+      "name": "Jackline Mutanu Kasinga",
+      "name_key": "jackline mutanu kasinga",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Human Resource Assistant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P485",
+      "name": "Jeritah Michira Moraa",
+      "name_key": "jeritah michira moraa",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Coordinator-Partner Brands",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P487",
+      "name": "Clement Omondi Otieno",
+      "name_key": "clement omondi otieno",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P488",
+      "name": "Dennis Masira Mecha",
+      "name_key": "dennis masira mecha",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P489",
+      "name": "John Kaguai Njoroge",
+      "name_key": "john kaguai njoroge",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Profesional Sales Consultant - Upcountry",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P490",
+      "name": "Brian Muindi Justus",
+      "name_key": "brian muindi justus",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Sales System Administrator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P491",
+      "name": "Erick Otieno Onyango",
+      "name_key": "erick otieno onyango",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Data Analyst - Modern Trade",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P492",
+      "name": "Godfrey Odongo Otieno",
+      "name_key": "godfrey odongo otieno",
+      "department": "Operations",
+      "division": "Maintenance",
+      "designation": "Assistant Mechanical Technician",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P493",
+      "name": "Bonface Okomba",
+      "name_key": "bonface okomba",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Pharmacy Sales Representative",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P495",
+      "name": "Yash Premji Vekariya",
+      "name_key": "yash premji vekariya",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": "Stores Officer",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P496",
+      "name": "Purity Nduku Kioko",
+      "name_key": "purity nduku kioko",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P497",
+      "name": "Benard Otieno Omollo",
+      "name_key": "benard otieno omollo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Production Manager - Converting",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P498",
+      "name": "Antony Kiema",
+      "name_key": "antony kiema",
+      "department": "Finance",
+      "division": "IT",
+      "designation": "IT Manager",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P499",
+      "name": "Christine Cheptoo Lagat",
+      "name_key": "christine cheptoo lagat",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Debtors Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P500",
+      "name": "Pauline Muthoni Njeru",
+      "name_key": "pauline muthoni njeru",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Trade Marketing Lead - Partner Brands",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P501",
+      "name": "Dennis Kememwa Ayiga",
+      "name_key": "dennis kememwa ayiga",
+      "department": "Finance",
+      "division": "IT",
+      "designation": "IT Infrastructure & Applications Assistant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P503",
+      "name": "Martha Wanjiru Gachuki",
+      "name_key": "martha wanjiru gachuki",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Payables Accountant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P504",
+      "name": "DianaWendy Wangui Mwangi",
+      "name_key": "dianawendy wangui mwangi",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P505",
+      "name": "Shirleen Chebet Kimutai",
+      "name_key": "shirleen chebet kimutai",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P506",
+      "name": "Pricillah Njeri Gichuhi",
+      "name_key": "pricillah njeri gichuhi",
+      "department": "Partrner Brands",
+      "division": "Partner Brands",
+      "designation": "Brand Operations Manager - KC, Bio &Duracell",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "P507",
+      "name": "Stephen Nguru Nduati",
+      "name_key": "stephen nguru nduati",
+      "department": "Consumer Sales",
+      "division": "Consumer Sales",
+      "designation": "Sales Administrator",
+      "sheet": "permanent"
+    },
+    {
+      "employee_number": "C017",
+      "name": "Dominic Mulinge Mwangangi",
+      "name_key": "dominic mulinge mwangangi",
+      "department": "Finance",
+      "division": "Mombasa Depot",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C025",
+      "name": "Eliakim Otieno Arodi",
+      "name_key": "eliakim otieno arodi",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C057",
+      "name": "Edwin Muhati Imbiakha",
+      "name_key": "edwin muhati imbiakha",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C106",
+      "name": "Jackson Khavinu Adams",
+      "name_key": "jackson khavinu adams",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C165",
+      "name": "Simon Nzioki Kyule",
+      "name_key": "simon nzioki kyule",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C169",
+      "name": "Maxwell Kisoma Mwalusa",
+      "name_key": "maxwell kisoma mwalusa",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C198",
+      "name": "Alex Malusi Kalekye",
+      "name_key": "alex malusi kalekye",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C199",
+      "name": "Kelvin Ondieki Mosota",
+      "name_key": "kelvin ondieki mosota",
+      "department": "Finance",
+      "division": "RMS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C242",
+      "name": "Gabriel Kumwaka",
+      "name_key": "gabriel kumwaka",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C307",
+      "name": "Fidelis Alfonce Mwendwa",
+      "name_key": "fidelis alfonce mwendwa",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C332",
+      "name": "Silas Owuor Wasonga",
+      "name_key": "silas owuor wasonga",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C344",
+      "name": "Wilson Muthiwi Kioko",
+      "name_key": "wilson muthiwi kioko",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C345",
+      "name": "Nicholus Muindi Makai",
+      "name_key": "nicholus muindi makai",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C404",
+      "name": "Jeremiah Mutunga Mutuku",
+      "name_key": "jeremiah mutunga mutuku",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C451",
+      "name": "John Wekesa Kimungui",
+      "name_key": "john wekesa kimungui",
+      "department": "Finance",
+      "division": "RMS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C478",
+      "name": "Esther Muthoni",
+      "name_key": "esther muthoni",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C487",
+      "name": "David Munala Indimuli",
+      "name_key": "david munala indimuli",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C490",
+      "name": "Jeremiah Omondi",
+      "name_key": "jeremiah omondi",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C450",
+      "name": "Onesmus Musyoki Mutua",
+      "name_key": "onesmus musyoki mutua",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C506",
+      "name": "Fainos Lugadilu Ouoremi",
+      "name_key": "fainos lugadilu ouoremi",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C512",
+      "name": "Charles Muthenya Nyamai",
+      "name_key": "charles muthenya nyamai",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C517",
+      "name": "Daniel Manyasi Luvanda",
+      "name_key": "daniel manyasi luvanda",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C519",
+      "name": "Dickson Moranga Gechuru",
+      "name_key": "dickson moranga gechuru",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C527",
+      "name": "Elizabeth Awour Odero",
+      "name_key": "elizabeth awour odero",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C350",
+      "name": "Christine Ndanu Victor",
+      "name_key": "christine ndanu victor",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C439",
+      "name": "Dominic Mutuku Matheka",
+      "name_key": "dominic mutuku matheka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C259",
+      "name": "Everngline Masitsa Nabutete",
+      "name_key": "everngline masitsa nabutete",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C075",
+      "name": "Bonface Nyabayo",
+      "name_key": "bonface nyabayo",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C548",
+      "name": "Martin Mugendi Mwaniki",
+      "name_key": "martin mugendi mwaniki",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C549",
+      "name": "Festus Mutuku King'oo",
+      "name_key": "festus mutuku king'oo",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C556",
+      "name": "Esther Mutee Victor",
+      "name_key": "esther mutee victor",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C559",
+      "name": "Irene Syomiti Muia",
+      "name_key": "irene syomiti muia",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C560",
+      "name": "Caroline Wangari Wanjiru",
+      "name_key": "caroline wangari wanjiru",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C563",
+      "name": "Fredrick Mutinda Kivunzya",
+      "name_key": "fredrick mutinda kivunzya",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C565",
+      "name": "Stanley Muindi Muthoka",
+      "name_key": "stanley muindi muthoka",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C566",
+      "name": "John Koskei Kugo",
+      "name_key": "john koskei kugo",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C098",
+      "name": "Doris Karimi Muriithi",
+      "name_key": "doris karimi muriithi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C569",
+      "name": "Kelvin Kasyoka Mutwii",
+      "name_key": "kelvin kasyoka mutwii",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C578",
+      "name": "Jane Mueni Kivuva",
+      "name_key": "jane mueni kivuva",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C380",
+      "name": "Abigail Mwikali Mutua",
+      "name_key": "abigail mwikali mutua",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C580",
+      "name": "Protus Shitsu Muhunzu",
+      "name_key": "protus shitsu muhunzu",
+      "department": "HR & Administration",
+      "division": "Runda",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C420",
+      "name": "Margaret Nelima Wamalwa",
+      "name_key": "margaret nelima wamalwa",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C425",
+      "name": "Anthony Wanyama Oduol",
+      "name_key": "anthony wanyama oduol",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C589",
+      "name": "Salome Naliaka Nyongesa",
+      "name_key": "salome naliaka nyongesa",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C591",
+      "name": "Lucy Akinyi Oluoch",
+      "name_key": "lucy akinyi oluoch",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C596",
+      "name": "Alberto Musyoka Matuto",
+      "name_key": "alberto musyoka matuto",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C600",
+      "name": "Bonventure Wakhisi Wafula",
+      "name_key": "bonventure wakhisi wafula",
+      "department": "Finance",
+      "division": "Mombasa Depot",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C604",
+      "name": "Anna Kaindi Chema",
+      "name_key": "anna kaindi chema",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C605",
+      "name": "Ruth Syuki",
+      "name_key": "ruth syuki",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C304",
+      "name": "Esther Anyango Ojwang",
+      "name_key": "esther anyango ojwang",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C606",
+      "name": "Elizabeth Mumbua Kimindu",
+      "name_key": "elizabeth mumbua kimindu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C320",
+      "name": "Isaac Ndonye Ngumbi",
+      "name_key": "isaac ndonye ngumbi",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C615",
+      "name": "Nancy Nduku Ndeti",
+      "name_key": "nancy nduku ndeti",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C629",
+      "name": "Shadrack Levis Omukhomba",
+      "name_key": "shadrack levis omukhomba",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C630",
+      "name": "Peter Nyongesa Koroboi",
+      "name_key": "peter nyongesa koroboi",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C633",
+      "name": "Jonathan Ndeto Kisyanga",
+      "name_key": "jonathan ndeto kisyanga",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C634",
+      "name": "Paul Muthini Musele",
+      "name_key": "paul muthini musele",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C635",
+      "name": "Erick Muya",
+      "name_key": "erick muya",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C639",
+      "name": "Yahaya Anzeze Wangonyi",
+      "name_key": "yahaya anzeze wangonyi",
+      "department": "Finance",
+      "division": "Mombasa Depot",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C280",
+      "name": "Dorine Mbula Kilonzo",
+      "name_key": "dorine mbula kilonzo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C646",
+      "name": "Joseph Mutinda Mutua",
+      "name_key": "joseph mutinda mutua",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C649",
+      "name": "Linet Anyango Mukele",
+      "name_key": "linet anyango mukele",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C651",
+      "name": "Bramwel Ominde",
+      "name_key": "bramwel ominde",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C664",
+      "name": "Deborah Auma",
+      "name_key": "deborah auma",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C667",
+      "name": "Purity Wanjiru Njoroge",
+      "name_key": "purity wanjiru njoroge",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C510",
+      "name": "Ibrahim Waqo Guyo",
+      "name_key": "ibrahim waqo guyo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C129",
+      "name": "Peris Wanjiku Mbukuru",
+      "name_key": "peris wanjiku mbukuru",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C672",
+      "name": "Moses Ogema Ojiambo",
+      "name_key": "moses ogema ojiambo",
+      "department": "Finance",
+      "division": "Mombasa Depot",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C671",
+      "name": "Emily Muthio Munyiva",
+      "name_key": "emily muthio munyiva",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C681",
+      "name": "Nichola Mukhebi Mama",
+      "name_key": "nichola mukhebi mama",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C683",
+      "name": "Brian Laama Peter",
+      "name_key": "brian laama peter",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C685",
+      "name": "Kennedy Gitahi Wanjiru",
+      "name_key": "kennedy gitahi wanjiru",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C690",
+      "name": "Kevin Ndalu",
+      "name_key": "kevin ndalu",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C133",
+      "name": "Redempta Nzembi Wambua",
+      "name_key": "redempta nzembi wambua",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C695",
+      "name": "Titus Madegwa Mayekula",
+      "name_key": "titus madegwa mayekula",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C653",
+      "name": "Damaris Mwende Kisilu",
+      "name_key": "damaris mwende kisilu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C700",
+      "name": "Priscillar Njeri Mbuthia",
+      "name_key": "priscillar njeri mbuthia",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C701",
+      "name": "Antony Mugendi Njeru",
+      "name_key": "antony mugendi njeru",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C705",
+      "name": "Anderson Chege Kamau",
+      "name_key": "anderson chege kamau",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C718",
+      "name": "Kelvin Mwangi Gichohi",
+      "name_key": "kelvin mwangi gichohi",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C720",
+      "name": "Lewis Mureithi Macharia",
+      "name_key": "lewis mureithi macharia",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C729",
+      "name": "Freddy Mwendwa Ndangili",
+      "name_key": "freddy mwendwa ndangili",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C737",
+      "name": "Mildred Iminza Obiero",
+      "name_key": "mildred iminza obiero",
+      "department": "HR & Administration",
+      "division": "Runda",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C746",
+      "name": "Miriam Nyawira Wainaina",
+      "name_key": "miriam nyawira wainaina",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C218",
+      "name": "Jackline Migare Kitunzi",
+      "name_key": "jackline migare kitunzi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C748",
+      "name": "Stephen Ayubu Onsongo",
+      "name_key": "stephen ayubu onsongo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C750",
+      "name": "Simon Ngugi Njoroge",
+      "name_key": "simon ngugi njoroge",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C751",
+      "name": "Erickson Muthini Musyoka",
+      "name_key": "erickson muthini musyoka",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C754",
+      "name": "Marion Nyatuka Oramini",
+      "name_key": "marion nyatuka oramini",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C755",
+      "name": "George Njoroge Gitara",
+      "name_key": "george njoroge gitara",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C109",
+      "name": "Josphat Masoud Mbithuka",
+      "name_key": "josphat masoud mbithuka",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C761",
+      "name": "Elvis Mukhwana Mizu",
+      "name_key": "elvis mukhwana mizu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C764",
+      "name": "Erick Muuo Musyoka",
+      "name_key": "erick muuo musyoka",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C766",
+      "name": "Godfrey Kenanda",
+      "name_key": "godfrey kenanda",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C767",
+      "name": "Davis Mmbaya Ndula",
+      "name_key": "davis mmbaya ndula",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C770",
+      "name": "Eric Omutsani",
+      "name_key": "eric omutsani",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C771",
+      "name": "Dennis Wecholi Barasa",
+      "name_key": "dennis wecholi barasa",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C783",
+      "name": "Samuel Mutie Muasya",
+      "name_key": "samuel mutie muasya",
+      "department": "Operations",
+      "division": "Fleet",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C785",
+      "name": "David Ogero Maikuri",
+      "name_key": "david ogero maikuri",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C469",
+      "name": "Mildred Mmbaya",
+      "name_key": "mildred mmbaya",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C797",
+      "name": "Samuel Mwongela Musyoki",
+      "name_key": "samuel mwongela musyoki",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C799",
+      "name": "Eliud Kionga Somi",
+      "name_key": "eliud kionga somi",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C800",
+      "name": "Peter Kiprotich",
+      "name_key": "peter kiprotich",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C801",
+      "name": "Antony Kiura Mugo",
+      "name_key": "antony kiura mugo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C805",
+      "name": "James Kituu Mulu",
+      "name_key": "james kituu mulu",
+      "department": "Finance",
+      "division": "RMS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C807",
+      "name": "Violet Oyiela Shitukha",
+      "name_key": "violet oyiela shitukha",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C808",
+      "name": "Fernandes Kibe Kivisi",
+      "name_key": "fernandes kibe kivisi",
+      "department": "Finance",
+      "division": "RMS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C813",
+      "name": "Isaac Mbuba Kirimi",
+      "name_key": "isaac mbuba kirimi",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C579",
+      "name": "Fredrick Musungu Miheso",
+      "name_key": "fredrick musungu miheso",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C738",
+      "name": "Mohammed Bakari Mwanjenjewa",
+      "name_key": "mohammed bakari mwanjenjewa",
+      "department": "Finance",
+      "division": "Mombasa Depot",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C826",
+      "name": "MohamedRashid Issakow Alio",
+      "name_key": "mohamedrashid issakow alio",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C836",
+      "name": "Olando Denis Nesta",
+      "name_key": "olando denis nesta",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C838",
+      "name": "Stephen Gichohe Mukuha",
+      "name_key": "stephen gichohe mukuha",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C662",
+      "name": "Olivia Awino Obala",
+      "name_key": "olivia awino obala",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C844",
+      "name": "Dominic Matata Boniface",
+      "name_key": "dominic matata boniface",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C848",
+      "name": "Peter Onyaji Agero",
+      "name_key": "peter onyaji agero",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C850",
+      "name": "Alfred Gichane Njeri",
+      "name_key": "alfred gichane njeri",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C852",
+      "name": "Maxmillan Mutinda Mate",
+      "name_key": "maxmillan mutinda mate",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C856",
+      "name": "Edwin Simiyu Misiko",
+      "name_key": "edwin simiyu misiko",
+      "department": "Finance",
+      "division": "RMS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C862",
+      "name": "Elvis Omondi",
+      "name_key": "elvis omondi",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C871",
+      "name": "Evanson Mwangi Kamau",
+      "name_key": "evanson mwangi kamau",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C529",
+      "name": "Juliana Kasimbu Nzaki",
+      "name_key": "juliana kasimbu nzaki",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C873",
+      "name": "Joseph Makomere Inyangala",
+      "name_key": "joseph makomere inyangala",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C876",
+      "name": "David Kariuki Wanjiru",
+      "name_key": "david kariuki wanjiru",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C881",
+      "name": "Griffin Mdomo Shilunji",
+      "name_key": "griffin mdomo shilunji",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C883",
+      "name": "Joseph Gatune Mwangi",
+      "name_key": "joseph gatune mwangi",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C887",
+      "name": "Reuben Marube Ondieki",
+      "name_key": "reuben marube ondieki",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C892",
+      "name": "Mercy Kajuju Murungi",
+      "name_key": "mercy kajuju murungi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C897",
+      "name": "Josphat Morara Oira",
+      "name_key": "josphat morara oira",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C898",
+      "name": "Boniface Kyalo Kimanthi",
+      "name_key": "boniface kyalo kimanthi",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C902",
+      "name": "Moureen Tsisika Shakachi",
+      "name_key": "moureen tsisika shakachi",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C903",
+      "name": "Mercy Wanjiru Chege",
+      "name_key": "mercy wanjiru chege",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C909",
+      "name": "Mirriam Mwende Mwai",
+      "name_key": "mirriam mwende mwai",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C911",
+      "name": "Gideon Kiplangat",
+      "name_key": "gideon kiplangat",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C918",
+      "name": "Nixon Mulili Kioko",
+      "name_key": "nixon mulili kioko",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C920",
+      "name": "Dennis Toili Sikuku",
+      "name_key": "dennis toili sikuku",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C925",
+      "name": "Edith Awuor Odhiambo",
+      "name_key": "edith awuor odhiambo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C929",
+      "name": "Moses Shitera Otiende",
+      "name_key": "moses shitera otiende",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C931",
+      "name": "Boniface Nyutu Mbogo",
+      "name_key": "boniface nyutu mbogo",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C934",
+      "name": "Kelvin Musyoka Masyuka",
+      "name_key": "kelvin musyoka masyuka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C935",
+      "name": "Augustin Malon Odongo",
+      "name_key": "augustin malon odongo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C936",
+      "name": "Mike Kamau Bundi",
+      "name_key": "mike kamau bundi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C939",
+      "name": "Hellen Wanjiru Wanjira",
+      "name_key": "hellen wanjiru wanjira",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C941",
+      "name": "Boniface Wafula Wangina",
+      "name_key": "boniface wafula wangina",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C946",
+      "name": "Susan Wanjiru Thande",
+      "name_key": "susan wanjiru thande",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C951",
+      "name": "Bryson Mutayi Mise",
+      "name_key": "bryson mutayi mise",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C952",
+      "name": "Duncan Ndungu Njuguna",
+      "name_key": "duncan ndungu njuguna",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C956",
+      "name": "Ali Mohammed Vali",
+      "name_key": "ali mohammed vali",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C957",
+      "name": "Collins Mageto Mokaya",
+      "name_key": "collins mageto mokaya",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C961",
+      "name": "Fred Kyalo Munywoki",
+      "name_key": "fred kyalo munywoki",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C962",
+      "name": "Bedford Ndereva Magiri",
+      "name_key": "bedford ndereva magiri",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C976",
+      "name": "Brian Muhanda",
+      "name_key": "brian muhanda",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C978",
+      "name": "Salman Osman Ali",
+      "name_key": "salman osman ali",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C980",
+      "name": "Bernard Kibet Langat",
+      "name_key": "bernard kibet langat",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C984",
+      "name": "Norah Kwamboka Yaro",
+      "name_key": "norah kwamboka yaro",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C985",
+      "name": "Virginia Ndunge Muthini",
+      "name_key": "virginia ndunge muthini",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C987",
+      "name": "Purity Kinya",
+      "name_key": "purity kinya",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C988",
+      "name": "Sharon Akoyi Odero",
+      "name_key": "sharon akoyi odero",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1017",
+      "name": "Moses Karanja Kariuki",
+      "name_key": "moses karanja kariuki",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1018",
+      "name": "Duma Oscar Ragwel",
+      "name_key": "duma oscar ragwel",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1020",
+      "name": "Mohamed Asif Abdulrehman Bakhrani",
+      "name_key": "mohamed asif abdulrehman bakhrani",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1021",
+      "name": "Gabriel Wangila Simiyu",
+      "name_key": "gabriel wangila simiyu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1022",
+      "name": "William Osike Othieno",
+      "name_key": "william osike othieno",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1026",
+      "name": "Andrewcliff Odoyo Onyango",
+      "name_key": "andrewcliff odoyo onyango",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1028",
+      "name": "Peninah Wanjiru Njambi",
+      "name_key": "peninah wanjiru njambi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1029",
+      "name": "Faith Sheila Otieno",
+      "name_key": "faith sheila otieno",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1030",
+      "name": "Mercy Wangechi Wahome",
+      "name_key": "mercy wangechi wahome",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1031",
+      "name": "Mercy Chelangat",
+      "name_key": "mercy chelangat",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1034",
+      "name": "Pacificia Kerubo Nyabuto",
+      "name_key": "pacificia kerubo nyabuto",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1035",
+      "name": "Yurub Isaack Mohammed",
+      "name_key": "yurub isaack mohammed",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1036",
+      "name": "Damaris Kanini Joseph",
+      "name_key": "damaris kanini joseph",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1037",
+      "name": "Yvonne Mumbua Musa",
+      "name_key": "yvonne mumbua musa",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1038",
+      "name": "Sharon Iminza",
+      "name_key": "sharon iminza",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1039",
+      "name": "Joan Mwende Kathuri",
+      "name_key": "joan mwende kathuri",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1040",
+      "name": "Mercy Mutile Mbula",
+      "name_key": "mercy mutile mbula",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1041",
+      "name": "Ezekiel Kimutai Langat",
+      "name_key": "ezekiel kimutai langat",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1008",
+      "name": "Moses Omondi Obare",
+      "name_key": "moses omondi obare",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1004",
+      "name": "Victor Wanyonyi Wabwile",
+      "name_key": "victor wanyonyi wabwile",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1044",
+      "name": "Caleb Opiyo Otieno",
+      "name_key": "caleb opiyo otieno",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1047",
+      "name": "Sylvester Martin Yeye",
+      "name_key": "sylvester martin yeye",
+      "department": "Partner Brands",
+      "division": "Danone",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1049",
+      "name": "Evans Kipchirchir",
+      "name_key": "evans kipchirchir",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1050",
+      "name": "Dan Muinde",
+      "name_key": "dan muinde",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1053",
+      "name": "Brian Kyalo Muoki",
+      "name_key": "brian kyalo muoki",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1054",
+      "name": "Kelvin Kariuki Macharia",
+      "name_key": "kelvin kariuki macharia",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1055",
+      "name": "Ismael Hamisi",
+      "name_key": "ismael hamisi",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1056",
+      "name": "Charles Masila Ngui",
+      "name_key": "charles masila ngui",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1059",
+      "name": "Charles Masila Mulwa",
+      "name_key": "charles masila mulwa",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1060",
+      "name": "Benson Okindo Okerosi",
+      "name_key": "benson okindo okerosi",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1061",
+      "name": "Johnstone Wambua Mbeva",
+      "name_key": "johnstone wambua mbeva",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C991",
+      "name": "Joseph Ndambuki Mbithi",
+      "name_key": "joseph ndambuki mbithi",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C998",
+      "name": "Hillary Kipchumba",
+      "name_key": "hillary kipchumba",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1001",
+      "name": "Samuel Njogu Ng'ang'a",
+      "name_key": "samuel njogu ng'ang'a",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C092",
+      "name": "Daniel Maingi Mutua",
+      "name_key": "daniel maingi mutua",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1063",
+      "name": "Pius Shikhuyu Ashiono",
+      "name_key": "pius shikhuyu ashiono",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C990",
+      "name": "Ronald Kamama James",
+      "name_key": "ronald kamama james",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C992",
+      "name": "David Kimanthi Kitoo",
+      "name_key": "david kimanthi kitoo",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C996",
+      "name": "Richard Kioko Wambua",
+      "name_key": "richard kioko wambua",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1010",
+      "name": "Hesbond Kiplangat",
+      "name_key": "hesbond kiplangat",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1011",
+      "name": "Peter Muthoka Munyao",
+      "name_key": "peter muthoka munyao",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1072",
+      "name": "Beatrice Awino Odemba",
+      "name_key": "beatrice awino odemba",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1073",
+      "name": "Kennedy Kahugu Munyinyi",
+      "name_key": "kennedy kahugu munyinyi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1074",
+      "name": "Victor Nyangweso",
+      "name_key": "victor nyangweso",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1076",
+      "name": "Andrew Semo Onyango",
+      "name_key": "andrew semo onyango",
+      "department": "Operations",
+      "division": "Maintenance",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1078",
+      "name": "Dennis Wambua Kyalo",
+      "name_key": "dennis wambua kyalo",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1079",
+      "name": "Geoffrey Kyende John",
+      "name_key": "geoffrey kyende john",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1080",
+      "name": "Joseph Nyachae Morara",
+      "name_key": "joseph nyachae morara",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1083",
+      "name": "James Ogutu",
+      "name_key": "james ogutu",
+      "department": "HR & Administration",
+      "division": "Runda",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1087",
+      "name": "Caleb Sagwe Matunda",
+      "name_key": "caleb sagwe matunda",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1090",
+      "name": "Kenneth Muriithi Gitari",
+      "name_key": "kenneth muriithi gitari",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1093",
+      "name": "Maureen Wangui Nduta",
+      "name_key": "maureen wangui nduta",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1119",
+      "name": "Joseph Musyoki Mutavi",
+      "name_key": "joseph musyoki mutavi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1118",
+      "name": "Irine Aluoch Ochieng",
+      "name_key": "irine aluoch ochieng",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1116",
+      "name": "Samuel Mwangi Wambui",
+      "name_key": "samuel mwangi wambui",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1120",
+      "name": "Joram Ndaka Muoka",
+      "name_key": "joram ndaka muoka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1129",
+      "name": "Purity Wangari Mwaniki",
+      "name_key": "purity wangari mwaniki",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1130",
+      "name": "Daniel Wambua Mutua",
+      "name_key": "daniel wambua mutua",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1133",
+      "name": "Gabriel Mugai Mugambi",
+      "name_key": "gabriel mugai mugambi",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1136",
+      "name": "Peter Wainaina Mariga",
+      "name_key": "peter wainaina mariga",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1138",
+      "name": "Francis Migwi Ruga",
+      "name_key": "francis migwi ruga",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C190",
+      "name": "Jared Mageto Miruka",
+      "name_key": "jared mageto miruka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1141",
+      "name": "Florence Avoga",
+      "name_key": "florence avoga",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1144",
+      "name": "Carl Dominique Jousset",
+      "name_key": "carl dominique jousset",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C796",
+      "name": "Janet Wanjiku Nancy",
+      "name_key": "janet wanjiku nancy",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1146",
+      "name": "Joseph Githuka Kinuthia",
+      "name_key": "joseph githuka kinuthia",
+      "department": "Operations",
+      "division": "Maintenance",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1147",
+      "name": "Govan Mang'oli Wamalwa",
+      "name_key": "govan mang'oli wamalwa",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1148",
+      "name": "Kelvin Githaiga Ndiritu",
+      "name_key": "kelvin githaiga ndiritu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1149",
+      "name": "Vivian Adhiambo Ochieng",
+      "name_key": "vivian adhiambo ochieng",
+      "department": "HR & Administration",
+      "division": "Runda",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1150",
+      "name": "Sarah Mugure Mwangi",
+      "name_key": "sarah mugure mwangi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C924",
+      "name": "Damaris Mueni Kasyoka",
+      "name_key": "damaris mueni kasyoka",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1151",
+      "name": "Veronicah Katwiri Nyaga",
+      "name_key": "veronicah katwiri nyaga",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1152",
+      "name": "Rosemary Imbande Luseka",
+      "name_key": "rosemary imbande luseka",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1154",
+      "name": "Jane Muthoni Munyinyi",
+      "name_key": "jane muthoni munyinyi",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1155",
+      "name": "Divinah Kwamboka Omurua",
+      "name_key": "divinah kwamboka omurua",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1157",
+      "name": "Nickson Cheruiyot Ngetich",
+      "name_key": "nickson cheruiyot ngetich",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1158",
+      "name": "Bavon Odieno Lodenyo",
+      "name_key": "bavon odieno lodenyo",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1159",
+      "name": "Lucy Iminza",
+      "name_key": "lucy iminza",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1160",
+      "name": "Cynthia Mumbua Kioko",
+      "name_key": "cynthia mumbua kioko",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1163",
+      "name": "Alex Mutonyi Wanjiru",
+      "name_key": "alex mutonyi wanjiru",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1164",
+      "name": "Thomas Mumina Kawawa",
+      "name_key": "thomas mumina kawawa",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1168",
+      "name": "Bernard Kiplangat Cheruiyot",
+      "name_key": "bernard kiplangat cheruiyot",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1169",
+      "name": "Jacinta Nzembi James",
+      "name_key": "jacinta nzembi james",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1170",
+      "name": "Shawn Kevin Mugendi",
+      "name_key": "shawn kevin mugendi",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1171",
+      "name": "Safari Nzau Nzaki",
+      "name_key": "safari nzau nzaki",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1172",
+      "name": "Caleb  Nyakoe Makori",
+      "name_key": "caleb nyakoe makori",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1173",
+      "name": "Faith Ngina Kasiva",
+      "name_key": "faith ngina kasiva",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1075",
+      "name": "Kennedy Ahuta",
+      "name_key": "kennedy ahuta",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C171",
+      "name": "Maxwell Shikoli",
+      "name_key": "maxwell shikoli",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C456",
+      "name": "David Oguna Okutu",
+      "name_key": "david oguna okutu",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C756",
+      "name": "Dickens Otieno Awas",
+      "name_key": "dickens otieno awas",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C530",
+      "name": "Leah Mouma Idoyo",
+      "name_key": "leah mouma idoyo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1096",
+      "name": "Ruth Nduku Paul",
+      "name_key": "ruth nduku paul",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1097",
+      "name": "Hannah Wangui Karanja",
+      "name_key": "hannah wangui karanja",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1099",
+      "name": "Joan Wairimu Njoroge",
+      "name_key": "joan wairimu njoroge",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1103",
+      "name": "Joan Jaquin Owade",
+      "name_key": "joan jaquin owade",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1104",
+      "name": "Faustina Muthoni Wanjiru",
+      "name_key": "faustina muthoni wanjiru",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1105",
+      "name": "Faith Cheruto Sagana",
+      "name_key": "faith cheruto sagana",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1108",
+      "name": "Faith Njeri Waichong'e",
+      "name_key": "faith njeri waichong'e",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1109",
+      "name": "Catherine Nyawsiaboka Onduso",
+      "name_key": "catherine nyawsiaboka onduso",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1111",
+      "name": "Emmaculate Atieno Lomo",
+      "name_key": "emmaculate atieno lomo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1112",
+      "name": "Dorcas Nyambura Thuku",
+      "name_key": "dorcas nyambura thuku",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1121",
+      "name": "Diana Mumbua Mugendi",
+      "name_key": "diana mumbua mugendi",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1122",
+      "name": "Edwin Kipkorir Meissy",
+      "name_key": "edwin kipkorir meissy",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1124",
+      "name": "Elkana Langat",
+      "name_key": "elkana langat",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1125",
+      "name": "John Wafula",
+      "name_key": "john wafula",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1126",
+      "name": "Musa Wanjala",
+      "name_key": "musa wanjala",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C713",
+      "name": "Peninah Mwalimu",
+      "name_key": "peninah mwalimu",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1135",
+      "name": "James Gacheru Kimani",
+      "name_key": "james gacheru kimani",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1165",
+      "name": "Althea Nyarocho Mangeni",
+      "name_key": "althea nyarocho mangeni",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1167",
+      "name": "Wilbert Mwachia Mwamburi",
+      "name_key": "wilbert mwachia mwamburi",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1174",
+      "name": "Maurice Mutuku Mbaluka",
+      "name_key": "maurice mutuku mbaluka",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1175",
+      "name": "Charles Otieno Obama",
+      "name_key": "charles otieno obama",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1176",
+      "name": "Clive Kebasi Onguti",
+      "name_key": "clive kebasi onguti",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1177",
+      "name": "Wilfred Ngigi Njoroge",
+      "name_key": "wilfred ngigi njoroge",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1178",
+      "name": "Melane Onyango Onyino",
+      "name_key": "melane onyango onyino",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1179",
+      "name": "Alexander Mutisya Kyalo",
+      "name_key": "alexander mutisya kyalo",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1180",
+      "name": "Dennis Nahinga",
+      "name_key": "dennis nahinga",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1181",
+      "name": "Michael Kiprono Cheruiyot",
+      "name_key": "michael kiprono cheruiyot",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1182",
+      "name": "Humphrey Njoroge Macharia",
+      "name_key": "humphrey njoroge macharia",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1183",
+      "name": "Vincent Muthiani kioko",
+      "name_key": "vincent muthiani kioko",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1185",
+      "name": "Mark Musungu Likono",
+      "name_key": "mark musungu likono",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1188",
+      "name": "Annet Lynn Mbulwa Kiio",
+      "name_key": "annet lynn mbulwa kiio",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1190",
+      "name": "Eugine Ongoma",
+      "name_key": "eugine ongoma",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1191",
+      "name": "Evans Samson Chimau",
+      "name_key": "evans samson chimau",
+      "department": "Finance",
+      "division": "RMS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1192",
+      "name": "Reuben Anyangu Kutwa",
+      "name_key": "reuben anyangu kutwa",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1193",
+      "name": "Argwins Mutugi Kaaria",
+      "name_key": "argwins mutugi kaaria",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1194",
+      "name": "Ruth Wanza Kilungu",
+      "name_key": "ruth wanza kilungu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1005",
+      "name": "Frederick Yapesa Odongo",
+      "name_key": "frederick yapesa odongo",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1195",
+      "name": "Victor Matheka Kioko",
+      "name_key": "victor matheka kioko",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1196",
+      "name": "Eliud Wanyonyi Wafula",
+      "name_key": "eliud wanyonyi wafula",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1197",
+      "name": "Phlevian Lwane Shitukha",
+      "name_key": "phlevian lwane shitukha",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1199",
+      "name": "Remigulus Fortune Bulinda",
+      "name_key": "remigulus fortune bulinda",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1200",
+      "name": "Dominic Mwanje Odongo",
+      "name_key": "dominic mwanje odongo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1201",
+      "name": "Albin Omuleka Sachiel",
+      "name_key": "albin omuleka sachiel",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1202",
+      "name": "Juma Abdi Isa",
+      "name_key": "juma abdi isa",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1203",
+      "name": "Alex Mwendwa Muthoka",
+      "name_key": "alex mwendwa muthoka",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1205",
+      "name": "Susan Mwikali Muli",
+      "name_key": "susan mwikali muli",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1206",
+      "name": "Nicholas Wambua Matheka",
+      "name_key": "nicholas wambua matheka",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1207",
+      "name": "Esther Mbula Ndunge",
+      "name_key": "esther mbula ndunge",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1208",
+      "name": "Belita Kambua Muinde",
+      "name_key": "belita kambua muinde",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1209",
+      "name": "Josphat Kimutai Ronoh",
+      "name_key": "josphat kimutai ronoh",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1210",
+      "name": "Chrispus Mwalimo",
+      "name_key": "chrispus mwalimo",
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C430",
+      "name": "Kyalo Musau",
+      "name_key": "kyalo musau",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1212",
+      "name": "Elizabeth Jumba Milimu",
+      "name_key": "elizabeth jumba milimu",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1213",
+      "name": "Rosalyne Njeri Ngure",
+      "name_key": "rosalyne njeri ngure",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1214",
+      "name": "Risper Nzembi Mulei",
+      "name_key": "risper nzembi mulei",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1215",
+      "name": "Daniel Nzungi Musyoki",
+      "name_key": "daniel nzungi musyoki",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1216",
+      "name": "Antony Fundi Kiura",
+      "name_key": "antony fundi kiura",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1218",
+      "name": "Imojir Charles Marwa",
+      "name_key": "imojir charles marwa",
+      "department": "Operations",
+      "division": "Maintenance",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1219",
+      "name": "Fredrick Adikinyi",
+      "name_key": "fredrick adikinyi",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1220",
+      "name": "Victor Oduor Omondi",
+      "name_key": "victor oduor omondi",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1221",
+      "name": "Peter Njuguna Munene",
+      "name_key": "peter njuguna munene",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1222",
+      "name": "Griffin Sanja Wafula",
+      "name_key": "griffin sanja wafula",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1223",
+      "name": "Winfridah Sikhoya Musamali",
+      "name_key": "winfridah sikhoya musamali",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1225",
+      "name": "Moses Mbuvi Muthini",
+      "name_key": "moses mbuvi muthini",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C235",
+      "name": "Musembi Matula",
+      "name_key": "musembi matula",
+      "department": "Finance",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1227",
+      "name": "Eunice Nzilani Kinyae",
+      "name_key": "eunice nzilani kinyae",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1229",
+      "name": "Theresia Mauu Musembi",
+      "name_key": "theresia mauu musembi",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1230",
+      "name": "Miriam Wangeci Mwai",
+      "name_key": "miriam wangeci mwai",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1231",
+      "name": "Hellen Anungo",
+      "name_key": "hellen anungo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1232",
+      "name": "Otieno Isaac Otieno",
+      "name_key": "otieno isaac otieno",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1233",
+      "name": "Nancy Njeri Wambui",
+      "name_key": "nancy njeri wambui",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1234",
+      "name": "Franklin Wachira Mugambi",
+      "name_key": "franklin wachira mugambi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1235",
+      "name": "Arees Karim Sayani",
+      "name_key": "arees karim sayani",
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1236",
+      "name": "Mauline Wanjiku Gicheha",
+      "name_key": "mauline wanjiku gicheha",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1239",
+      "name": "Vincent Mudanya Keya",
+      "name_key": "vincent mudanya keya",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1240",
+      "name": "Beryl Margaret Musoko",
+      "name_key": "beryl margaret musoko",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1241",
+      "name": "Allen Mbuthia Kamore",
+      "name_key": "allen mbuthia kamore",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1242",
+      "name": "Moses Mulandi Mutua",
+      "name_key": "moses mulandi mutua",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1243",
+      "name": "John Mwendwa Mbita",
+      "name_key": "john mwendwa mbita",
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1245",
+      "name": "Brian Walm Isigi",
+      "name_key": "brian walm isigi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1246",
+      "name": "Mary Wamboi Gichia",
+      "name_key": "mary wamboi gichia",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1247",
+      "name": "Regina E Wanjiku Mwangi",
+      "name_key": "regina e wanjiku mwangi",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1248",
+      "name": "Benjamin Ajesi Okutu Mwangu",
+      "name_key": "benjamin ajesi okutu mwangu",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1249",
+      "name": "Cosmus David Kyowa",
+      "name_key": "cosmus david kyowa",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1250",
+      "name": "JoseMaria Xaviour Malachy",
+      "name_key": "josemaria xaviour malachy",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": null,
+      "sheet": "stc"
+    },
+    {
+      "employee_number": "C1251",
+      "name": "Dorothy Walegwa Manambo",
+      "name_key": "dorothy walegwa manambo",
+      "department": "Operations",
+      "division": "Production",
+      "designation": null,
+      "sheet": "stc"
+    }
+  ]
+}

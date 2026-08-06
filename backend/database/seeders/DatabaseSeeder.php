@@ -15,6 +15,11 @@ class DatabaseSeeder extends Seeder
             ShippingZoneSeeder::class,
             RouteSeeder::class,
             UserRepCodeSeeder::class,
+            // Correct employee_number / rep_code by name from Active staff + HODs JSON:
+            // UserIdentityFromStaffJsonSeeder::class,
+            // Then KP portfolio import (needs rep codes aligned):
+            // KpRepCodeAlignment202608Seeder::class,
+            // KpCustomerPortfolio202608Seeder::class,
             CustomerSeeder::class,
             // Optional, after the employee roster exists:
             // PartnerBrandsTeam202608Seeder::class,

@@ -1,0 +1,193 @@
+{
+  "description": "Rep codes from KP-Customers CSV + known aliases.",
+  "reps": [
+    {
+      "match_names": [
+        "Shirleen Chebet"
+      ],
+      "rep_code": "P505",
+      "employee_number": "P505",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Berna Piwang"
+      ],
+      "rep_code": "C967",
+      "employee_number": "P460",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Mercyline Kemunto"
+      ],
+      "rep_code": "C1262",
+      "employee_number": "P483",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Doreen Mugwika"
+      ],
+      "rep_code": "P096",
+      "employee_number": "P096",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Diana Wendy"
+      ],
+      "rep_code": "P504",
+      "employee_number": "P504",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "June Chesire"
+      ],
+      "rep_code": "P193",
+      "employee_number": "P193",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Yvonne Achieng"
+      ],
+      "rep_code": "YVON",
+      "employee_number": "P317",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Irene Luketelo"
+      ],
+      "rep_code": "P104",
+      "employee_number": "P104",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Lucy Rimberia"
+      ],
+      "rep_code": "P022",
+      "employee_number": "P022",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "John Kaguai"
+      ],
+      "rep_code": "P489",
+      "employee_number": "P489",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Florence Karaya"
+      ],
+      "rep_code": "P201",
+      "employee_number": "P201",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Susan Mwathi"
+      ],
+      "rep_code": "P025",
+      "employee_number": "P025",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Mercy Irungu"
+      ],
+      "rep_code": "P183",
+      "employee_number": "P183",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Hafswa Fadhili"
+      ],
+      "rep_code": "P271",
+      "employee_number": "P271",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Moses Mwaka"
+      ],
+      "rep_code": "P455",
+      "employee_number": "P455",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Mercy Gathua"
+      ],
+      "rep_code": "P267",
+      "employee_number": "P267",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Clement Otieno"
+      ],
+      "rep_code": "P487",
+      "employee_number": "P487",
+      "source": "kp_customers_20260805"
+    },
+    {
+      "match_names": [
+        "Nicole Wanjiku"
+      ],
+      "rep_code": "C835",
+      "employee_number": "C835",
+      "source": "kp_customers_20260805"
+    }
+  ],
+  "aliases": [
+    {
+      "match_names": [
+        "Yvonne Achieng Otieno"
+      ],
+      "employee_number": "P317",
+      "rep_code": "YVON"
+    },
+    {
+      "match_names": [
+        "Yvonne Achieng"
+      ],
+      "employee_number": "P317",
+      "rep_code": "YVON"
+    },
+    {
+      "match_names": [
+        "Berna Piwang Abondo"
+      ],
+      "employee_number": "P460",
+      "rep_code": "C967"
+    },
+    {
+      "match_names": [
+        "Berna Piwang"
+      ],
+      "employee_number": "P460",
+      "rep_code": "C967"
+    },
+    {
+      "match_names": [
+        "Mercyline Kemunto Moranga"
+      ],
+      "employee_number": "P483",
+      "rep_code": "C1262"
+    },
+    {
+      "match_names": [
+        "Mercyline Kemunto"
+      ],
+      "employee_number": "P483",
+      "rep_code": "C1262"
+    }
+  ]
+}

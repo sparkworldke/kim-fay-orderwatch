@@ -323,12 +323,29 @@ class DashboardController extends Controller
             $orders->pluck('customer_acumatica_id')->filter()->unique()->values()->all(),
         );
 
+        $brands = $this->multiFilterValues($request, 'brand');
+        $lineRows = DB::table('acumatica_sales_order_lines as l')
+            ->leftJoin('acumatica_inventory_items as i', 'i.inventory_id', '=', 'l.inventory_id')
+            ->whereIn('l.sales_order_id', $orders->pluck('id'))
+            ->when($brands !== [], fn ($q) => $q->whereIn('i.brand', $brands))
+            ->get([
+                'l.sales_order_id', 'l.order_qty', 'l.shipped_qty', 'l.qty_on_shipments',
+                'l.open_qty', 'l.cancelled_qty', 'l.unit_price',
+            ])
+            ->groupBy('sales_order_id');
+
         return response()->json([
             'status'     => $statusKey,
             'date_from'  => $dateFrom,
             'date_to'    => $dateTo,
             'count'      => $orders->count(),
-            'orders'     => $orders->map(fn ($order) => [
+            'orders'     => $orders->map(function ($order) use ($customerNames, $lineRows, $brands) {
+                $lines = $lineRows->get($order->id, collect());
+                $quantity = (float) $lines->sum(fn ($line) => (float) $line->order_qty);
+                $amount = (float) $lines->sum(fn ($line) => (float) $line->order_qty * (float) $line->unit_price);
+                $skipped = $lines->filter(fn ($line) => $this->lineSkippedQty($line) > 0);
+
+                return [
                 'id'                    => $order->id,
                 'order_nbr'             => $order->acumatica_order_nbr,
                 'customer_acumatica_id' => $order->customer_acumatica_id,
@@ -337,13 +354,87 @@ class DashboardController extends Controller
                     $order->customer_acumatica_id,
                     $customerNames,
                 ),
-                'amount'        => round((float) $order->order_total, 2),
+                'amount'        => round($brands !== [] ? $amount : (float) $order->order_total, 2),
+                'full_order_amount' => round((float) $order->order_total, 2),
                 'currency_id'   => $order->currency_id,
-                'quantity'      => round((float) ($order->total_qty ?? 0), 4),
+                'quantity'      => round($quantity, 4),
+                'brand_scoped'  => $brands !== [],
+                'brand_line_count' => $lines->count(),
+                'skipped_line_count' => $skipped->count(),
+                'skipped_qty' => round((float) $skipped->sum(fn ($line) => $this->lineSkippedQty($line)), 4),
+                'skipped_amount' => round((float) $skipped->sum(fn ($line) => $this->lineSkippedQty($line) * (float) $line->unit_price), 2),
                 'order_date'    => $order->order_date?->toDateString(),
                 'status'        => $order->status,
-            ])->values(),
+                ];
+            })->values(),
         ]);
+    }
+
+    public function orderLines(Request $request, int $order): JsonResponse
+    {
+        $orderRow = $this->applyDashboardFilters($this->excludeSpecialCustomers(
+            DataScope::applyOrderScope(AcumaticaSalesOrder::query()->salesOrdersOnly(), $request->user()),
+        ), $request, applyStatus: false)->whereKey($order)->firstOrFail();
+
+        $brands = $this->multiFilterValues($request, 'brand');
+        $lines = DB::table('acumatica_sales_order_lines as l')
+            ->leftJoin('acumatica_inventory_items as i', 'i.inventory_id', '=', 'l.inventory_id')
+            ->where('l.sales_order_id', $orderRow->id)
+            ->when($brands !== [], fn ($q) => $q->whereIn('i.brand', $brands))
+            ->orderBy('l.line_nbr')
+            ->get([
+                'l.id', 'l.line_nbr', 'l.inventory_id', 'l.description', 'i.brand',
+                'l.order_qty', 'l.shipped_qty', 'l.qty_on_shipments', 'l.open_qty',
+                'l.cancelled_qty', 'l.unit_price', 'l.fulfillment_status', 'l.completed',
+            ]);
+
+        $onOrder = $lines->map(function ($line) {
+            $ordered = (float) $line->order_qty;
+            $shipped = max((float) $line->shipped_qty, (float) $line->qty_on_shipments);
+            $cancelled = (float) $line->cancelled_qty;
+            $skippedQty = $this->lineSkippedQty($line);
+            $kind = $skippedQty <= 0 ? null : ($cancelled >= $ordered && $ordered > 0 ? 'skipped_sku' : ($cancelled > 0 ? 'cancelled' : 'qty_shortfall'));
+
+            return [
+                'id' => (int) $line->id,
+                'line_nbr' => (int) $line->line_nbr,
+                'inventory_id' => (string) $line->inventory_id,
+                'description' => $line->description,
+                'brand' => $line->brand,
+                'order_qty' => round($ordered, 4),
+                'shipped_qty' => round($shipped, 4),
+                'open_qty' => round((float) $line->open_qty, 4),
+                'cancelled_qty' => round($cancelled, 4),
+                'unit_price' => round((float) $line->unit_price, 4),
+                'line_amount' => round($ordered * (float) $line->unit_price, 2),
+                'fulfillment_status' => $line->fulfillment_status,
+                'skipped_qty' => round($skippedQty, 4),
+                'amount_at_risk' => round($skippedQty * (float) $line->unit_price, 2),
+                'shortfall_kind' => $kind,
+            ];
+        })->values();
+
+        return response()->json([
+            'order_nbr' => $orderRow->acumatica_order_nbr,
+            'brand_scoped' => $brands !== [],
+            'brands' => $brands,
+            'on_order' => $onOrder,
+            'skipped' => $onOrder->where('skipped_qty', '>', 0)->values(),
+            'subtotal_qty' => round((float) $onOrder->sum('order_qty'), 4),
+            'subtotal_amount' => round((float) $onOrder->sum('line_amount'), 2),
+            'skipped_qty' => round((float) $onOrder->sum('skipped_qty'), 4),
+            'skipped_amount' => round((float) $onOrder->sum('amount_at_risk'), 2),
+        ]);
+    }
+
+    private function lineSkippedQty(object $line): float
+    {
+        $ordered = max(0, (float) $line->order_qty);
+        $shipped = max(0, (float) $line->shipped_qty, (float) $line->qty_on_shipments);
+        $cancelled = max(0, (float) $line->cancelled_qty);
+        $open = max(0, (float) $line->open_qty, $ordered - $shipped - $cancelled);
+
+        return min($ordered, $cancelled + $open);
     }
 
     /**

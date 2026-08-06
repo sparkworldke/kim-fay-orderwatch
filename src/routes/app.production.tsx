@@ -31,7 +31,8 @@ function ProductionAndStockLayout() {
     void queryClient.prefetchQuery({
       queryKey: ["production-reference"],
       queryFn: () => apiFetch("operations/production/reference"),
-      staleTime: Number.POSITIVE_INFINITY,
+      staleTime: 60 * 60 * 1000,
+      gcTime: 24 * 60 * 60 * 1000,
     });
   }, [queryClient]);
 

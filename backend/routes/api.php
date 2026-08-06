@@ -121,7 +121,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::prefix('auth')->group(function () {
         Route::get('me',     [AuthController::class, 'me']);
-        Route::get('capabilities', CapabilitiesController::class);
+        Route::get('capabilities', CapabilitiesController::class)->middleware('response.cache:capabilities,600');
         Route::post('logout',[AuthController::class, 'logout']);
         Route::post('onboarding/complete', [ProfileController::class, 'completeOnboarding']);
         // Stop must work while impersonating (token is the target user, not admin)
@@ -130,9 +130,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Dashboard KPIs + trend
     Route::get('dashboard/kpis',              [DashboardController::class, 'kpis']);
-    Route::get('dashboard/filter-options',     [DashboardController::class, 'filterOptions']);
+    Route::get('dashboard/filter-options',     [DashboardController::class, 'filterOptions'])->middleware('response.cache:references,1800');
     Route::get('dashboard/trend',             [DashboardController::class, 'trend']);
     Route::get('dashboard/orders-by-status',  [DashboardController::class, 'ordersByStatus']);
+    Route::get('dashboard/orders/{order}/lines', [DashboardController::class, 'orderLines'])->whereNumber('order');
     Route::get('dashboard/goods-lost-in-transit', [DashboardController::class, 'goodsLostInTransit']);
     Route::get('dashboard/zone-routes',          [DashboardController::class, 'zoneRoutes']);
     Route::get('dashboard/customer-brands',      [CustomerBrandController::class, 'index']);
@@ -155,7 +156,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('operations')->group(function () {
         Route::prefix('production')->group(function () {
             Route::get('version', [ProductionIntelligenceController::class, 'version']);
-            Route::get('reference', [ProductionIntelligenceController::class, 'reference']);
+            Route::get('reference', [ProductionIntelligenceController::class, 'reference'])->middleware('response.cache:references,3600');
             Route::get('summary', [ProductionIntelligenceController::class, 'summary']);
             Route::get('inventory', [ProductionIntelligenceController::class, 'inventory']);
             Route::get('inventory/{inventoryId}/trend', [ProductionIntelligenceController::class, 'trend']);
@@ -486,9 +487,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('sales-consultant-digests', [SalesConsultantDigestController::class, 'index']);
         Route::put('sales-consultant-digests/bulk', [SalesConsultantDigestController::class, 'bulk']);
         Route::put('sales-consultant-digests/{user}', [SalesConsultantDigestController::class, 'update']);
-        Route::post('brands', [BrandsController::class, 'store']);
-        Route::put('brands/{brand}', [BrandsController::class, 'update']);
-        Route::delete('brands/{brand}', [BrandsController::class, 'destroy']);
+        Route::post('brands', [BrandsController::class, 'store'])->middleware('response.cache:references,1');
+        Route::put('brands/{brand}', [BrandsController::class, 'update'])->middleware('response.cache:references,1');
+        Route::delete('brands/{brand}', [BrandsController::class, 'destroy'])->middleware('response.cache:references,1');
         Route::apiResource('categories', CategoriesController::class)->except(['show']);
         Route::apiResource('trading-groups', TradingGroupsController::class)->except(['show'])
             ->parameters(['trading-groups' => 'tradingGroup']);

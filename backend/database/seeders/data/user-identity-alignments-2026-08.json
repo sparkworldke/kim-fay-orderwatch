@@ -1,0 +1,4478 @@
+{
+  "description": "Name matches between Active staff July 2026 HQ and Kimfay Employees HODs. users.employee_number should be set from Active staff (employee_number). hod_employee_number is the org-chart code from HODs CSV when present.",
+  "generated_from": [
+    "Active staff July 2026- HQ.xlsx",
+    "Kimfay Employees - HODs.csv"
+  ],
+  "matched_hod_count": 111,
+  "unmatched_hod_count": 0,
+  "unmatched_hods": [],
+  "number_mismatches": [],
+  "alignments": [
+    {
+      "name": "Rajdeep Singh Bains",
+      "match_name": "Rajdeep Singh Bains",
+      "name_key": "rajdeep singh bains",
+      "employee_number": "P301",
+      "hod_employee_number": "P301",
+      "reports_to_employee_number": null,
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Chief Executive Officer",
+      "email": null,
+      "segment": "Executive",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Hartaj Singh Bains",
+      "match_name": "Hartaj Singh Bains",
+      "name_key": "hartaj singh bains",
+      "employee_number": "P302",
+      "hod_employee_number": "P302",
+      "reports_to_employee_number": null,
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Sales and Marketing Director",
+      "email": null,
+      "segment": "Executive",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Vignesh Ramachandran",
+      "match_name": "Vignesh Ramachandran",
+      "name_key": "vignesh ramachandran",
+      "employee_number": "P320",
+      "hod_employee_number": "P320",
+      "reports_to_employee_number": null,
+      "department": "Commercial",
+      "division": "C-Suite",
+      "designation": "Chief Commercial Officer",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Miraj Shantilal Jhankhariya",
+      "match_name": "Miraj Shantilal Jhankhariya",
+      "name_key": "miraj shantilal jhankhariya",
+      "employee_number": "P231",
+      "hod_employee_number": "P231",
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "C-Suite",
+      "designation": "Chief Operations Officer",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Beatrice Luteshi",
+      "match_name": "Beatrice Luteshi",
+      "name_key": "beatrice luteshi",
+      "employee_number": "P014",
+      "hod_employee_number": "P014",
+      "reports_to_employee_number": "P320",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Susan Ngina Mwathi",
+      "match_name": "Susan Ngina Mwathi",
+      "name_key": "susan ngina mwathi",
+      "employee_number": "P025",
+      "hod_employee_number": "P025",
+      "reports_to_employee_number": "P320",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Business Development Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Francis Muhoro Thiong'o",
+      "match_name": "Francis Muhoro Thiong'o",
+      "name_key": "francis muhoro thiong'o",
+      "employee_number": "P084",
+      "hod_employee_number": "P084",
+      "reports_to_employee_number": "P320",
+      "department": "Consumer Sales",
+      "division": "Export Sales",
+      "designation": "Export Sales Manager - East Africa",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Anne Christine Muthoni",
+      "match_name": "Anne Christine Muthoni",
+      "name_key": "anne christine muthoni",
+      "employee_number": "P086",
+      "hod_employee_number": "P086",
+      "reports_to_employee_number": "P320",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Head of Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Dickens Ozengo",
+      "match_name": "Dickens Ozengo",
+      "name_key": "dickens ozengo",
+      "employee_number": "P284",
+      "hod_employee_number": "P284",
+      "reports_to_employee_number": "P320",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Titus Kaleli Mutiso",
+      "match_name": "Titus Kaleli Mutiso",
+      "name_key": "titus kaleli mutiso",
+      "employee_number": "P415",
+      "hod_employee_number": "P415",
+      "reports_to_employee_number": "P320",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Commercial Tech Lead",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Siham Ahmed Mohamed",
+      "match_name": "Siham Ahmed Mohamed",
+      "name_key": "siham ahmed mohamed",
+      "employee_number": "P429",
+      "hod_employee_number": "P429",
+      "reports_to_employee_number": "P320",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Coordinator - Modern Trade",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Purity Nduku Kioko",
+      "match_name": "Purity Nduku Kioko",
+      "name_key": "purity nduku kioko",
+      "employee_number": "P496",
+      "hod_employee_number": "P496",
+      "reports_to_employee_number": "P320",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Linet Wavinya Nzioka",
+      "match_name": "Linet Wavinya Nzioka",
+      "name_key": "linet wavinya nzioka",
+      "employee_number": "P017",
+      "hod_employee_number": "P017",
+      "reports_to_employee_number": "P231",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Quality Controller",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Alice Gituto Mworia",
+      "match_name": "Alice Gituto Mworia",
+      "name_key": "alice gituto mworia",
+      "employee_number": "P049",
+      "hod_employee_number": "P049",
+      "reports_to_employee_number": "P231",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Head of People and Culture",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Patrick Kariuki Karanja",
+      "match_name": "Patrick Kariuki Karanja",
+      "name_key": "patrick kariuki karanja",
+      "employee_number": "P063",
+      "hod_employee_number": "P063",
+      "reports_to_employee_number": "P231",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Technical Projects Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Qais Yunus Osman",
+      "match_name": "Qais Yunus Osman",
+      "name_key": "qais yunus osman",
+      "employee_number": "P175",
+      "hod_employee_number": "P175",
+      "reports_to_employee_number": "P231",
+      "department": "Internal Audit",
+      "division": "Internal Audit",
+      "designation": "Internal Auditor",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Nicodemus Muthini Kivuva",
+      "match_name": "Nicodemus Muthini Kivuva",
+      "name_key": "nicodemus muthini kivuva",
+      "employee_number": "P227",
+      "hod_employee_number": "P227",
+      "reports_to_employee_number": "P231",
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Supply Chain Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Imran Cocker",
+      "match_name": "Imran Cocker",
+      "name_key": "imran cocker",
+      "employee_number": "P396",
+      "hod_employee_number": "P396",
+      "reports_to_employee_number": "P231",
+      "department": "Operations",
+      "division": "Fleet",
+      "designation": "Fleet Workshop Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Manan Anilkumar Shah",
+      "match_name": "Manan Anilkumar Shah",
+      "name_key": "manan anilkumar shah",
+      "employee_number": "P424",
+      "hod_employee_number": "P424",
+      "reports_to_employee_number": "P231",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Chief Financial Officer",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Dorcus Mawuda Mwandawiro",
+      "match_name": "Dorcus Mawuda Mwandawiro",
+      "name_key": "dorcus mawuda mwandawiro",
+      "employee_number": "P450",
+      "hod_employee_number": "P450",
+      "reports_to_employee_number": "P231",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Compliance and Safety Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Ann Christine Njeri Kahira",
+      "match_name": "Ann Christine Njeri Kahira",
+      "name_key": "ann christine njeri kahira",
+      "employee_number": "P322",
+      "hod_employee_number": "P322",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Grace Njeri Gatonye",
+      "match_name": "Grace Njeri Gatonye",
+      "name_key": "grace njeri gatonye",
+      "employee_number": "P385",
+      "hod_employee_number": "P385",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Representative",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Georgina Muthini Kiilu",
+      "match_name": "Georgina Muthini Kiilu",
+      "name_key": "georgina muthini kiilu",
+      "employee_number": "P013",
+      "hod_employee_number": "P013",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Jane Kirigo Kuria",
+      "match_name": "Jane Kirigo Kuria",
+      "name_key": "jane kirigo kuria",
+      "employee_number": "P076",
+      "hod_employee_number": "P076",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "George Amenya Morang'a",
+      "match_name": "George Amenya Morang'a",
+      "name_key": "george amenya morang'a",
+      "employee_number": "P120",
+      "hod_employee_number": "P120",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Senior Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lilian Kalondu Kimeu",
+      "match_name": "Lilian Kalondu Kimeu",
+      "name_key": "lilian kalondu kimeu",
+      "employee_number": "P149",
+      "hod_employee_number": "P149",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Senior Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Kevin Werunga Barasa",
+      "match_name": "Kevin Werunga Barasa",
+      "name_key": "kevin werunga barasa",
+      "employee_number": "P230",
+      "hod_employee_number": "P230",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Consumer Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Beryl Akinyi Muga",
+      "match_name": "Beryl Akinyi Muga",
+      "name_key": "beryl akinyi muga",
+      "employee_number": "P245",
+      "hod_employee_number": "P245",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lawrence Amukhono Amukhono",
+      "match_name": "Lawrence Amukhono Amukhono",
+      "name_key": "lawrence amukhono amukhono",
+      "employee_number": "P272",
+      "hod_employee_number": "P272",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Executive",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Dennis Mutwiri Kimathi",
+      "match_name": "Dennis Mutwiri Kimathi",
+      "name_key": "dennis mutwiri kimathi",
+      "employee_number": "P293",
+      "hod_employee_number": "P293",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lucy Wanjiru Munene",
+      "match_name": "Lucy Wanjiru Munene",
+      "name_key": "lucy wanjiru munene",
+      "employee_number": "P321",
+      "hod_employee_number": "P321",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Isaya Omondi Kobe",
+      "match_name": "Isaya Omondi Kobe",
+      "name_key": "isaya omondi kobe",
+      "employee_number": "P437",
+      "hod_employee_number": "P437",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Trade Marketing",
+      "designation": "Data Analyst",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Zipporah Wangeci Muiruri",
+      "match_name": "Zipporah Wangeci Muiruri",
+      "name_key": "zipporah wangeci muiruri",
+      "employee_number": "P443",
+      "hod_employee_number": "P443",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Erick Otieno Onyango",
+      "match_name": "Erick Otieno Onyango",
+      "name_key": "erick otieno onyango",
+      "employee_number": "P491",
+      "hod_employee_number": "P491",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Data Analyst - Modern Trade",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Stephen Nguru Nduati",
+      "match_name": "Stephen Nguru Nduati",
+      "name_key": "stephen nguru nduati",
+      "employee_number": "P507",
+      "hod_employee_number": "P507",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Consumer Sales",
+      "designation": "Sales Administrator",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Jackson Musyoka Pius",
+      "match_name": "Jackson Musyoka Pius",
+      "name_key": "jackson musyoka pius",
+      "employee_number": "P028",
+      "hod_employee_number": "P028",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Johnsam Kioko Musyoki",
+      "match_name": "Johnsam Kioko Musyoki",
+      "name_key": "johnsam kioko musyoki",
+      "employee_number": "P033",
+      "hod_employee_number": "P033",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Francis Muhoro Thiong'o",
+      "match_name": "Francis Muhoro Thiong'o",
+      "name_key": "francis muhoro thiong'o",
+      "employee_number": "P084",
+      "hod_employee_number": "P084",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Export Sales",
+      "designation": "Export Sales Manager - East Africa",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lilian Judy Muthoni Maina",
+      "match_name": "Lilian Judy Muthoni Maina",
+      "name_key": "lilian judy muthoni maina",
+      "employee_number": "P150",
+      "hod_employee_number": "P150",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Faith Wamaitha Muiya",
+      "match_name": "Faith Wamaitha Muiya",
+      "name_key": "faith wamaitha muiya",
+      "employee_number": "P154",
+      "hod_employee_number": "P154",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Melan Naliaka Khisa",
+      "match_name": "Melan Naliaka Khisa",
+      "name_key": "melan naliaka khisa",
+      "employee_number": "P158",
+      "hod_employee_number": "P158",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Linet Adhiambo",
+      "match_name": "Linet Adhiambo",
+      "name_key": "linet adhiambo",
+      "employee_number": "P172",
+      "hod_employee_number": "P172",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Duncan Mwanzia Nguni",
+      "match_name": "Duncan Mwanzia Nguni",
+      "name_key": "duncan mwanzia nguni",
+      "employee_number": "P178",
+      "hod_employee_number": "P178",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Peter Kago Mburu",
+      "match_name": "Peter Kago Mburu",
+      "name_key": "peter kago mburu",
+      "employee_number": "P276",
+      "hod_employee_number": "P276",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Simon Macharia Mwaniki",
+      "match_name": "Simon Macharia Mwaniki",
+      "name_key": "simon macharia mwaniki",
+      "employee_number": "P323",
+      "hod_employee_number": "P323",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Repsentantive",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "James Fundi Njeru",
+      "match_name": "James Fundi Njeru",
+      "name_key": "james fundi njeru",
+      "employee_number": "P335",
+      "hod_employee_number": "P335",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Tuk Tuk Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Jonathan Mwasi",
+      "match_name": "Jonathan Mwasi",
+      "name_key": "jonathan mwasi",
+      "employee_number": "P339",
+      "hod_employee_number": "P339",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative-Lake",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Samson Kiwoi Vorogha",
+      "match_name": "Samson Kiwoi Vorogha",
+      "name_key": "samson kiwoi vorogha",
+      "employee_number": "P342",
+      "hod_employee_number": "P342",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Rebecca Kananu",
+      "match_name": "Rebecca Kananu",
+      "name_key": "rebecca kananu",
+      "employee_number": "P343",
+      "hod_employee_number": "P343",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Purity Wanjira Gichohi",
+      "match_name": "Purity Wanjira Gichohi",
+      "name_key": "purity wanjira gichohi",
+      "employee_number": "P344",
+      "hod_employee_number": "P344",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Dan Kaberia Mutiga",
+      "match_name": "Dan Kaberia Mutiga",
+      "name_key": "dan kaberia mutiga",
+      "employee_number": "P345",
+      "hod_employee_number": "P345",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lucy Wanjiru Kamau",
+      "match_name": "Lucy Wanjiru Kamau",
+      "name_key": "lucy wanjiru kamau",
+      "employee_number": "P346",
+      "hod_employee_number": "P346",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Pitwel Mwakulegwa Beja",
+      "match_name": "Pitwel Mwakulegwa Beja",
+      "name_key": "pitwel mwakulegwa beja",
+      "employee_number": "P348",
+      "hod_employee_number": "P348",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Everlyne Awiti Otiende",
+      "match_name": "Everlyne Awiti Otiende",
+      "name_key": "everlyne awiti otiende",
+      "employee_number": "P373",
+      "hod_employee_number": "P373",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Johnson Muthiga Mbatia",
+      "match_name": "Johnson Muthiga Mbatia",
+      "name_key": "johnson muthiga mbatia",
+      "employee_number": "P395",
+      "hod_employee_number": "P395",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Peter Muuo Nzuki",
+      "match_name": "Peter Muuo Nzuki",
+      "name_key": "peter muuo nzuki",
+      "employee_number": "P413",
+      "hod_employee_number": "P413",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Hannah Mwelu Mutisya",
+      "match_name": "Hannah Mwelu Mutisya",
+      "name_key": "hannah mwelu mutisya",
+      "employee_number": "P421",
+      "hod_employee_number": "P421",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lawrence Kipkemoi",
+      "match_name": "Lawrence Kipkemoi",
+      "name_key": "lawrence kipkemoi",
+      "employee_number": "P427",
+      "hod_employee_number": "P427",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Kathleen Karimi Mutua",
+      "match_name": "Kathleen Karimi Mutua",
+      "name_key": "kathleen karimi mutua",
+      "employee_number": "P428",
+      "hod_employee_number": "P428",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Bernadette Mghoi Waleghwa",
+      "match_name": "Bernadette Mghoi Waleghwa",
+      "name_key": "bernadette mghoi waleghwa",
+      "employee_number": "P430",
+      "hod_employee_number": "P430",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Timothy Piwa",
+      "match_name": "Timothy Piwa",
+      "name_key": "timothy piwa",
+      "employee_number": "P431",
+      "hod_employee_number": "P431",
+      "reports_to_employee_number": "P084",
+      "department": "Consumer Sales",
+      "division": "Export Sales",
+      "designation": "Consumer Sales Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Moses Mwaka Daniel",
+      "match_name": "Moses Mwaka Daniel",
+      "name_key": "moses mwaka daniel",
+      "employee_number": "P455",
+      "hod_employee_number": "P455",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative - Wholesale and Van Operations",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Fredrick Juma Wesonga",
+      "match_name": "Fredrick Juma Wesonga",
+      "name_key": "fredrick juma wesonga",
+      "employee_number": "P461",
+      "hod_employee_number": "P461",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative - Rift",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Stephanie Kerubo Ayieni",
+      "match_name": "Stephanie Kerubo Ayieni",
+      "name_key": "stephanie kerubo ayieni",
+      "employee_number": "P481",
+      "hod_employee_number": "P481",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Territory Supervisor- Coast Region",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Clement Omondi Otieno",
+      "match_name": "Clement Omondi Otieno",
+      "name_key": "clement omondi otieno",
+      "employee_number": "P487",
+      "hod_employee_number": "P487",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Jeritah Michira Moraa",
+      "match_name": "Jeritah Michira Moraa",
+      "name_key": "jeritah michira moraa",
+      "employee_number": "P485",
+      "hod_employee_number": "P485",
+      "reports_to_employee_number": "P284",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Coordinator-Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Brian Muindi Justus",
+      "match_name": "Brian Muindi Justus",
+      "name_key": "brian muindi justus",
+      "employee_number": "P490",
+      "hod_employee_number": "P490",
+      "reports_to_employee_number": "P415",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Sales System Administrator",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Victoria Munanie Kyalo Ndetei",
+      "match_name": "Victoria Munanie Kyalo Ndetei",
+      "name_key": "victoria munanie kyalo ndetei",
+      "employee_number": "P370",
+      "hod_employee_number": "P370",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Account Developer",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Nicholas Muriuki",
+      "match_name": "Nicholas Muriuki",
+      "name_key": "nicholas muriuki",
+      "employee_number": "P380",
+      "hod_employee_number": "P380",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Medical Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lydiah Chepng'eno Cheruyoit",
+      "match_name": "Lydiah Chepng'eno Cheruyoit",
+      "name_key": "lydiah chepng'eno cheruyoit",
+      "employee_number": "P397",
+      "hod_employee_number": "P397",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Medical Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Peris Wanjiku Kariuki",
+      "match_name": "Peris Wanjiku Kariuki",
+      "name_key": "peris wanjiku kariuki",
+      "employee_number": "P400",
+      "hod_employee_number": "P400",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Pharmarcy Channel Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Brenda Gati Werema",
+      "match_name": "Brenda Gati Werema",
+      "name_key": "brenda gati werema",
+      "employee_number": "P419",
+      "hod_employee_number": "P419",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Danone",
+      "designation": "Regulatory Affairs Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Joyce Njeri",
+      "match_name": "Joyce Njeri",
+      "name_key": "joyce njeri",
+      "employee_number": "P436",
+      "hod_employee_number": "P436",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Brands Operations Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Brian Basweti ChirChir",
+      "match_name": "Brian Basweti ChirChir",
+      "name_key": "brian basweti chirchir",
+      "employee_number": "P438",
+      "hod_employee_number": "P438",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Trade Marketing Lead - Dabur",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Adan Gulleid Ibrahim",
+      "match_name": "Adan Gulleid Ibrahim",
+      "name_key": "adan gulleid ibrahim",
+      "employee_number": "P456",
+      "hod_employee_number": "P456",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Brands Operations Manager",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Tom Jumba Obiri",
+      "match_name": "Tom Jumba Obiri",
+      "name_key": "tom jumba obiri",
+      "employee_number": "P473",
+      "hod_employee_number": "P473",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Dabur",
+      "designation": "Business Manager - Dabur",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Bonface Okomba",
+      "match_name": "Bonface Okomba",
+      "name_key": "bonface okomba",
+      "employee_number": "P493",
+      "hod_employee_number": "P493",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Pharmacy Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Pauline Muthoni Njeru",
+      "match_name": "Pauline Muthoni Njeru",
+      "name_key": "pauline muthoni njeru",
+      "employee_number": "P500",
+      "hod_employee_number": "P500",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Trade Marketing Lead - Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Pricillah Njeri Gichuhi",
+      "match_name": "Pricillah Njeri Gichuhi",
+      "name_key": "pricillah njeri gichuhi",
+      "employee_number": "P506",
+      "hod_employee_number": "P506",
+      "reports_to_employee_number": "P086",
+      "department": "Partrner Brands",
+      "division": "Partner Brands",
+      "designation": "Brand Operations Manager - KC, Bio &Duracell",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lucy Gakii Rimberia",
+      "match_name": "Lucy Gakii Rimberia",
+      "name_key": "lucy gakii rimberia",
+      "employee_number": "P022",
+      "hod_employee_number": "P022",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Fredrick Omondi Dede",
+      "match_name": "Fredrick Omondi Dede",
+      "name_key": "fredrick omondi dede",
+      "employee_number": "P051",
+      "hod_employee_number": "P051",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Doreen Mukami Mugwika",
+      "match_name": "Doreen Mukami Mugwika",
+      "name_key": "doreen mukami mugwika",
+      "employee_number": "P096",
+      "hod_employee_number": "P096",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Irene Naliaka Luketelo",
+      "match_name": "Irene Naliaka Luketelo",
+      "name_key": "irene naliaka luketelo",
+      "employee_number": "P104",
+      "hod_employee_number": "P104",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Shadrack Ochieng Onyango",
+      "match_name": "Shadrack Ochieng Onyango",
+      "name_key": "shadrack ochieng onyango",
+      "employee_number": "P163",
+      "hod_employee_number": "P163",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "June Jemutai Chesire",
+      "match_name": "June Jemutai Chesire",
+      "name_key": "june jemutai chesire",
+      "employee_number": "P193",
+      "hod_employee_number": "P193",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Florence Wanjiru Karaya",
+      "match_name": "Florence Wanjiru Karaya",
+      "name_key": "florence wanjiru karaya",
+      "employee_number": "P201",
+      "hod_employee_number": "P201",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Yvonne Achieng Otieno",
+      "match_name": "Yvonne Achieng Otieno",
+      "name_key": "yvonne achieng otieno",
+      "employee_number": "P317",
+      "hod_employee_number": "P317",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Maurice Okinyi Odhiambo",
+      "match_name": "Maurice Okinyi Odhiambo",
+      "name_key": "maurice okinyi odhiambo",
+      "employee_number": "P369",
+      "hod_employee_number": "P369",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Berna Piwang Abondo",
+      "match_name": "Berna Piwang Abondo",
+      "name_key": "berna piwang abondo",
+      "employee_number": "P460",
+      "hod_employee_number": "P460",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Mercyline Kemunto Moranga",
+      "match_name": "Mercyline Kemunto Moranga",
+      "name_key": "mercyline kemunto moranga",
+      "employee_number": "P483",
+      "hod_employee_number": "P483",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Profesional Sales Consultant - Hygiene Innovations",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "John Kaguai Njoroge",
+      "match_name": "John Kaguai Njoroge",
+      "name_key": "john kaguai njoroge",
+      "employee_number": "P489",
+      "hod_employee_number": "P489",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Profesional Sales Consultant - Upcountry",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "DianaWendy Wangui Mwangi",
+      "match_name": "DianaWendy Wangui Mwangi",
+      "name_key": "dianawendy wangui mwangi",
+      "employee_number": "P504",
+      "hod_employee_number": "P504",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Shirleen Chebet Kimutai",
+      "match_name": "Shirleen Chebet Kimutai",
+      "name_key": "shirleen chebet kimutai",
+      "employee_number": "P505",
+      "hod_employee_number": "P505",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Victor Ochieng Wamira",
+      "match_name": "Victor Ochieng Wamira",
+      "name_key": "victor ochieng wamira",
+      "employee_number": "P030",
+      "hod_employee_number": "P030",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Chief Accountant",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Reuben Thuita Githinji",
+      "match_name": "Reuben Thuita Githinji",
+      "name_key": "reuben thuita githinji",
+      "employee_number": "P055",
+      "hod_employee_number": "P055",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Business Intelligence Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Akbar Majid Alamkhan",
+      "match_name": "Akbar Majid Alamkhan",
+      "name_key": "akbar majid alamkhan",
+      "employee_number": "P215",
+      "hod_employee_number": "P215",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Mombasa Depot",
+      "designation": "Store Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Vincent Matheka Musyoka",
+      "match_name": "Vincent Matheka Musyoka",
+      "name_key": "vincent matheka musyoka",
+      "employee_number": "P277",
+      "hod_employee_number": "P277",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": "Dispatch Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "George Odhiambo Oketch",
+      "match_name": "George Odhiambo Oketch",
+      "name_key": "george odhiambo oketch",
+      "employee_number": "P398",
+      "hod_employee_number": "P398",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Inventory Controller",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Manan Anilkumar Shah",
+      "match_name": "Manan Anilkumar Shah",
+      "name_key": "manan anilkumar shah",
+      "employee_number": "P424",
+      "hod_employee_number": "P424",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Chief Financial Officer",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Mayur Hitesh Rabadia",
+      "match_name": "Mayur Hitesh Rabadia",
+      "name_key": "mayur hitesh rabadia",
+      "employee_number": "P478",
+      "hod_employee_number": "P478",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": "Warehouse & Dispatch Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Antony Kiema",
+      "match_name": "Antony Kiema",
+      "name_key": "antony kiema",
+      "employee_number": "P498",
+      "hod_employee_number": "P498",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "IT",
+      "designation": "IT Manager",
+      "email": null,
+      "segment": "Operations",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Hellen Wanjiru Wanjira",
+      "match_name": "Hellen Wanjiru Wanjira",
+      "name_key": "hellen wanjiru wanjira",
+      "employee_number": "C939",
+      "hod_employee_number": "C939",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Caleb Opiyo Otieno",
+      "match_name": "Caleb Opiyo Otieno",
+      "name_key": "caleb opiyo otieno",
+      "employee_number": "C1044",
+      "hod_employee_number": "C1044",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Sylvester Martin Yeye",
+      "match_name": "Sylvester Martin Yeye",
+      "name_key": "sylvester martin yeye",
+      "employee_number": "C1047",
+      "hod_employee_number": "C1047",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Danone",
+      "designation": "Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Charles Muthenya Nyamai",
+      "match_name": "Charles Muthenya Nyamai",
+      "name_key": "charles muthenya nyamai",
+      "employee_number": "C512",
+      "hod_employee_number": "C512",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Shadrack Levis Omukhomba",
+      "match_name": "Shadrack Levis Omukhomba",
+      "name_key": "shadrack levis omukhomba",
+      "employee_number": "C629",
+      "hod_employee_number": "C629",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Lewis Mureithi Macharia",
+      "match_name": "Lewis Mureithi Macharia",
+      "name_key": "lewis mureithi macharia",
+      "employee_number": "C720",
+      "hod_employee_number": "C720",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Olando Denis Nesta",
+      "match_name": "Olando Denis Nesta",
+      "name_key": "olando denis nesta",
+      "employee_number": "C836",
+      "hod_employee_number": "C836",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Annet Lynn Mbulwa Kiio",
+      "match_name": "Annet Lynn Mbulwa Kiio",
+      "name_key": "annet lynn mbulwa kiio",
+      "employee_number": "C1188",
+      "hod_employee_number": "C1188",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Jacinta Nzembi James",
+      "match_name": "Jacinta Nzembi James",
+      "name_key": "jacinta nzembi james",
+      "employee_number": "C1169",
+      "hod_employee_number": "C1169",
+      "reports_to_employee_number": "P284",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    },
+    {
+      "name": "Shawn Kevin Mugendi",
+      "match_name": "Shawn Kevin Mugendi",
+      "name_key": "shawn kevin mugendi",
+      "employee_number": "C1170",
+      "hod_employee_number": "C1170",
+      "reports_to_employee_number": "P284",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing",
+      "email": null,
+      "segment": "Commercial",
+      "numbers_match": true,
+      "match_type": "exact_name"
+    }
+  ],
+  "user_corrections": [
+    {
+      "match_names": [
+        "Rajdeep Singh Bains"
+      ],
+      "employee_number": "P301",
+      "hod_employee_number": "P301",
+      "reports_to_employee_number": null,
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Chief Executive Officer",
+      "email": null,
+      "segment": "Executive",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Hartaj Singh Bains"
+      ],
+      "employee_number": "P302",
+      "hod_employee_number": "P302",
+      "reports_to_employee_number": null,
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Sales and Marketing Director",
+      "email": null,
+      "segment": "Executive",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Vignesh Ramachandran"
+      ],
+      "employee_number": "P320",
+      "hod_employee_number": "P320",
+      "reports_to_employee_number": null,
+      "department": "Commercial",
+      "division": "C-Suite",
+      "designation": "Chief Commercial Officer",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Miraj Shantilal Jhankhariya"
+      ],
+      "employee_number": "P231",
+      "hod_employee_number": "P231",
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "C-Suite",
+      "designation": "Chief Operations Officer",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Beatrice Luteshi"
+      ],
+      "employee_number": "P014",
+      "hod_employee_number": "P014",
+      "reports_to_employee_number": "P320",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Susan Ngina Mwathi"
+      ],
+      "employee_number": "P025",
+      "hod_employee_number": "P025",
+      "reports_to_employee_number": "P320",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Business Development Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P025",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Francis Muhoro Thiong'o"
+      ],
+      "employee_number": "P084",
+      "hod_employee_number": "P084",
+      "reports_to_employee_number": "P320",
+      "department": "Consumer Sales",
+      "division": "Export Sales",
+      "designation": "Export Sales Manager - East Africa",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Anne Christine Muthoni"
+      ],
+      "employee_number": "P086",
+      "hod_employee_number": "P086",
+      "reports_to_employee_number": "P320",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Head of Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Dickens Ozengo"
+      ],
+      "employee_number": "P284",
+      "hod_employee_number": "P284",
+      "reports_to_employee_number": "P320",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Titus Kaleli Mutiso"
+      ],
+      "employee_number": "P415",
+      "hod_employee_number": "P415",
+      "reports_to_employee_number": "P320",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Commercial Tech Lead",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Siham Ahmed Mohamed"
+      ],
+      "employee_number": "P429",
+      "hod_employee_number": "P429",
+      "reports_to_employee_number": "P320",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Coordinator - Modern Trade",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Purity Nduku Kioko"
+      ],
+      "employee_number": "P496",
+      "hod_employee_number": "P496",
+      "reports_to_employee_number": "P320",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Linet Wavinya Nzioka"
+      ],
+      "employee_number": "P017",
+      "hod_employee_number": "P017",
+      "reports_to_employee_number": "P231",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Quality Controller",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Alice Gituto Mworia"
+      ],
+      "employee_number": "P049",
+      "hod_employee_number": "P049",
+      "reports_to_employee_number": "P231",
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Head of People and Culture",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Patrick Kariuki Karanja"
+      ],
+      "employee_number": "P063",
+      "hod_employee_number": "P063",
+      "reports_to_employee_number": "P231",
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Technical Projects Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Qais Yunus Osman"
+      ],
+      "employee_number": "P175",
+      "hod_employee_number": "P175",
+      "reports_to_employee_number": "P231",
+      "department": "Internal Audit",
+      "division": "Internal Audit",
+      "designation": "Internal Auditor",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Nicodemus Muthini Kivuva"
+      ],
+      "employee_number": "P227",
+      "hod_employee_number": "P227",
+      "reports_to_employee_number": "P231",
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Supply Chain Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Imran Cocker"
+      ],
+      "employee_number": "P396",
+      "hod_employee_number": "P396",
+      "reports_to_employee_number": "P231",
+      "department": "Operations",
+      "division": "Fleet",
+      "designation": "Fleet Workshop Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Manan Anilkumar Shah"
+      ],
+      "employee_number": "P424",
+      "hod_employee_number": "P424",
+      "reports_to_employee_number": "P231",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Chief Financial Officer",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Dorcus Mawuda Mwandawiro"
+      ],
+      "employee_number": "P450",
+      "hod_employee_number": "P450",
+      "reports_to_employee_number": "P231",
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Compliance and Safety Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Ann Christine Njeri Kahira"
+      ],
+      "employee_number": "P322",
+      "hod_employee_number": "P322",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Grace Njeri Gatonye"
+      ],
+      "employee_number": "P385",
+      "hod_employee_number": "P385",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care Representative",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Georgina Muthini Kiilu"
+      ],
+      "employee_number": "P013",
+      "hod_employee_number": "P013",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Jane Kirigo Kuria"
+      ],
+      "employee_number": "P076",
+      "hod_employee_number": "P076",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "George Amenya Morang'a"
+      ],
+      "employee_number": "P120",
+      "hod_employee_number": "P120",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Senior Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lilian Kalondu Kimeu"
+      ],
+      "employee_number": "P149",
+      "hod_employee_number": "P149",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Senior Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Kevin Werunga Barasa"
+      ],
+      "employee_number": "P230",
+      "hod_employee_number": "P230",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Consumer Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Beryl Akinyi Muga"
+      ],
+      "employee_number": "P245",
+      "hod_employee_number": "P245",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lawrence Amukhono Amukhono"
+      ],
+      "employee_number": "P272",
+      "hod_employee_number": "P272",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Executive",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Dennis Mutwiri Kimathi"
+      ],
+      "employee_number": "P293",
+      "hod_employee_number": "P293",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lucy Wanjiru Munene"
+      ],
+      "employee_number": "P321",
+      "hod_employee_number": "P321",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Isaya Omondi Kobe"
+      ],
+      "employee_number": "P437",
+      "hod_employee_number": "P437",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Trade Marketing",
+      "designation": "Data Analyst",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Zipporah Wangeci Muiruri"
+      ],
+      "employee_number": "P443",
+      "hod_employee_number": "P443",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Modern Trade Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Erick Otieno Onyango"
+      ],
+      "employee_number": "P491",
+      "hod_employee_number": "P491",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Modern Trade",
+      "designation": "Data Analyst - Modern Trade",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Stephen Nguru Nduati"
+      ],
+      "employee_number": "P507",
+      "hod_employee_number": "P507",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "Consumer Sales",
+      "designation": "Sales Administrator",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Jackson Musyoka Pius"
+      ],
+      "employee_number": "P028",
+      "hod_employee_number": "P028",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Johnsam Kioko Musyoki"
+      ],
+      "employee_number": "P033",
+      "hod_employee_number": "P033",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lilian Judy Muthoni Maina"
+      ],
+      "employee_number": "P150",
+      "hod_employee_number": "P150",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Faith Wamaitha Muiya"
+      ],
+      "employee_number": "P154",
+      "hod_employee_number": "P154",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Melan Naliaka Khisa"
+      ],
+      "employee_number": "P158",
+      "hod_employee_number": "P158",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Linet Adhiambo"
+      ],
+      "employee_number": "P172",
+      "hod_employee_number": "P172",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Duncan Mwanzia Nguni"
+      ],
+      "employee_number": "P178",
+      "hod_employee_number": "P178",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Peter Kago Mburu"
+      ],
+      "employee_number": "P276",
+      "hod_employee_number": "P276",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Simon Macharia Mwaniki"
+      ],
+      "employee_number": "P323",
+      "hod_employee_number": "P323",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Repsentantive",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "James Fundi Njeru"
+      ],
+      "employee_number": "P335",
+      "hod_employee_number": "P335",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Tuk Tuk Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Jonathan Mwasi"
+      ],
+      "employee_number": "P339",
+      "hod_employee_number": "P339",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Van Sales Representative-Lake",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Samson Kiwoi Vorogha"
+      ],
+      "employee_number": "P342",
+      "hod_employee_number": "P342",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Rebecca Kananu"
+      ],
+      "employee_number": "P343",
+      "hod_employee_number": "P343",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Purity Wanjira Gichohi"
+      ],
+      "employee_number": "P344",
+      "hod_employee_number": "P344",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Dan Kaberia Mutiga"
+      ],
+      "employee_number": "P345",
+      "hod_employee_number": "P345",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lucy Wanjiru Kamau"
+      ],
+      "employee_number": "P346",
+      "hod_employee_number": "P346",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Pitwel Mwakulegwa Beja"
+      ],
+      "employee_number": "P348",
+      "hod_employee_number": "P348",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Everlyne Awiti Otiende"
+      ],
+      "employee_number": "P373",
+      "hod_employee_number": "P373",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Johnson Muthiga Mbatia"
+      ],
+      "employee_number": "P395",
+      "hod_employee_number": "P395",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Area Sales Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Peter Muuo Nzuki"
+      ],
+      "employee_number": "P413",
+      "hod_employee_number": "P413",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Hannah Mwelu Mutisya"
+      ],
+      "employee_number": "P421",
+      "hod_employee_number": "P421",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lawrence Kipkemoi"
+      ],
+      "employee_number": "P427",
+      "hod_employee_number": "P427",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Kathleen Karimi Mutua"
+      ],
+      "employee_number": "P428",
+      "hod_employee_number": "P428",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Bernadette Mghoi Waleghwa"
+      ],
+      "employee_number": "P430",
+      "hod_employee_number": "P430",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Distributor Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Timothy Piwa"
+      ],
+      "employee_number": "P431",
+      "hod_employee_number": "P431",
+      "reports_to_employee_number": "P084",
+      "department": "Consumer Sales",
+      "division": "Export Sales",
+      "designation": "Consumer Sales Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Moses Mwaka Daniel"
+      ],
+      "employee_number": "P455",
+      "hod_employee_number": "P455",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative - Wholesale and Van Operations",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P455",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Fredrick Juma Wesonga"
+      ],
+      "employee_number": "P461",
+      "hod_employee_number": "P461",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative - Rift",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Stephanie Kerubo Ayieni"
+      ],
+      "employee_number": "P481",
+      "hod_employee_number": "P481",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Territory Supervisor- Coast Region",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Clement Omondi Otieno"
+      ],
+      "employee_number": "P487",
+      "hod_employee_number": "P487",
+      "reports_to_employee_number": "P496",
+      "department": "Consumer Sales",
+      "division": "General Trade",
+      "designation": "Consumer Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P487",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Jeritah Michira Moraa"
+      ],
+      "employee_number": "P485",
+      "hod_employee_number": "P485",
+      "reports_to_employee_number": "P284",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing Coordinator-Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Brian Muindi Justus"
+      ],
+      "employee_number": "P490",
+      "hod_employee_number": "P490",
+      "reports_to_employee_number": "P415",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Sales System Administrator",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Victoria Munanie Kyalo Ndetei"
+      ],
+      "employee_number": "P370",
+      "hod_employee_number": "P370",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Account Developer",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Nicholas Muriuki"
+      ],
+      "employee_number": "P380",
+      "hod_employee_number": "P380",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Medical Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lydiah Chepng'eno Cheruyoit"
+      ],
+      "employee_number": "P397",
+      "hod_employee_number": "P397",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Medical Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Peris Wanjiku Kariuki"
+      ],
+      "employee_number": "P400",
+      "hod_employee_number": "P400",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Pharmarcy Channel Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Brenda Gati Werema"
+      ],
+      "employee_number": "P419",
+      "hod_employee_number": "P419",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Danone",
+      "designation": "Regulatory Affairs Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Joyce Njeri"
+      ],
+      "employee_number": "P436",
+      "hod_employee_number": "P436",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Brands Operations Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Brian Basweti ChirChir"
+      ],
+      "employee_number": "P438",
+      "hod_employee_number": "P438",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Trade Marketing Lead - Dabur",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Adan Gulleid Ibrahim"
+      ],
+      "employee_number": "P456",
+      "hod_employee_number": "P456",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Brands Operations Manager",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Tom Jumba Obiri"
+      ],
+      "employee_number": "P473",
+      "hod_employee_number": "P473",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Dabur",
+      "designation": "Business Manager - Dabur",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Bonface Okomba"
+      ],
+      "employee_number": "P493",
+      "hod_employee_number": "P493",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Pharmacy Sales Representative",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Pauline Muthoni Njeru"
+      ],
+      "employee_number": "P500",
+      "hod_employee_number": "P500",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Trade Marketing Lead - Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Pricillah Njeri Gichuhi"
+      ],
+      "employee_number": "P506",
+      "hod_employee_number": "P506",
+      "reports_to_employee_number": "P086",
+      "department": "Partrner Brands",
+      "division": "Partner Brands",
+      "designation": "Brand Operations Manager - KC, Bio &Duracell",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lucy Gakii Rimberia"
+      ],
+      "employee_number": "P022",
+      "hod_employee_number": "P022",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P022",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Fredrick Omondi Dede"
+      ],
+      "employee_number": "P051",
+      "hod_employee_number": "P051",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Doreen Mukami Mugwika"
+      ],
+      "employee_number": "P096",
+      "hod_employee_number": "P096",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P096",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Irene Naliaka Luketelo"
+      ],
+      "employee_number": "P104",
+      "hod_employee_number": "P104",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P104",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Shadrack Ochieng Onyango"
+      ],
+      "employee_number": "P163",
+      "hod_employee_number": "P163",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "June Jemutai Chesire"
+      ],
+      "employee_number": "P193",
+      "hod_employee_number": "P193",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P193",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Florence Wanjiru Karaya"
+      ],
+      "employee_number": "P201",
+      "hod_employee_number": "P201",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P201",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Yvonne Achieng Otieno"
+      ],
+      "employee_number": "P317",
+      "hod_employee_number": "P317",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "YVON",
+      "rep_code_source": "known_alias"
+    },
+    {
+      "match_names": [
+        "Maurice Okinyi Odhiambo"
+      ],
+      "employee_number": "P369",
+      "hod_employee_number": "P369",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "KP Technician",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Berna Piwang Abondo"
+      ],
+      "employee_number": "P460",
+      "hod_employee_number": "P460",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "C967",
+      "rep_code_source": "known_alias"
+    },
+    {
+      "match_names": [
+        "Mercyline Kemunto Moranga"
+      ],
+      "employee_number": "P483",
+      "hod_employee_number": "P483",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Profesional Sales Consultant - Hygiene Innovations",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "C1262",
+      "rep_code_source": "known_alias"
+    },
+    {
+      "match_names": [
+        "John Kaguai Njoroge"
+      ],
+      "employee_number": "P489",
+      "hod_employee_number": "P489",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Profesional Sales Consultant - Upcountry",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P489",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "DianaWendy Wangui Mwangi"
+      ],
+      "employee_number": "P504",
+      "hod_employee_number": "P504",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Shirleen Chebet Kimutai"
+      ],
+      "employee_number": "P505",
+      "hod_employee_number": "P505",
+      "reports_to_employee_number": "P025",
+      "department": "Professional Sales",
+      "division": "Professional Sales",
+      "designation": "Professional Sales Consultant",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff",
+      "rep_code": "P505",
+      "rep_code_source": "kp_customers_sales_rep_name_fuzzy"
+    },
+    {
+      "match_names": [
+        "Victor Ochieng Wamira"
+      ],
+      "employee_number": "P030",
+      "hod_employee_number": "P030",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Chief Accountant",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Reuben Thuita Githinji"
+      ],
+      "employee_number": "P055",
+      "hod_employee_number": "P055",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Business Intelligence Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Akbar Majid Alamkhan"
+      ],
+      "employee_number": "P215",
+      "hod_employee_number": "P215",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Mombasa Depot",
+      "designation": "Store Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Vincent Matheka Musyoka"
+      ],
+      "employee_number": "P277",
+      "hod_employee_number": "P277",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Dispatch",
+      "designation": "Dispatch Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "George Odhiambo Oketch"
+      ],
+      "employee_number": "P398",
+      "hod_employee_number": "P398",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Inventory Controller",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Mayur Hitesh Rabadia"
+      ],
+      "employee_number": "P478",
+      "hod_employee_number": "P478",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "FGS",
+      "designation": "Warehouse & Dispatch Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Antony Kiema"
+      ],
+      "employee_number": "P498",
+      "hod_employee_number": "P498",
+      "reports_to_employee_number": "P424",
+      "department": "Finance",
+      "division": "IT",
+      "designation": "IT Manager",
+      "email": null,
+      "segment": "Operations",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Hellen Wanjiru Wanjira"
+      ],
+      "employee_number": "C939",
+      "hod_employee_number": "C939",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Caleb Opiyo Otieno"
+      ],
+      "employee_number": "C1044",
+      "hod_employee_number": "C1044",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Partner Brands",
+      "designation": "Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Sylvester Martin Yeye"
+      ],
+      "employee_number": "C1047",
+      "hod_employee_number": "C1047",
+      "reports_to_employee_number": "P086",
+      "department": "Partner Brands",
+      "division": "Danone",
+      "designation": "Partner Brands",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Charles Muthenya Nyamai"
+      ],
+      "employee_number": "C512",
+      "hod_employee_number": "C512",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Shadrack Levis Omukhomba"
+      ],
+      "employee_number": "C629",
+      "hod_employee_number": "C629",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Lewis Mureithi Macharia"
+      ],
+      "employee_number": "C720",
+      "hod_employee_number": "C720",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Olando Denis Nesta"
+      ],
+      "employee_number": "C836",
+      "hod_employee_number": "C836",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Annet Lynn Mbulwa Kiio"
+      ],
+      "employee_number": "C1188",
+      "hod_employee_number": "C1188",
+      "reports_to_employee_number": "P014",
+      "department": "Customer Care",
+      "division": "Customer Care",
+      "designation": "Customer Care",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Jacinta Nzembi James"
+      ],
+      "employee_number": "C1169",
+      "hod_employee_number": "C1169",
+      "reports_to_employee_number": "P284",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Shawn Kevin Mugendi"
+      ],
+      "employee_number": "C1170",
+      "hod_employee_number": "C1170",
+      "reports_to_employee_number": "P284",
+      "department": "Marketing",
+      "division": "Marketing",
+      "designation": "Marketing",
+      "email": null,
+      "segment": "Commercial",
+      "source": "hod_matched_to_active_staff"
+    },
+    {
+      "match_names": [
+        "Resham Singh Bains"
+      ],
+      "employee_number": "P300",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Chairman",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Rajpreet Kaur Bains"
+      ],
+      "employee_number": "P303",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Consultant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Divya Sudhir Jumani"
+      ],
+      "employee_number": "P368",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Consultant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Sartivinder Kaur Bains"
+      ],
+      "employee_number": "P420",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Executive",
+      "division": "Executive",
+      "designation": "Consultant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Andrew Kungu Gichuki"
+      ],
+      "employee_number": "P007",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Maintenance Officer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Sarah Wamaitha Mainah"
+      ],
+      "employee_number": "P008",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Samuel Mwaura Njung'e"
+      ],
+      "employee_number": "P010",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "John Kamau Kimani"
+      ],
+      "employee_number": "P011",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Alice Mukachi M'mbaya"
+      ],
+      "employee_number": "P016",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Edward Kidima Otwele"
+      ],
+      "employee_number": "P034",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Eliakim Ambuka Ochunju"
+      ],
+      "employee_number": "P035",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Dennis Kilonzo Musyoka"
+      ],
+      "employee_number": "P040",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "George Amollo Ondolo"
+      ],
+      "employee_number": "P041",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Production Clerk",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Godfrey Mungoni Akhabale"
+      ],
+      "employee_number": "P042",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Hastings Odera Odhiambo"
+      ],
+      "employee_number": "P043",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Joseph Mwaniki Muthui"
+      ],
+      "employee_number": "P044",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Lilian Ethel Njagi"
+      ],
+      "employee_number": "P046",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Senior Packer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Robert Kimani Kamau"
+      ],
+      "employee_number": "P048",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Philemon Odhiambo Otienoh"
+      ],
+      "employee_number": "P050",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Anthony Githaiga Mwangi"
+      ],
+      "employee_number": "P074",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Jackson Irungu Mutune"
+      ],
+      "employee_number": "P079",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "RMS",
+      "designation": "Forklift Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Ann Brettah Karambu"
+      ],
+      "employee_number": "P085",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Credit Controller",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "John Obai Okiki"
+      ],
+      "employee_number": "P089",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Judy Njoki Wambui"
+      ],
+      "employee_number": "P106",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Beatrice Mbale Ahona"
+      ],
+      "employee_number": "P130",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Catherine Ndinda Mavua"
+      ],
+      "employee_number": "P131",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Emily Mmbone Kadenge"
+      ],
+      "employee_number": "P133",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Julius Kiplimo Koech"
+      ],
+      "employee_number": "P134",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Seraphine Musanga"
+      ],
+      "employee_number": "P141",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "FGS",
+      "designation": "Logistics Coordinator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Victoria Mmboga Kagevela"
+      ],
+      "employee_number": "P142",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Thomas Kingori Wagaki"
+      ],
+      "employee_number": "P169",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": "Forklift Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Nollias Mamboleo Tai"
+      ],
+      "employee_number": "P174",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Cleaner",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Simon Onduso Migosi"
+      ],
+      "employee_number": "P236",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Personal Driver",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Caroline Jane Nyambura Macharia"
+      ],
+      "employee_number": "P241",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Performance Manager",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Mohamed Ahamed Maalim"
+      ],
+      "employee_number": "P248",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "FGS 2",
+      "designation": "Loader",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Adanoor Ibrahim Abdi"
+      ],
+      "employee_number": "P250",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Runda",
+      "designation": "General Worker",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Hussein Ibrahim Abdi"
+      ],
+      "employee_number": "P251",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Runda",
+      "designation": "General Worker",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Adan Mohamed Hassan"
+      ],
+      "employee_number": "P254",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Packer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Justo Wanda Otenyo"
+      ],
+      "employee_number": "P255",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Fleet",
+      "designation": "Mechanic",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Fred Omondi Opanda"
+      ],
+      "employee_number": "P257",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Production Shift Supervisor",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Stephen Onyiego Bogonko"
+      ],
+      "employee_number": "P258",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Administration",
+      "designation": "Maintenance Officer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Amos Runji Mathagu"
+      ],
+      "employee_number": "P265",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Maintenance",
+      "designation": "Senior Mechanical Technician",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Martin Mwangi Mutune"
+      ],
+      "employee_number": "P278",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Emmanuel Abwako Omongin"
+      ],
+      "employee_number": "P295",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Messenger",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Simon Ouma Oduya"
+      ],
+      "employee_number": "P313",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Electrical Technician",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Philimeon Mung'au John"
+      ],
+      "employee_number": "P330",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Fleet",
+      "designation": "Mechanic",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Maurine Ayoti Sarange"
+      ],
+      "employee_number": "P337",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Demand Planner",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Willington Wanyama Simiyu"
+      ],
+      "employee_number": "P355",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Phillip Mwanzia Kitaka"
+      ],
+      "employee_number": "P356",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Dennis Matundura Moemi"
+      ],
+      "employee_number": "P357",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Silvester Mutie Kaviti"
+      ],
+      "employee_number": "P358",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Sosteen Madwale Ong'unya"
+      ],
+      "employee_number": "P360",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Adan Issak Ibren"
+      ],
+      "employee_number": "P361",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Kelvin Kyalo Musyoki"
+      ],
+      "employee_number": "P362",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Gidraf Abiero"
+      ],
+      "employee_number": "P364",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "MROs Coordinator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Collins Ouma Opiyo"
+      ],
+      "employee_number": "P376",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Stock Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Kunal Harsadrai Thakar"
+      ],
+      "employee_number": "P391",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "NPD",
+      "division": "NPD",
+      "designation": "NPD & Special Projects Manager",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Immaculate Kaminika Manjanga"
+      ],
+      "employee_number": "P399",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Senior Payables Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Hudson Shisoga Otengo"
+      ],
+      "employee_number": "P409",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Daisy Adhiambo Agwingwi"
+      ],
+      "employee_number": "P414",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Assistant Quality Controller",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Mercy Mumo"
+      ],
+      "employee_number": "P426",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Logistics Coordinator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Victor Karanja Irungu"
+      ],
+      "employee_number": "P434",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Phinnas Ngunjiri Mumbi"
+      ],
+      "employee_number": "P440",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Assistant Electrical Technician",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Esther Wanjiru Karanja"
+      ],
+      "employee_number": "P452",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Procurement",
+      "division": "Procurement",
+      "designation": "Packaging Stocks Planner",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Joseph Omondi Obonyo"
+      ],
+      "employee_number": "P457",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Stock Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "John Gichuki Wairimu"
+      ],
+      "employee_number": "P458",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Payables Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Kelvin Emoli Musonye"
+      ],
+      "employee_number": "P463",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Patrick Ngare Mudiali"
+      ],
+      "employee_number": "P464",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Wycliffe Sikoko Mbale"
+      ],
+      "employee_number": "P465",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Peter Musembi Mutiso"
+      ],
+      "employee_number": "P466",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Attendant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Duncan Mochama Mogeni"
+      ],
+      "employee_number": "P467",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Kelvin Kongo Kiluu"
+      ],
+      "employee_number": "P468",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Attendant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Jabez Owino  Odoyo"
+      ],
+      "employee_number": "P469",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Brian Muteti Muema"
+      ],
+      "employee_number": "P470",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Daniel Njukia Kambo"
+      ],
+      "employee_number": "P471",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Attendant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Jackson Wambua Musyoka"
+      ],
+      "employee_number": "P472",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Dauglas Raini Nyagaka"
+      ],
+      "employee_number": "P474",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Attendant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Laureen Wangari Maingi"
+      ],
+      "employee_number": "P475",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Internal Audit",
+      "division": "Internal Audit",
+      "designation": "Internal Audit Assistant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Thadius Omondi Ogutu"
+      ],
+      "employee_number": "P476",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Payables Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Maximillian Otieno Odhiambo"
+      ],
+      "employee_number": "P479",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Debtors Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Mercy Nyagano"
+      ],
+      "employee_number": "P480",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Debtors Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Jackline Mutanu Kasinga"
+      ],
+      "employee_number": "P484",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "HR & Administration",
+      "division": "Human Resource",
+      "designation": "Human Resource Assistant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Dennis Masira Mecha"
+      ],
+      "employee_number": "P488",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Machine Operator",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Godfrey Odongo Otieno"
+      ],
+      "employee_number": "P492",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Maintenance",
+      "designation": "Assistant Mechanical Technician",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Yash Premji Vekariya"
+      ],
+      "employee_number": "P495",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "FGS 3",
+      "designation": "Stores Officer",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Benard Otieno Omollo"
+      ],
+      "employee_number": "P497",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Operations",
+      "division": "Production",
+      "designation": "Production Manager - Converting",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Christine Cheptoo Lagat"
+      ],
+      "employee_number": "P499",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Debtors Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Dennis Kememwa Ayiga"
+      ],
+      "employee_number": "P501",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "IT",
+      "designation": "IT Infrastructure & Applications Assistant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    },
+    {
+      "match_names": [
+        "Martha Wanjiru Gachuki"
+      ],
+      "employee_number": "P503",
+      "hod_employee_number": null,
+      "reports_to_employee_number": null,
+      "department": "Finance",
+      "division": "Accounts",
+      "designation": "Payables Accountant",
+      "email": null,
+      "segment": null,
+      "source": "active_staff_only"
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Cache\DomainCache;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,6 +17,25 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    protected static function booted(): void
+    {
+        static::saved(function (): void {
+            app(DomainCache::class)->bump(
+                DomainCache::CAPABILITIES,
+                DomainCache::REFERENCES,
+                DomainCache::SALES_PORTFOLIO,
+            );
+        });
+
+        static::deleted(function (): void {
+            app(DomainCache::class)->bump(
+                DomainCache::CAPABILITIES,
+                DomainCache::REFERENCES,
+                DomainCache::SALES_PORTFOLIO,
+            );
+        });
+    }
 
     protected $fillable = [
         'name',

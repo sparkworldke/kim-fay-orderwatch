@@ -51,7 +51,8 @@ export function useCapabilities() {
     // Path is relative to VITE_API_BASE_URL (already ends with /api in production).
     queryFn: () => apiFetch<UserCapabilities>("auth/capabilities"),
     enabled: !!token,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
   });
 
   const caps = query.data ?? FALLBACK;

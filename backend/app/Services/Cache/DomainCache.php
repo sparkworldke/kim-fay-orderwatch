@@ -13,6 +13,7 @@ final class DomainCache
     public const FILL_RATE = 'fill-rate';
     public const BUSINESS_OPTIMIZATION = 'business-optimization';
     public const REFERENCES = 'references';
+    public const CAPABILITIES = 'capabilities';
     public const NOT_DELIVERED = 'not-delivered';
     public const CUSTOMER_ANALYTICS = 'customer-analytics';
     public const SALES_PORTFOLIO = 'sales-portfolio';
@@ -46,7 +47,16 @@ final class DomainCache
 
             return $store;
         } catch (\Throwable) {
-            return Cache::store((string) config('cache.dashboard_fallback_store', 'database'));
+            try {
+                $fallback = Cache::store((string) config('cache.dashboard_fallback_store', 'database'));
+                $fallback->get('domain-cache:fallback-healthcheck');
+
+                return $fallback;
+            } catch (\Throwable) {
+                // Last-resort request-local cache keeps reference endpoints usable
+                // during bootstrap/tests when the database cache table is absent.
+                return Cache::store('array');
+            }
         }
     }
 }

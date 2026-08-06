@@ -136,6 +136,14 @@ function FolDetailPage() {
           </div>
           <p className="text-sm text-muted-foreground">
             <CustomerLink customerId={fol.customer_acumatica_id} customerName={fol.customer_name} showId />
+            {fol.ownership_source && (
+              <Badge
+                variant={fol.ownership_source === "manual" ? "default" : "outline"}
+                className={fol.ownership_source === "employee_match" ? "ml-2 border-amber-300 text-amber-700" : "ml-2"}
+              >
+                {fol.ownership_source === "manual" ? "Manual" : fol.ownership_source === "acumatica" ? "Acumatica" : "Employee match"}
+              </Badge>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -7,6 +7,7 @@ use App\Models\CustomerAssignmentBatch;
 use App\Models\User;
 use App\Services\Team\BrandFilterService;
 use App\Services\Team\CustomerAssignmentService;
+use App\Services\Cache\DomainCache;
 use App\Models\AcumaticaCustomer;
 use App\Models\UserBrandAssignment;
 use App\Models\Brand;
@@ -61,6 +62,7 @@ class UserAssignmentController extends Controller
                 'assigned_by' => $request->user()?->id,
             ]);
         }
+        $this->invalidateReferenceScopes();
 
         return response()->json([
             'message' => 'Brand assignments updated.',
@@ -115,6 +117,7 @@ class UserAssignmentController extends Controller
             $request->user()?->id,
             $validated['assignment_type'],
         );
+        $this->invalidateReferenceScopes();
 
         return response()->json([
             'message' => 'Customer assignments updated.',
@@ -198,6 +201,7 @@ class UserAssignmentController extends Controller
 
         $validated = $request->validate(['assignment_type' => ['required', 'in:owner,servicing']]);
         $batch = $service->applyBatch($batch, $request->user()?->id, $validated['assignment_type']);
+        $this->invalidateReferenceScopes();
 
         return response()->json($service->presentBatch($batch));
     }
@@ -215,5 +219,15 @@ class UserAssignmentController extends Controller
         if (! $manageAll && ! $actor->hasPermission('customers.assign.view') && ! $actor->hasPermission('customers.assign.manage')) {
             abort(403, 'Forbidden.');
         }
+    }
+
+    private function invalidateReferenceScopes(): void
+    {
+        app(DomainCache::class)->bump(
+            DomainCache::CAPABILITIES,
+            DomainCache::REFERENCES,
+            DomainCache::SALES_PORTFOLIO,
+            DomainCache::CUSTOMER_ANALYTICS,
+        );
     }
 }

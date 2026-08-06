@@ -51,6 +51,7 @@ export interface FolRequest {
   customer_acumatica_id: string;
   customer_name: string;
   sales_consultant_email: string | null;
+  ownership_source?: "manual" | "acumatica" | "employee_match";
   request_origin: string;
   requestor_first_name: string;
   requestor_last_name: string;

@@ -16,8 +16,11 @@ use App\Services\Crm\CustomerContactService;
 use App\Models\NotificationRule;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\UserCustomerAssignment;
 use App\Support\DataScope;
 use App\Services\Team\AccessTierService;
+use App\Services\Team\CustomerAttributionService;
+use App\Services\Team\KpReportingHierarchyService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -36,6 +39,8 @@ class FolRequestService
         private readonly CustomerContactService $contacts,
         private readonly FolAcumaticaSalesOrderService $folSalesOrders,
         private readonly AccessTierService $accessTier,
+        private readonly CustomerAttributionService $attribution,
+        private readonly KpReportingHierarchyService $kpHierarchy,
     ) {}
 
     public function userCan(User $user, string $permission): bool
@@ -96,13 +101,20 @@ class FolRequestService
             return $query;
         }
 
-        $customerIds = DataScope::scopedCustomerAcumaticaIds($user);
+        $customerIds = $this->folCustomerIdsFor($user);
         $isTech = $this->userCan($user, 'kp.fol.install.execute');
+        $attachedOnly = $this->requiresAttachedFolBook($user);
 
-        return $query->where(function (Builder $scoped) use ($user, $customerIds, $isTech) {
-            $scoped->where('sales_consultant_user_id', $user->id);
+        return $query->where(function (Builder $scoped) use ($user, $customerIds, $isTech, $attachedOnly) {
+            if (! $attachedOnly) {
+                $scoped->where('sales_consultant_user_id', $user->id);
+            }
             if ($customerIds !== null && $customerIds !== []) {
-                $scoped->orWhereIn('customer_acumatica_id', $customerIds);
+                $attachedOnly
+                    ? $scoped->whereIn('customer_acumatica_id', $customerIds)
+                    : $scoped->orWhereIn('customer_acumatica_id', $customerIds);
+            } elseif ($attachedOnly) {
+                $scoped->whereRaw('1 = 0');
             }
             // Technicians always see FOLs allocated to them
             if ($isTech) {
@@ -114,6 +126,15 @@ class FolRequestService
     public function present(FolRequest $request): array
     {
         $request->loadMissing(['lines', 'attachments', 'events', 'approvalActions', 'soLinks', 'assignedTechnician']);
+
+        // Older requests may have persisted a zero snapshot because no catalogue
+        // products were tagged for FOL. Recompute that empty fallback for display.
+        $liveMetrics = null;
+        if (($request->consumable_inventory_ids ?? []) === []
+            && (float) $request->consumables_sales_3m_kes === 0.0
+            && (float) $request->consumables_sales_6m_kes === 0.0) {
+            $liveMetrics = $this->metricsForCustomer((string) $request->customer_acumatica_id);
+        }
 
         $attachments = $request->attachments->map(function ($file) {
             return [
@@ -132,14 +153,35 @@ class FolRequestService
             $soNumbers = $request->soLinks->pluck('acumatica_order_nbr')->filter()->values();
         }
         $primarySo = $soNumbers->first();
+        $ownership = UserCustomerAssignment::query()
+            ->where('user_id', $request->sales_consultant_user_id)
+            ->where('customer_acumatica_id', $request->customer_acumatica_id)
+            ->whereIn('assignment_type', [UserCustomerAssignment::TYPE_SERVICING, UserCustomerAssignment::TYPE_LEGACY_PRIMARY])
+            ->latest('id')
+            ->first(['source', 'is_manual_override']);
+        $ownershipSource = $ownership
+            ? ((bool) $ownership->is_manual_override
+                || in_array((string) $ownership->source, ['manual', 'admin_csv', 'portfolio_import', 'kp_customers_20260805'], true)
+                    ? 'manual'
+                    : 'acumatica')
+            : 'employee_match';
 
         return [
             ...$request->toArray(),
+            ...($liveMetrics ? [
+                'consumables_last_purchase_date' => $liveMetrics['last_purchase_date'],
+                'consumables_sales_3m_kes' => $liveMetrics['sales_3m_kes'],
+                'consumables_volume_3m' => $liveMetrics['volume_3m'],
+                'consumables_sales_6m_kes' => $liveMetrics['sales_6m_kes'],
+                'consumables_volume_6m' => $liveMetrics['volume_6m'],
+                'consumables_metrics_as_of' => $liveMetrics['metrics_as_of'],
+            ] : []),
             // Explicit SO attachment fields for UI / clients.
             'so_number' => $primarySo,
             'acumatica_so_number' => $primarySo,
             'so_numbers' => $soNumbers->all(),
             'so_status' => $request->linked_so_status_summary,
+            'ownership_source' => $ownershipSource,
             'lines' => $request->lines->values(),
             'attachments' => $attachments,
             'events' => $request->events()->latest('id')->get(),
@@ -914,9 +956,9 @@ class FolRequestService
     /**
      * SO-backed consumables metrics for a KP customer.
      *
-     * Only FOL-eligible inventory is counted (is_fol_eligible = true).
-     * When $inventoryIds is non-empty, further restricts to those SKUs
-     * (typically the lines already on the FOL draft).
+     * When supporting consumables are selected, only those SKUs are counted.
+     * With no supporting SKUs, use the customer's complete sales-order history;
+     * otherwise an untagged catalogue makes genuine customer sales appear as zero.
      *
      * @param  list<string>  $inventoryIds
      * @return array{
@@ -936,14 +978,13 @@ class FolRequestService
         $from = $asOf->copy()->subMonthsNoOverflow($months)->startOfDay();
         $fromThreeMonths = $asOf->copy()->subMonthsNoOverflow(3)->startOfDay();
 
-        // Base: SO lines for this customer in lookback window, FOL-eligible inventory only.
+        // Base: successful SO lines for this customer in the lookback window.
         $base = DB::table('acumatica_sales_order_lines as l')
             ->join('acumatica_sales_orders as o', 'o.id', '=', 'l.sales_order_id')
-            ->join('acumatica_inventory_items as i', 'i.inventory_id', '=', 'l.inventory_id')
             ->where('o.order_type', AcumaticaSalesOrder::TYPE_SALES_ORDER)
             ->where('o.customer_acumatica_id', $customerId)
             ->where('o.order_date', '>=', $from)
-            ->where('i.is_fol_eligible', true);
+            ->whereNotIn(DB::raw("LOWER(TRIM(COALESCE(o.status, '')))"), ['cancelled', 'canceled', 'rejected']);
 
         if ($inventoryIds !== []) {
             $base->whereIn('l.inventory_id', $inventoryIds);
@@ -1033,8 +1074,8 @@ class FolRequestService
             'volume_6m' => round((float) ($row->volume ?? 0), 4),
             'lookback_months' => $months,
             'scope' => $inventoryIds !== []
-                ? 'fol_eligible_lines_on_request'
-                : 'all_fol_eligible_inventory',
+                ? 'selected_supporting_consumables'
+                : 'all_customer_sales_orders',
             'line_last_purchases' => $lineLastPurchases,
             'metrics_as_of' => $asOf->toIso8601String(),
             // Full customer SO history context (NOT FOL-eligible filtered).
@@ -1383,9 +1424,35 @@ class FolRequestService
 
     private function ensureCustomerAllowed(User $actor, AcumaticaCustomer $customer): void
     {
+        if ($this->requiresAttachedFolBook($actor)) {
+            if (! in_array((string) $customer->acumatica_id, $this->attribution->folCustomerIds($actor->id), true)) {
+                abort(403, 'This customer is not manually attached to your FOL portfolio.');
+            }
+
+            return;
+        }
+
         if (! DataScope::customerAccessible($actor, (string) $customer->acumatica_id, $customer->customer_class)) {
             abort(403, 'Customer is outside your accessible portfolio.');
         }
+    }
+
+    public function folCustomerIdsFor(User $actor): ?array
+    {
+        return $this->requiresAttachedFolBook($actor)
+            ? $this->attribution->folCustomerIds($actor->id)
+            : DataScope::scopedCustomerAcumaticaIds($actor);
+    }
+
+    public function ensureFolCustomerAllowed(User $actor, AcumaticaCustomer $customer): void
+    {
+        $this->ensureCustomerAllowed($actor, $customer);
+    }
+
+    private function requiresAttachedFolBook(User $actor): bool
+    {
+        return $this->attribution->isMappedOnlyConsultant($actor)
+            || $this->kpHierarchy->isTeamMember($actor);
     }
 
     private function ensureKpCustomer(AcumaticaCustomer $customer): void
@@ -1500,8 +1567,15 @@ class FolRequestService
     {
         return User::query()
             ->where('is_active', true)
+            ->whereHas('reportsTo', function (Builder $managerQuery) {
+                $managerQuery->where(function (Builder $nameQuery) {
+                    $nameQuery->whereRaw('LOWER(name) LIKE ?', ['%susan%'])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ['%susan%']);
+                });
+            })
             ->where(function (Builder $query) {
                 $query->where('role', 'Technician')
+                    ->orWhereRaw('LOWER(TRIM(COALESCE(designation, ?))) LIKE ?', ['', '%technician%'])
                     ->orWhereHas('roles', function (Builder $roleQuery) {
                         $roleQuery->where('name', 'Technician')
                             ->orWhereHas('permissions', fn (Builder $permissionQuery) => $permissionQuery->where('name', 'kp.fol.install.execute'));
