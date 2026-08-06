@@ -168,7 +168,7 @@ export function DataTable<T>({
       ) : (
         <>
           {/* Mobile: app-like cards */}
-          <ul className="max-h-[420px] divide-y divide-border overflow-y-auto overscroll-contain lg:hidden">
+          <ul className="max-h-[420px] divide-y divide-border overflow-y-auto overscroll-contain md:hidden">
             {rows.map((row) => {
               const id = getRowId(row.original);
               return (
@@ -192,7 +192,7 @@ export function DataTable<T>({
           <div
             ref={desktopScrollRef}
             className={cn(
-              "hidden overflow-auto overscroll-contain lg:block",
+              "hidden overflow-auto overscroll-contain md:block",
               density === "compact" ? "h-[152px]" : "h-[218px]",
             )}
           >

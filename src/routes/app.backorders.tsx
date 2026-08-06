@@ -125,6 +125,93 @@ function ownerAndAction(lines: BackorderLine[], segment?: string | null) {
   return segment === "manufactured" ? { owner: "Production", action: "Produce" } : { owner: "Procurement", action: "Procure" };
 }
 
+function BackorderMobileLineCard({
+  line,
+  canAssignReasons,
+  onAssignReason,
+}: {
+  line: BackorderLine;
+  canAssignReasons: boolean;
+  onAssignReason: (line: BackorderLine) => void;
+}) {
+  const qty = Number(line.open_qty) > 0 ? Number(line.open_qty) : Number(line.backorder_qty) || 0;
+  const unitPrice = Number(line.unit_price) || 0;
+  const lineValue = qty * unitPrice;
+  const reasons = lineReasonLabels(line);
+  const unassigned = isUnassignedReason(line);
+  const next = ownerAndAction([line], line.product_segment);
+  const coverage = line.stock_signal === "stock_available_not_shipped"
+    ? "Full"
+    : line.stock_signal === "partial_cover"
+      ? "Partial"
+      : line.stock_signal === "true_stockout"
+        ? "None"
+        : "Unknown";
+
+  return (
+    <article className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          {line.customer_acumatica_id ? (
+            <OrderLink customerId={line.customer_acumatica_id} orderId={line.order_nbr} className="font-mono font-semibold">
+              {line.order_nbr}
+            </OrderLink>
+          ) : (
+            <span className="font-mono font-semibold">{line.order_nbr}</span>
+          )}
+          <p className="mt-1 text-muted-foreground">
+            {formatDate(line.order_date ?? null) ?? "—"}
+            {line.backorder_age_days !== null ? ` · ${line.backorder_age_days} days backordered` : ""}
+          </p>
+        </div>
+        <Badge variant={coverage === "Full" ? "default" : coverage === "None" ? "destructive" : "secondary"}>
+          {coverage}
+        </Badge>
+      </div>
+
+      <div>
+        {line.customer_acumatica_id ? (
+          <CustomerLink customerId={line.customer_acumatica_id} customerName={line.customer_name} className="font-medium">
+            {line.customer_name ?? line.customer_acumatica_id}
+          </CustomerLink>
+        ) : (
+          <span className="font-medium">{line.customer_name ?? "—"}</span>
+        )}
+        <p className="text-muted-foreground">{orderStatusLabel(line.order_status)}</p>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3">
+        <div>
+          <dt className="text-muted-foreground">Open quantity</dt>
+          <dd className="mt-1 font-semibold tabular-nums">{formatNumber(qty)}{line.uom ? ` ${line.uom}` : ""}</dd>
+        </div>
+        <div className="text-right">
+          <dt className="text-muted-foreground">Revenue at risk</dt>
+          <dd className="mt-1 font-semibold"><MaskedCurrency value={lineValue > 0 ? lineValue : line.revenue_at_risk} /></dd>
+        </div>
+      </dl>
+
+      <div className="flex flex-wrap gap-1">
+        {unassigned || reasons.length === 0 ? (
+          <Badge variant={line.missing_reason_exception ? "destructive" : "secondary"}>Reason unassigned</Badge>
+        ) : reasons.map((label) => <Badge key={`${line.id}-${label}`} variant="secondary" className="whitespace-normal">{label}</Badge>)}
+      </div>
+
+      <div className="flex items-end justify-between gap-3 border-t pt-3">
+        <div>
+          <p className="font-medium">{next.owner}</p>
+          <p className="text-muted-foreground">{next.action}</p>
+        </div>
+        {canAssignReasons && unassigned && (
+          <Button variant="outline" onClick={() => onAssignReason(line)}>
+            <PencilLine className="mr-2 h-4 w-4" /> Assign reason
+          </Button>
+        )}
+      </div>
+    </article>
+  );
+}
+
 function orderStatusLabel(status: string | null | undefined): string {
   if (!status?.trim()) return "—";
   return status.trim();
@@ -1228,11 +1315,11 @@ function BackordersPage() {
                 <AccordionItem
                   key={group.inventoryId}
                   value={group.inventoryId}
-                  className="border-b px-4 last:border-b-0"
+                  className="mx-3 my-3 rounded-xl border bg-card px-3 shadow-sm last:border-b md:mx-0 md:my-0 md:rounded-none md:border-x-0 md:border-t-0 md:px-4 md:shadow-none md:last:border-b-0"
                 >
-                  <AccordionTrigger className="hover:no-underline">
-                    <div className="grid w-full items-center gap-2 pr-2 text-left md:grid-cols-[minmax(0,1.5fr)_70px_80px_90px_105px_105px_130px] md:gap-3">
-                      <div className="min-w-0">
+                  <AccordionTrigger className="min-h-11 py-3 hover:no-underline">
+                    <div className="grid w-full grid-cols-2 items-center gap-3 pr-2 text-left md:grid-cols-[minmax(0,1.5fr)_70px_80px_90px_105px_105px_130px] md:gap-3">
+                      <div className="col-span-2 min-w-0 md:col-span-1">
                         <ProductListingCell
                           link={false}
                           product={{
@@ -1251,6 +1338,7 @@ function BackordersPage() {
                         )}
                       </div>
                       <div className="text-sm md:text-right">
+                        <span className="mb-1 block text-muted-foreground md:hidden">Orders</span>
                         <Badge variant="secondary">
                           {group.orderCount} SO{group.orderCount !== 1 ? "s" : ""}
                         </Badge>
@@ -1269,16 +1357,27 @@ function BackordersPage() {
                           </div>
                         )}
                       </div>
-                      <div className="text-sm font-medium md:text-right">
+                      <div className="text-right text-sm font-medium md:text-right">
+                        <span className="mb-1 block font-normal text-muted-foreground md:hidden">Revenue at risk</span>
                         {kes(group.totalRevenueAtRisk)}
                       </div>
-                      {(() => { const coverage = coverageForLines(group.lines); return <Badge variant={coverage === "full" ? "default" : coverage === "none" ? "destructive" : "secondary"} className="w-fit capitalize">{coverage}</Badge>; })()}
-                      {(() => { const next = ownerAndAction(group.lines, group.lines[0]?.product_segment); return <div className="text-xs"><p className="font-medium">{next.owner}</p><p className="text-muted-foreground">{next.action}</p></div>; })()}
+                      {(() => { const coverage = coverageForLines(group.lines); return <div><span className="mb-1 block text-muted-foreground md:hidden">Coverage</span><Badge variant={coverage === "full" ? "default" : coverage === "none" ? "destructive" : "secondary"} className="w-fit capitalize">{coverage}</Badge></div>; })()}
+                      {(() => { const next = ownerAndAction(group.lines, group.lines[0]?.product_segment); return <div className="text-xs"><span className="mb-1 block text-muted-foreground md:hidden">Owner / action</span><p className="font-medium">{next.owner}</p><p className="text-muted-foreground">{next.action}</p></div>; })()}
                     </div>
                   </AccordionTrigger>
 
                   <AccordionContent>
-                    <div className="overflow-x-auto rounded-md border">
+                    <div className="space-y-3 pb-2 md:hidden">
+                      {group.lines.map((line) => (
+                        <BackorderMobileLineCard
+                          key={line.id}
+                          line={line}
+                          canAssignReasons={canAssignReasons}
+                          onAssignReason={openReasonEditor}
+                        />
+                      ))}
+                    </div>
+                    <div className="hidden overflow-x-auto rounded-md border md:block">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b bg-muted/30 text-left">

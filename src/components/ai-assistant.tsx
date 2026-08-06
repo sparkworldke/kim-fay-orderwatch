@@ -448,13 +448,11 @@ export function AiAssistant() {
       {/* Panel */}
       <div
         className={cn(
-          "fixed bottom-20 right-3 z-50 flex flex-col rounded-xl border bg-background shadow-2xl transition-all duration-200 md:bottom-5 md:right-5",
-          "w-[380px] sm:w-[420px]",
+          "fixed inset-0 z-50 flex flex-col border bg-background shadow-2xl transition-all duration-200 sm:inset-auto sm:bottom-20 sm:right-3 sm:h-[min(560px,calc(100dvh-6rem))] sm:w-[420px] sm:rounded-xl md:bottom-5 md:right-5",
           open
             ? "translate-y-0 opacity-100 pointer-events-auto"
             : "translate-y-4 opacity-0 pointer-events-none",
         )}
-        style={{ height: "560px" }}
       >
         {/* Header */}
         <div className="flex items-center gap-2 border-b px-4 py-3">

@@ -40,7 +40,7 @@ function ProductionAndStockLayout() {
     <MsiProvider>
       <ProductionStockViewContext.Provider value={{ value: stockView, setValue: setStockView }}>
         <ProductionResetContext.Provider value={resetToken}>
-          <section className="production-dashboard -m-4 flex min-h-[calc(100dvh-3.5rem)] flex-col bg-background md:-m-6">
+          <section className="production-dashboard -m-3 flex min-h-[calc(100dvh-3.5rem)] flex-col bg-background sm:-m-4 md:-m-6">
             <DashboardHeader onReset={() => setResetToken((token) => token + 1)} />
             <div className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col px-3 py-2 sm:px-4">
               <Outlet />

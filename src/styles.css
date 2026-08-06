@@ -328,8 +328,31 @@
   }
 
   @media (max-width: 767px) {
+    body *,
+    body *::before,
+    body *::after {
+      font-size: 14px !important;
+    }
+
+    body :is(h1, .ui-title) {
+      font-size: 24px !important;
+    }
+
+    body h2 {
+      font-size: 20px !important;
+    }
+
+    body :is(h3, h4, h5, h6) {
+      font-size: 16px !important;
+    }
+
+    body :is(button, [role="button"], input, select, textarea) {
+      min-height: 44px;
+    }
+
     .mobile-app-main {
       min-width: 0;
+      padding-bottom: calc(6rem + env(safe-area-inset-bottom));
     }
 
     .mobile-app-main [data-slot="card"],

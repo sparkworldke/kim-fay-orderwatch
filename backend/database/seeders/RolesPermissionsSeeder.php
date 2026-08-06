@@ -300,6 +300,16 @@ class RolesPermissionsSeeder extends Seeder
             ])->pluck('id')->all()
         );
 
+        // Reporting is a read-only platform capability. Every team role may
+        // download Excel, while each report query continues to enforce the
+        // user's customer, department, channel and partner-brand data scope.
+        $reportExportPermissionId = Permission::where('name', 'reports.export')->value('id');
+        if ($reportExportPermissionId !== null) {
+            Role::query()->each(function (Role $role) use ($reportExportPermissionId): void {
+                $role->permissions()->syncWithoutDetaching([$reportExportPermissionId]);
+            });
+        }
+
         User::whereNotNull('role')->get()->each(function (User $user): void {
             $role = Role::where('name', $user->role)->first();
 
