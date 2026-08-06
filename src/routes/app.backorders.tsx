@@ -459,7 +459,9 @@ function BackordersPage() {
         `backorders-export-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.xlsx`,
         { timeoutMs: 180_000 },
       );
-      toast.success("Backorders Excel download started.");
+      toast.success(
+        "Backorders Excel ready — open “Start Here”, then Summary (executives) or your team’s sheet.",
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to download backorders.");
     } finally {
@@ -570,6 +572,10 @@ function BackordersPage() {
 
   const filteredSummary = analytics.data?.summary;
   const valueSummary = summary.data?.value_summary;
+  const completionPct =
+    valueSummary && valueSummary.order_value > 0
+      ? Math.min(100, (valueSummary.invoiced_value / valueSummary.order_value) * 100)
+      : 0;
   // Authoritative SKU count = SQL COUNT(DISTINCT inventory_id) on filtered open lines.
   // Do not use client-side group count of a paginated list (that under-counted ~291 vs ~518).
   const skuCount =
@@ -589,6 +595,12 @@ function BackordersPage() {
             Short products grouped by Inventory ID (SKU). Date filters use sales order date. Expand a
             product to see each sales order, status, and reason.
           </p>
+          <p className="mt-1 max-w-xl text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Excel export</span> is for every role:
+            executives use the Summary sheet; sales/CS use Customer Summary; warehouse looks for
+            stock coverage Full/Partial; production and procurement use Manufactured vs Trading
+            sheets. Open the workbook at &quot;Start Here&quot;.
+          </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {isAdmin && (
@@ -602,7 +614,12 @@ function BackordersPage() {
               {truncateBackorders.isPending ? "Clearing…" : "Clear data"}
             </Button>
           )}
-          <Button variant="outline" onClick={handleDownload} disabled={isDownloading || isQueuingDownload}>
+          <Button
+            variant="outline"
+            onClick={handleDownload}
+            disabled={isDownloading || isQueuingDownload}
+            title="Multi-sheet workbook: Summary for executives, detail for each team. Respects filters and your access."
+          >
             <FileDown className={`mr-2 h-4 w-4 ${isDownloading ? "animate-pulse" : ""}`} />
             {isDownloading ? "Preparing…" : "Download Excel"}
           </Button>
@@ -610,6 +627,7 @@ function BackordersPage() {
             variant="secondary"
             onClick={() => void handleQueueDownload()}
             disabled={isDownloading || isQueuingDownload}
+            title="For large date ranges — file appears under Downloads when ready."
           >
             <FileDown className={`mr-2 h-4 w-4 ${isQueuingDownload ? "animate-pulse" : ""}`} />
             {isQueuingDownload ? "Queuing…" : "Queue download"}
@@ -1077,18 +1095,13 @@ function BackordersPage() {
         />
         <div className="rounded-lg border bg-card p-4 shadow-sm">
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            Completed shortfall
-            <InfoTip text="Value that was never delivered on orders that completed short, captured from the first snapshot taken after each order completed. This is history — it does not change when backorders are cleared or resynced." />
+            Completion
+            <InfoTip text="Invoiced value as a percentage of ordered value for the current filters. This shows how much of the selected demand has been fulfilled." />
           </div>
-          {analytics.isLoading ? (
+          {summary.isLoading ? (
             <Skeleton className="mt-2 h-8 w-28" />
           ) : (
-            <div className="mt-1">
-              <MaskedCurrency
-                value={summary.data?.completed.missed_value ?? 0}
-                className={`text-2xl font-semibold ${(summary.data?.completed.missed_value ?? 0) > 500_000 ? "text-red-600" : ""}`}
-              />
-            </div>
+            <div className="mt-1 text-2xl font-semibold">{completionPct.toFixed(1)}%</div>
           )}
         </div>
         <div className="rounded-lg border bg-card p-4 shadow-sm">

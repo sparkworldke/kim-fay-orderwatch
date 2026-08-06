@@ -159,14 +159,33 @@ Do **not** invent a second RaR for the headline.
 
 ---
 
-## 12. Related
+## 12. Excel download (for executives & all teams)
+
+Implemented in `BackorderExcelExporter` — one workbook, role-aware **reading order**:
+
+| Sheet | Who |
+|---|---|
+| **Start Here** | Everyone — three questions + who opens which sheet |
+| **Summary** | Executives / HODs first — RaR · Ready to release · Blocked no stock |
+| **Backorders** | All — lines + **Stock Coverage · Owner · Next Action** |
+| Manufactured / Trading | Production vs Procurement |
+| Customer Summary | Sales / CS call list |
+| Other sheets | Ops deep-dive, data quality, resolved |
+
+UI copy on Backorders page explains this; toast points users to Start Here / Summary.
+
+---
+
+## 13. Related
 
 | Doc / code | Use |
 |---|---|
 | Screenshot | `Backorders-—-Kim-Fay-Sight-08-06-2026_12_45_PM.png` |
 | Excel / audit specs | `backorder-excel-docs/` (line math) |
+| Exporter | `backend/app/Services/Operations/BackorderExcelExporter.php` |
 | Executive pulse | `executive-view.md` (RaR as one gap KPI) |
 | My Team | `my-team.md` (team BO KES, not this page) |
+| Roles | `roles-access.md` |
 | Mobile | `mobile-phone.md` |
 | App | `src/routes/app.backorders.tsx` |
 

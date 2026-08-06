@@ -97,7 +97,7 @@ class OperationsExcelExportTest extends TestCase
         foreach ($workbook->getAllSheets() as $s) {
             $sheetNames[] = $s->getTitle();
         }
-        $this->assertContains('Instructions', $sheetNames);
+        $this->assertContains('Start Here', $sheetNames);
         $this->assertContains('Summary', $sheetNames);
         $this->assertContains('Backorders', $sheetNames);
         $this->assertContains('Manufactured Lines', $sheetNames);
@@ -109,15 +109,18 @@ class OperationsExcelExportTest extends TestCase
         $this->assertContains('Orders with Backorders', $sheetNames);
         $this->assertContains('Missing Price Values', $sheetNames);
 
-        $this->assertSame('Instructions', $workbook->getSheet(0)->getTitle());
+        $this->assertSame('Start Here', $workbook->getSheet(0)->getTitle());
 
         $sheet = $workbook->getSheetByName('Backorders');
         $this->assertNotNull($sheet);
         $this->assertSame('SO-KEEP', $sheet->getCell('A2')->getValue());
 
-        // Locate reason columns by header (column layout can grow over time).
+        // Locate columns by header (layout can grow).
         $reasonCodeCol = null;
         $reasonLabelCol = null;
+        $coverageCol = null;
+        $ownerCol = null;
+        $actionCol = null;
         for ($col = 1; $col <= 40; $col++) {
             $letter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
             $header = (string) $sheet->getCell("{$letter}1")->getValue();
@@ -127,12 +130,31 @@ class OperationsExcelExportTest extends TestCase
             if ($header === 'Reason') {
                 $reasonLabelCol = $letter;
             }
+            if ($header === 'Stock Coverage') {
+                $coverageCol = $letter;
+            }
+            if ($header === 'Owner (who acts)') {
+                $ownerCol = $letter;
+            }
+            if ($header === 'Next Action') {
+                $actionCol = $letter;
+            }
         }
         $this->assertNotNull($reasonCodeCol, 'Reason Code column missing');
         $this->assertNotNull($reasonLabelCol, 'Reason column missing');
+        $this->assertNotNull($coverageCol, 'Stock Coverage column missing');
+        $this->assertNotNull($ownerCol, 'Owner column missing');
+        $this->assertNotNull($actionCol, 'Next Action column missing');
         $this->assertSame('out_of_stock_procurement', $sheet->getCell("{$reasonCodeCol}2")->getValue());
         $this->assertSame('Out of stock - Procurement', $sheet->getCell("{$reasonLabelCol}2")->getValue());
+        $this->assertContains($sheet->getCell("{$coverageCol}2")->getValue(), ['Full', 'Partial', 'None', 'N/A']);
+        $this->assertNotSame('', (string) $sheet->getCell("{$ownerCol}2")->getValue());
+        $this->assertNotSame('', (string) $sheet->getCell("{$actionCol}2")->getValue());
         $this->assertSame(null, $sheet->getCell('A3')->getValue());
+
+        $summary = $workbook->getSheetByName('Summary');
+        $this->assertNotNull($summary);
+        $this->assertStringContainsString('Decision Summary', (string) $summary->getCell('A1')->getValue());
     }
 
     public function test_fill_rate_export_includes_product_line_reasons(): void

@@ -14,21 +14,23 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
- * Enhanced multi-sheet Backorders Excel export (mirrors Fill Rate export structure).
+ * Multi-sheet Backorders Excel — readable for executives and every ops/sales role.
  *
- * Sheets:
- *   1. Instructions          – how to use this file
- *   2. Summary               – KPIs, brand split, reason/top SKUs
- *   3. Backorders            – full line-level detail
- *   4. Manufactured Lines    – Kim-Fay manufactured SKUs only
- *   5. Trading (Partners) Lines – partner brands only
- *   6. Exposure by SKU       – SKU-grouped Revenue at Risk (open qty × unit price)
- *   7. Reason Summary        – root-cause contribution
- *   8. Customer Summary      – top customers by exposure
- *   9. Product Summary       – SKUs by InventoryID
- *  10. Orders with Backorders – SO-level rollup
- *  11. Missing Price Values  – lines with zero/missing unit price
- *  12. Resolved Backorders   – lines that cleared in the period, with first-backordered/resolved dates
+ * Sheets (open in order):
+ *   1. Start Here            – who should use which sheet + three questions
+ *   2. Summary               – Revenue at Risk, ready to release, blocked, splits
+ *   3. Backorders            – line detail + stock coverage, owner, next action
+ *   4. Manufactured Lines    – Kim-Fay manufactured only
+ *   5. Trading (Partners)    – partner brands only
+ *   6. Exposure by SKU       – SKU groups (ops deep-dive)
+ *   7. Reason Summary        – root causes
+ *   8. Customer Summary      – customers by exposure (sales/CS)
+ *   9. Product Summary       – SKUs ranked
+ *  10. Orders with Backorders
+ *  11. Missing Price Values
+ *  12. Resolved Backorders
+ *
+ * Revenue at Risk (headline) = open qty × unit price on active lines.
  */
 class BackorderExcelExporter
 {
@@ -138,7 +140,7 @@ class BackorderExcelExporter
     // ---------------------------------------------------------------------------
 
     /**
-     * Line row layout (0-indexed):
+     * Line row layout (0-indexed) from the API:
      *  0 Order | 1 Customer ID | 2 Customer Name | 3 Inventory ID | 4 Product Name |
      *  5 Product Line | 6 Warehouse | 7 Shortfall Kind | 8 Order Status |
      *  9 Order Qty | 10 Shipped Qty | 11 Open Qty | 12 Unit Price | 13 Revenue at Risk (KES) |
@@ -146,8 +148,7 @@ class BackorderExcelExporter
      * 20 Brand | 21 Fulfillment Status | 22 Qty On Hand | 23 Qty Available |
      * 24 First Backordered At | 25 Backorder Age (days) | 26 Aging Bucket | 27 Missing Reason Exception
      *
-     * "Brand" (20) is the item's actual brand (e.g. "Fay Tissues") — a different, finer axis
-     * than "Product Segment" (appended last), which is the coarser Manufactured/Trading split.
+     * Export appends: Product Segment | Stock Coverage | Owner | Next Action
      */
     private function writeBackordersSheet(Spreadsheet $ss, array $rows): void
     {
@@ -158,12 +159,22 @@ class BackorderExcelExporter
             'Reason Code', 'Reason', 'Reason Notes', 'UOM', 'Currency', 'Synced At',
             'Brand', 'Fulfillment Status', 'Qty On Hand', 'Qty Available',
             'First Backordered At', 'Backorder Age (days)', 'Aging Bucket', 'Missing Reason Exception',
-            'Product Segment',
+            'Product Segment', 'Stock Coverage', 'Owner (who acts)', 'Next Action',
         ];
 
         $enriched = array_map(function (array $row) {
             $invId = (string) ($row[3] ?? '');
-            $row[] = $this->classifyBrand($invId);
+            $segment = $this->classifyBrand($invId);
+            $openQty = (float) ($row[11] ?? 0);
+            $qtyAvailable = (float) ($row[23] ?? 0);
+            $reasonCode = trim((string) ($row[14] ?? ''));
+            $coverage = $this->stockCoverage($openQty, $qtyAvailable);
+            [$owner, $action] = $this->ownerAndNextAction($coverage, $invId, $reasonCode);
+
+            $row[] = $segment;
+            $row[] = $coverage;
+            $row[] = $owner;
+            $row[] = $action;
 
             return $row;
         }, $rows);
@@ -452,6 +463,10 @@ class BackorderExcelExporter
         $partnerTotal = 0.0;
         $missingPrice = 0;
         $unassignedReasons = 0;
+        $readyKes = 0.0;
+        $blockedKes = 0.0;
+        $readyLines = 0;
+        $blockedLines = 0;
 
         foreach ($lineRows as $row) {
             $invId = (string) ($row[3] ?? '');
@@ -459,6 +474,7 @@ class BackorderExcelExporter
             $qty = (float) ($row[11] ?? 0);
             $price = (float) ($row[12] ?? 0);
             $reasonCode = trim((string) ($row[14] ?? ''));
+            $qtyAvailable = (float) ($row[23] ?? 0);
 
             $grandTotal += $value;
             $openQty += $qty;
@@ -476,6 +492,16 @@ class BackorderExcelExporter
             if ($reasonCode === '' || strcasecmp($reasonCode, 'unassigned') === 0) {
                 $unassignedReasons++;
             }
+
+            $coverage = $this->stockCoverage($qty, $qtyAvailable);
+            if ($coverage === 'None') {
+                $blockedKes += $value;
+                $blockedLines++;
+            } else {
+                // Full or partial free stock — can act to release something now.
+                $readyKes += $value;
+                $readyLines++;
+            }
         }
 
         arsort($bySkuTotal);
@@ -484,7 +510,7 @@ class BackorderExcelExporter
 
         $r = 1;
         $sheet->mergeCells("A{$r}:D{$r}");
-        $sheet->setCellValue("A{$r}", 'Backorders — Revenue at Risk Summary');
+        $sheet->setCellValue("A{$r}", 'Backorders — Decision Summary (all roles)');
         $sheet->getStyle("A{$r}")->applyFromArray([
             'font' => ['bold' => true, 'size' => 16, 'color' => ['argb' => 'FFFFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1E3A5F']],
@@ -493,32 +519,45 @@ class BackorderExcelExporter
         $sheet->getRowDimension($r)->setRowHeight(30);
         $r++;
 
-        $sheet->setCellValue("A{$r}", "Period: {$dateFrom} to {$dateTo}  (sales order date)  ·  Revenue at Risk (RaR) = open qty × unit price");
+        $sheet->setCellValue("A{$r}", "Period: {$dateFrom} to {$dateTo}  (sales order date)  ·  Filtered to your access + on-screen filters");
+        $sheet->getStyle("A{$r}")->getFont()->setItalic(true)->setColor(new Color('FF555555'));
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Revenue at Risk = open (unshipped) qty × unit price. Not order total. Not cash collected.');
         $sheet->getStyle("A{$r}")->getFont()->setItalic(true)->setColor(new Color('FF555555'));
         $r += 2;
 
+        // Three decision KPIs first (exec + every team).
         $kpiRows = [
-            ['Total Revenue at Risk (KES)', 'KES '.number_format($grandTotal, 2), 'FFDC2626'],
-            ['  Formula', 'open qty × unit price (unshipped remainder)', 'FF6B7280'],
-            ['Manufactured Goods — Revenue at Risk', 'KES '.number_format($mfgTotal, 2), 'FF0F4C81'],
-            ['Trading (Partners) — Revenue at Risk', 'KES '.number_format($partnerTotal, 2), 'FF6B3A7D'],
-            ['Open Lines', (string) count($lineRows), 'FF0369A1'],
-            ['Open Orders', (string) $orderCount, 'FF0369A1'],
-            ['Open Qty', number_format($openQty, 2), 'FF0369A1'],
-            ['SKUs Affected', (string) count($bySkuTotal), 'FF0369A1'],
-            ['Lines w/ Missing Price', (string) $missingPrice, 'FFF59E0B'],
-            ['Lines w/ Unassigned Reason', (string) $unassignedReasons, 'FFF59E0B'],
+            ['1. REVENUE AT RISK (total exposure)', 'KES '.number_format($grandTotal, 2), 'FFDC2626'],
+            ['2. READY TO RELEASE (stock available or partial)', 'KES '.number_format($readyKes, 2).'  ·  '.$readyLines.' lines', 'FF15803D'],
+            ['3. BLOCKED — NO STOCK', 'KES '.number_format($blockedKes, 2).'  ·  '.$blockedLines.' lines', 'FFB45309'],
+            ['', '', 'FF6B7280'],
+            ['Manufactured (Kim-Fay) — of total RaR', 'KES '.number_format($mfgTotal, 2), 'FF0F4C81'],
+            ['Trading / Partners — of total RaR', 'KES '.number_format($partnerTotal, 2), 'FF6B3A7D'],
+            ['Open lines / open orders / SKUs', count($lineRows).' lines · '.$orderCount.' orders · '.count($bySkuTotal).' SKUs', 'FF0369A1'],
+            ['Open quantity (units)', number_format($openQty, 2), 'FF0369A1'],
+            ['Data quality — missing unit price', (string) $missingPrice.' lines (see Missing Price Values sheet)', 'FFF59E0B'],
+            ['Data quality — no root-cause reason', (string) $unassignedReasons.' lines (Sales/CS should set reason)', 'FFF59E0B'],
         ];
 
         if ($valueSummary !== null) {
-            $kpiRows = array_merge([
-                ['Order Value (period)', 'KES '.number_format((float) ($valueSummary['order_value'] ?? 0), 2), 'FF1E3A5F'],
-                ['Invoiced Value (period)', 'KES '.number_format((float) ($valueSummary['invoiced_value'] ?? 0), 2), 'FF15803D'],
-                ['Backorder Value / Revenue at Risk (period SO lines)', 'KES '.number_format((float) ($valueSummary['backorder_value'] ?? 0), 2), 'FFDC2626'],
-            ], $kpiRows);
+            $kpiRows[] = ['', '', 'FF6B7280'];
+            $kpiRows[] = ['Context — ordered value in period (not RaR)', 'KES '.number_format((float) ($valueSummary['order_value'] ?? 0), 2), 'FF1E3A5F'];
+            $kpiRows[] = ['Context — invoiced / delivered value in period', 'KES '.number_format((float) ($valueSummary['invoiced_value'] ?? 0), 2), 'FF15803D'];
         }
 
+        $sheet->setCellValue("A{$r}", 'What matters (read these three first)');
+        $sheet->getStyle("A{$r}")->applyFromArray([
+            'font' => ['bold' => true, 'size' => 12],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE5E7EB']],
+        ]);
+        $r++;
+
         foreach ($kpiRows as [$label, $val, $color]) {
+            if ($label === '' && $val === '') {
+                $r++;
+                continue;
+            }
             $sheet->setCellValue("A{$r}", $label);
             $sheet->setCellValue("B{$r}", $val);
             $sheet->getStyle("A{$r}")->getFont()->setBold(true);
@@ -529,6 +568,27 @@ class BackorderExcelExporter
         }
 
         $r++;
+        $sheet->setCellValue("A{$r}", 'Who does what next');
+        $sheet->getStyle("A{$r}")->applyFromArray([
+            'font' => ['bold' => true, 'size' => 12],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE5E7EB']],
+        ]);
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Executives / HODs');
+        $sheet->setCellValue("B{$r}", 'Use this Summary + Customer Summary. Drill only if escalating.');
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Sales / Customer Service');
+        $sheet->setCellValue("B{$r}", 'Customer Summary + Backorders (filter your customers). Call customers; set missing reasons.');
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Warehouse / CS ops');
+        $sheet->setCellValue("B{$r}", 'Backorders where Stock Coverage = Full or Partial → release / ship / transfer.');
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Production');
+        $sheet->setCellValue("B{$r}", 'Manufactured Lines where Stock Coverage = None.');
+        $r++;
+        $sheet->setCellValue("A{$r}", 'Procurement / Partner Brands');
+        $sheet->setCellValue("B{$r}", 'Trading (Partners) Lines where Stock Coverage = None.');
+        $r += 2;
 
         if ($businessCategoryRows !== []) {
             $sheet->mergeCells("A{$r}:D{$r}");
@@ -620,77 +680,77 @@ class BackorderExcelExporter
             ? $ss->getActiveSheet()
             : $ss->createSheet();
 
-        $sheet->setTitle('Instructions');
+        $sheet->setTitle('Start Here');
 
         $lines = [
-            ['Backorders Export — How to Use This File', 'title'],
+            ['Backorders export — for executives and every team', 'title'],
             ['', ''],
-            ['This workbook is structured like the Fill Rate export. Guide to each sheet:', 'heading'],
+            ['Three questions this file answers', 'heading'],
+            ['1. How much money is stuck?  →  Summary: Revenue at Risk', ''],
+            ['2. What can we ship or release now?  →  Summary: Ready to release · Backorders where Stock Coverage is Full/Partial', ''],
+            ['3. What is blocked and who acts?  →  Stock Coverage = None · Owner and Next Action columns', ''],
             ['', ''],
-            ['1. Instructions (this sheet)', 'bold'],
-            ['   Guide to every sheet, plus Manufactured vs Trading classification rules.', ''],
+            ['Who should open which sheet', 'heading'],
+            ['Role', 'bold'],
+            ['Executives / C-suite / HODs', 'bold'],
+            ['   Open: Summary only. Optional: Customer Summary for escalation. Skip line dumps unless needed.', ''],
+            ['Sales consultants / Customer Service', 'bold'],
+            ['   Open: Customer Summary, then Backorders (your customers). Use Next Action = Call customer / Set reason.', ''],
+            ['Warehouse / Dispatch / CS ops', 'bold'],
+            ['   Open: Backorders. Filter Stock Coverage = Full or Partial. Next Action = Release / transfer.', ''],
+            ['Production', 'bold'],
+            ['   Open: Manufactured Lines. Focus Stock Coverage = None. Next Action = Produce.', ''],
+            ['Procurement / Partner Brands', 'bold'],
+            ['   Open: Trading (Partners) Lines. Focus Stock Coverage = None. Next Action = Procure.', ''],
+            ['All teams', 'bold'],
+            ['   Missing Price Values and unassigned reasons = data quality — fix so RaR and owners stay honest.', ''],
             ['', ''],
+            ['Sheet guide', 'heading'],
+            ['1. Start Here (this sheet)', 'bold'],
+            ['   Audience map and definitions.', ''],
             ['2. Summary', 'bold'],
-            ['   Executive dashboard: Total Revenue at Risk (RaR), Manufactured vs Trading split,', ''],
-            ['   optional Order / Invoice / Backorder period totals (sales order date),', ''],
-            ['   root cause top list, top 5 SKUs by Revenue at Risk, data-quality counts.', ''],
-            ['', ''],
+            ['   Decision dashboard: total RaR, ready to release, blocked (no stock), Manufactured vs Trading,', ''],
+            ['   top root causes, top SKUs. Start here every time.', ''],
             ['3. Backorders', 'bold'],
-            ['   Full line-level detail for every open/shortfall line in the filter set.', ''],
-            ['   Includes SO status, open qty, unit price, Revenue at Risk (KES), reason, Brand,', ''],
-            ['   fulfillment status, live qty on hand/available, backorder age + aging bucket,', ''],
-            ['   a missing-reason-exception flag, and Product Segment (Manufactured/Trading).', ''],
-            ['   Brand and Product Segment are different axes — see Business Category note below.', ''],
-            ['', ''],
+            ['   Every open line: order, customer, SKU, open qty, RaR, reason, stock on hand/available,', ''],
+            ['   Stock Coverage (Full / Partial / None), Owner, Next Action, age.', ''],
             ['4. Manufactured Lines', 'bold'],
-            ['   Filtered view of Kim-Fay manufactured product lines only.', ''],
-            ['', ''],
+            ['   Kim-Fay manufactured products only (Production focus).', ''],
             ['5. Trading (Partners) Lines', 'bold'],
-            ['   Filtered view of partner / third-party brand lines only.', ''],
-            ['', ''],
+            ['   Partner brands only — Dove, Lux, Rexona, Huggies, etc. (Procurement / Partner Brands).', ''],
             ['6. Exposure by SKU', 'bold'],
-            ['   SKU-by-SKU breakdown of Revenue at Risk. Each SKU has transaction rows + subtotal.', ''],
-            ['   Conditional formatting: gold cells = Revenue at Risk > KES 100,000.', ''],
-            ['', ''],
+            ['   Same RaR rolled up under each SKU with order rows (ops deep-dive). Gold = RaR > KES 100,000.', ''],
             ['7. Reason Summary', 'bold'],
-            ['   Root cause contribution — share of total Revenue at Risk by reason.', ''],
-            ['', ''],
+            ['   Why stock is short — share of RaR by root cause.', ''],
             ['8. Customer Summary', 'bold'],
-            ['   Customers ranked by Revenue at Risk.', ''],
-            ['', ''],
+            ['   Which customers are most exposed (sales & CS call list).', ''],
             ['9. Product Summary', 'bold'],
-            ['   All SKUs grouped by Inventory ID, sorted by Revenue at Risk.', ''],
-            ['', ''],
+            ['   SKUs ranked by RaR.', ''],
             ['10. Orders with Backorders', 'bold'],
-            ['   Sales-order rollup: line count, open qty, and total Revenue at Risk per SO.', ''],
-            ['', ''],
+            ['   One row per sales order with open shortfall.', ''],
             ['11. Missing Price Values', 'bold'],
-            ['   Data-quality check: lines with zero or missing unit price (cannot compute Revenue at Risk).', ''],
-            ['', ''],
+            ['   Lines with no unit price — RaR cannot be trusted until priced.', ''],
             ['12. Resolved Backorders', 'bold'],
-            ['   Lines that cleared (shipped, or their order completed) in the filter period.', ''],
-            ['   First Backordered At and Resolved At are independent dates — a line spanning two', ''],
-            ['   months is not forced into a single "owning" month.', ''],
+            ['   Cleared in the filter period (shipped / completed) — for recovery tracking.', ''],
             ['', ''],
-            ['How values are calculated', 'heading'],
-            ['Revenue at Risk (RaR) — full name for the metric sometimes abbreviated “RaR”.', ''],
-            ['Revenue at Risk (line) = open qty × unit price (unshipped remainder).', ''],
-            ['Never use order total or invoice total as Revenue at Risk.', ''],
-            ['Order / Invoice / Backorder cards (when present) use sales order date for the period:', ''],
-            ['   Order value = ordered qty × unit price', ''],
-            ['   Invoiced value = delivered qty × unit price (capped at ordered)', ''],
-            ['   Backorder value / Revenue at Risk = residual open qty × unit price', ''],
-            ['Aging bucket = days between First Backordered At and today: 0-7 / 8-14 / 15-30 / 30+.', ''],
-            ['Missing Reason Exception = aging bucket exceeds the configured threshold (default 7 days)', ''],
-            ['   with no reason assigned — a data-quality flag, not a new metric.', ''],
+            ['Plain-language definitions', 'heading'],
+            ['Revenue at Risk (RaR)', 'bold'],
+            ['   Money still committed on the order that has not shipped: open qty × unit price.', ''],
+            ['   Do NOT treat full order value or invoice total as RaR.', ''],
+            ['Stock Coverage', 'bold'],
+            ['   Full = available stock can cover open qty. Partial = some stock. None = nothing free to release.', ''],
+            ['Owner / Next Action', 'bold'],
+            ['   Suggested function and step so every row has a clear owner (not a blame score).', ''],
+            ['Manufactured vs Trading', 'bold'],
+            ['   Manufactured = Kim-Fay made (Fay, Sifa, Cosy…). Trading = partner brands (Dove, Lux, Rexona…).', ''],
+            ['Aging', 'bold'],
+            ['   Days since first backordered: 0-7 / 8-14 / 15-30 / 30+ days.', ''],
             ['', ''],
-            ['Business Category Classification', 'heading'],
-            ['Brand (e.g. "Fay Tissues") is the item\'s actual brand — the canonical display classification.', ''],
-            ['Product Segment (Manufactured vs Trading) is a separate, coarser axis used for value splits:', ''],
-            ['Manufactured (Kim-Fay): FAY, SIF, COS, TIS, ULT, STD, SHO, ANT, URI, TOI, AIR, ALK, DIS, …', ''],
-            ['Trading (Partners): DOV, REX, LUX, HUG, KOT, COW, APT, and other partner prefixes.', ''],
+            ['Scope note', 'heading'],
+            ['This file respects the filters you set in Sight and your login access (team / portfolio).', ''],
+            ['A sales consultant export is their book only. An executive export can be company-wide.', ''],
             ['', ''],
-            ['Generated by Kim-Fay OrderWatch', 'italic'],
+            ['Generated by Kim-Fay Sight (OrderWatch)', 'italic'],
         ];
 
         $r = 1;
@@ -719,8 +779,45 @@ class BackorderExcelExporter
     }
 
     // ---------------------------------------------------------------------------
-    // Helpers
+    // Helpers — coverage / ownership (same rules for Summary + line sheet)
     // ---------------------------------------------------------------------------
+
+    private function stockCoverage(float $openQty, float $qtyAvailable): string
+    {
+        if ($openQty <= 0) {
+            return 'N/A';
+        }
+        if ($qtyAvailable <= 0) {
+            return 'None';
+        }
+        if ($qtyAvailable + 0.0001 >= $openQty) {
+            return 'Full';
+        }
+
+        return 'Partial';
+    }
+
+    /**
+     * @return array{0: string, 1: string} [owner, next action]
+     */
+    private function ownerAndNextAction(string $coverage, string $inventoryId, string $reasonCode): array
+    {
+        $unassigned = $reasonCode === '' || strcasecmp($reasonCode, 'unassigned') === 0;
+        if ($unassigned) {
+            return ['Sales / Customer Service', 'Set root-cause reason on the line'];
+        }
+
+        $manufactured = $this->businessCategory->classify($inventoryId) === FillRateBusinessCategory::MANUFACTURED;
+
+        return match ($coverage) {
+            'Full' => ['Warehouse / Dispatch', 'Release stock — create / confirm shipment'],
+            'Partial' => ['Warehouse / Dispatch', 'Partial release or transfer stock from another warehouse'],
+            'None' => $manufactured
+                ? ['Production', 'Produce / prioritise manufacturing for this SKU']
+                : ['Procurement / Partner supply', 'Procure or chase partner supply'],
+            default => ['Operations', 'Review line with Supply and Sales'],
+        };
+    }
 
     private function raiseMemoryLimit(): void
     {
