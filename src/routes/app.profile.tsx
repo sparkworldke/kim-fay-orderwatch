@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, Mail, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch, ApiError } from "@/lib/api";
 import { setSession, setToken } from "@/lib/auth";
@@ -13,9 +13,12 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
+type PasswordOtpChannel = "email" | "whatsapp" | "both";
 
 export const Route = createFileRoute("/app/profile")({
-  head: () => ({ meta: [{ title: "Profile — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Profile — Kim-Fay Sight" }] }),
   component: ProfilePage,
 });
 
@@ -27,6 +30,7 @@ interface ProfileData {
   email: string;
   role: string;
   phone_number: string | null;
+  whatsapp_number: string | null;
   rep_code: string | null;
   employee_number: string | null;
   updated_at: string;
@@ -68,6 +72,7 @@ interface UserSessionsResponse {
 interface ProfileErrors {
   name?: string[];
   phone_number?: string[];
+  whatsapp_number?: string[];
   rep_code?: string[];
 }
 
@@ -133,9 +138,12 @@ function ProfilePage() {
   // Local form state
   const [name, setName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [sameContactNumber, setSameContactNumber] = useState(false);
   const [repCode, setRepCode] = useState("");
   const [fieldErrors, setFieldErrors] = useState<ProfileErrors>({});
   const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
+  const [passwordOtpChannel, setPasswordOtpChannel] = useState<PasswordOtpChannel>("email");
   const [passwordOtp, setPasswordOtp] = useState("");
   const [passwordOtpVerified, setPasswordOtpVerified] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -143,12 +151,15 @@ function ProfilePage() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showNewPasswordConfirmation, setShowNewPasswordConfirmation] = useState(false);
   const [passwordOtpSecondsLeft, setPasswordOtpSecondsLeft] = useState(0);
+  const [lastPasswordOtpDelivery, setLastPasswordOtpDelivery] = useState<string | null>(null);
 
   // Sync query data into form state
   useEffect(() => {
     if (profile) {
       setName(profile.name);
       setPhoneNumber(profile.phone_number ?? "");
+      setWhatsappNumber(profile.whatsapp_number ?? "");
+      setSameContactNumber(Boolean(profile.phone_number && profile.phone_number === profile.whatsapp_number));
       setRepCode(profile.rep_code ?? "");
     }
   }, [profile]);
@@ -170,6 +181,7 @@ function ProfilePage() {
         body: {
           name,
           phone_number: phoneNumber || null,
+          whatsapp_number: (sameContactNumber ? phoneNumber : whatsappNumber) || null,
           rep_code: profile?.role === "Sales Consultant" ? (repCode.trim() || null) : undefined,
         },
       }),
@@ -193,10 +205,17 @@ function ProfilePage() {
     },
   });
 
+  const hasWhatsApp = Boolean(profile?.whatsapp_number?.trim());
+  const effectivePasswordChannel: PasswordOtpChannel =
+    !hasWhatsApp && (passwordOtpChannel === "whatsapp" || passwordOtpChannel === "both")
+      ? "email"
+      : passwordOtpChannel;
+
   const requestPasswordOtpMutation = useMutation({
-    mutationFn: () =>
-      apiFetch<{ message: string }>("profile/password/otp", {
+    mutationFn: (channel: PasswordOtpChannel) =>
+      apiFetch<{ message: string; delivered?: string[]; failed?: string[] }>("profile/password/otp", {
         method: "POST",
+        body: { channel },
       }),
     onSuccess: (data) => {
       setPasswordPanelOpen(true);
@@ -205,12 +224,22 @@ function ProfilePage() {
       setNewPassword("");
       setNewPasswordConfirmation("");
       setPasswordOtpSecondsLeft(900);
-      toast.success(data.message || "Verification code sent to your email");
+      setLastPasswordOtpDelivery(data.message || "Verification code sent");
+      toast.success(data.message || "Verification code sent");
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : "Failed to send verification code");
     },
   });
+
+  const sendPasswordOtp = () => {
+    const channel = effectivePasswordChannel;
+    if ((channel === "whatsapp" || channel === "both") && !hasWhatsApp) {
+      toast.error("Add a WhatsApp number on your profile first, or choose Email only.");
+      return;
+    }
+    requestPasswordOtpMutation.mutate(channel);
+  };
 
   const verifyPasswordOtpMutation = useMutation({
     mutationFn: () =>
@@ -342,6 +371,33 @@ function ProfilePage() {
                 )}
               </div>
 
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={sameContactNumber}
+                  onChange={(event) => {
+                    setSameContactNumber(event.target.checked);
+                    if (event.target.checked) setWhatsappNumber(phoneNumber);
+                  }}
+                />
+                Use the same number for WhatsApp
+              </label>
+
+              {!sameContactNumber && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="profile-whatsapp">WhatsApp number</Label>
+                  <Input
+                    id="profile-whatsapp"
+                    value={whatsappNumber}
+                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                    placeholder="+254712345678"
+                  />
+                  {fieldErrors.whatsapp_number && (
+                    <p className="text-xs text-destructive">{fieldErrors.whatsapp_number[0]}</p>
+                  )}
+                </div>
+              )}
+
               {/* Role — read-only badge */}
               <div className="space-y-1.5">
                 <Label>Role</Label>
@@ -406,14 +462,79 @@ function ProfilePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Start a password update by verifying a code sent to your registered email.
+            Start a password update by verifying a code sent to your registered email, WhatsApp, or both.
           </p>
+
+          <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+            <Label className="text-sm font-medium">Send verification code via</Label>
+            <RadioGroup
+              value={effectivePasswordChannel}
+              onValueChange={(value) => setPasswordOtpChannel(value as PasswordOtpChannel)}
+              className="grid gap-2"
+              disabled={requestPasswordOtpMutation.isPending}
+            >
+              <label
+                htmlFor="pwd-otp-email"
+                className="flex cursor-pointer items-start gap-3 rounded-md border bg-background px-3 py-2.5 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+              >
+                <RadioGroupItem value="email" id="pwd-otp-email" className="mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 text-sm font-medium">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                    Email
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {profile?.email ?? "Your registered email"}
+                  </p>
+                </div>
+              </label>
+
+              <label
+                htmlFor="pwd-otp-whatsapp"
+                className={`flex items-start gap-3 rounded-md border bg-background px-3 py-2.5 ${
+                  hasWhatsApp
+                    ? "cursor-pointer has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                    : "cursor-not-allowed opacity-60"
+                }`}
+              >
+                <RadioGroupItem value="whatsapp" id="pwd-otp-whatsapp" className="mt-0.5" disabled={!hasWhatsApp} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 text-sm font-medium">
+                    <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    WhatsApp
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {hasWhatsApp
+                      ? profile?.whatsapp_number
+                      : "Add a WhatsApp number in Personal information first"}
+                  </p>
+                </div>
+              </label>
+
+              <label
+                htmlFor="pwd-otp-both"
+                className={`flex items-start gap-3 rounded-md border bg-background px-3 py-2.5 ${
+                  hasWhatsApp
+                    ? "cursor-pointer has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                    : "cursor-not-allowed opacity-60"
+                }`}
+              >
+                <RadioGroupItem value="both" id="pwd-otp-both" className="mt-0.5" disabled={!hasWhatsApp} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">Both (Email + WhatsApp)</div>
+                  <p className="text-xs text-muted-foreground">
+                    Same code delivered on both channels
+                  </p>
+                </div>
+              </label>
+            </RadioGroup>
+          </div>
 
           {!passwordPanelOpen ? (
             <Button
               variant="outline"
-              onClick={() => requestPasswordOtpMutation.mutate()}
-              disabled={requestPasswordOtpMutation.isPending}
+              onClick={sendPasswordOtp}
+              disabled={requestPasswordOtpMutation.isPending || profileLoading}
             >
               {requestPasswordOtpMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -422,6 +543,9 @@ function ProfilePage() {
             </Button>
           ) : (
             <div className="space-y-4">
+              {lastPasswordOtpDelivery ? (
+                <p className="text-xs text-muted-foreground">{lastPasswordOtpDelivery}</p>
+              ) : null}
               <div className="space-y-2">
                 <Label>Verification code</Label>
                 <InputOTP
@@ -452,7 +576,7 @@ function ProfilePage() {
                   <button
                     type="button"
                     className="self-start font-medium text-primary hover:underline disabled:opacity-50 sm:self-auto"
-                    onClick={() => requestPasswordOtpMutation.mutate()}
+                    onClick={sendPasswordOtp}
                     disabled={requestPasswordOtpMutation.isPending}
                   >
                     {requestPasswordOtpMutation.isPending ? "Sending..." : "Resend OTP"}
@@ -552,6 +676,7 @@ function ProfilePage() {
                   variant="ghost"
                   onClick={() => {
                     setPasswordPanelOpen(false);
+                    setLastPasswordOtpDelivery(null);
                     setPasswordOtp("");
                     setPasswordOtpVerified(false);
                     setNewPassword("");

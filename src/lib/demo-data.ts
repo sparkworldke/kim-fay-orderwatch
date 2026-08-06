@@ -1,4 +1,4 @@
-// Deterministic seeded demo data for Kim-Fay OrderWatch.
+// Deterministic seeded demo data for Kim-Fay Sight.
 
 function mulberry32(seed: number) {
   let a = seed;

@@ -2,66 +2,124 @@
 
 namespace App\Services\AI;
 
-use App\Services\Admin\AiConnectorService;
-use App\Services\AI\AiPromptLogService;
-use Illuminate\Support\Facades\Http;
+use App\Exceptions\AiGenerationException;
 use Throwable;
 
 class AiIntelligenceInsightService
 {
     public function __construct(
-        private readonly AiConnectorService $ai,
+        private readonly LlmClient $llm,
         private readonly AiPromptLogService $logger,
     ) {}
 
-    /** @param  array<string, mixed>  $payload */
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @throws AiGenerationException
+     */
     public function generate(array $payload): array
     {
-        [$provider, $apiKey] = $this->ai->resolveKey();
-        if (! $apiKey) {
-            return $this->fallback($payload, 'unavailable');
-        }
-
         $system = $this->systemPrompt();
-        $user = 'Generate an executive intelligence briefing from this OrderWatch dataset: '.json_encode($payload, JSON_PRETTY_PRINT);
+        $user = 'Generate an executive intelligence briefing from this OrderWatch dataset (compact JSON): '
+            .json_encode($this->compactPayload($payload), JSON_UNESCAPED_UNICODE);
         $start = microtime(true);
 
         try {
-            $raw = $provider === 'anthropic'
-                ? $this->callAnthropic($apiKey, $system, $user)
-                : $this->callOpenAi($apiKey, $system, $user);
-
-            $parsed = $this->parse($raw);
+            $result = $this->llm->chatJson($system, $user);
+            $parsed = $this->parse($result['content']);
             $elapsed = (int) ((microtime(true) - $start) * 1000);
 
             $this->logger->log([
-                'prompt' => $user,
+                'prompt' => mb_substr($user, 0, 8000),
                 'intent' => 'ai_intelligence_briefing',
                 'domains' => ['orders', 'customers'],
-                'ai_message' => $raw,
-                'provider' => $provider,
+                'ai_message' => mb_substr($result['content'], 0, 8000),
+                'provider' => $result['provider'],
                 'response_time_ms' => $elapsed,
                 'status' => 'success',
             ]);
 
-            return array_merge($parsed, ['ai_status' => 'success', 'provider' => $provider]);
-        } catch (Throwable $e) {
+            return array_merge($parsed, [
+                'ai_status' => 'success',
+                'provider' => $result['provider'],
+                'model' => $result['model'],
+            ]);
+        } catch (AiGenerationException $e) {
             $elapsed = (int) ((microtime(true) - $start) * 1000);
             $this->logger->log([
-                'prompt' => $user,
+                'prompt' => mb_substr($user, 0, 8000),
                 'intent' => 'ai_intelligence_briefing',
-                'provider' => $provider,
+                'provider' => $e->provider,
                 'response_time_ms' => $elapsed,
                 'status' => 'failed',
                 'error_message' => $e->getMessage(),
             ]);
 
-            return array_merge($this->fallback($payload, 'failed'), ['ai_error' => $e->getMessage()]);
+            if (config('ai.allow_template_fallback')) {
+                return array_merge($this->fallback($payload, $e->codeKey === 'AI_KEY_MISSING' ? 'unavailable' : 'failed'), [
+                    'ai_error' => $e->getMessage(),
+                    'provider' => $e->provider,
+                ]);
+            }
+
+            throw $e;
+        } catch (Throwable $e) {
+            $elapsed = (int) ((microtime(true) - $start) * 1000);
+            $this->logger->log([
+                'prompt' => mb_substr($user, 0, 8000),
+                'intent' => 'ai_intelligence_briefing',
+                'response_time_ms' => $elapsed,
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+            ]);
+
+            if (config('ai.allow_template_fallback')) {
+                return array_merge($this->fallback($payload, 'failed'), [
+                    'ai_error' => mb_substr($e->getMessage(), 0, 500),
+                ]);
+            }
+
+            throw new AiGenerationException(
+                mb_substr($e->getMessage(), 0, 500),
+                'AI_PROVIDER_ERROR',
+                502,
+            );
         }
     }
 
+    /**
+     * Compact metrics for the LLM (cost + context limit control).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function compactPayload(array $payload): array
+    {
+        $customers = $payload['customers'] ?? [];
+
+        return [
+            'period' => $payload['period'] ?? null,
+            'comparison_period' => $payload['comparison_period'] ?? null,
+            'orders' => $payload['orders'] ?? null,
+            'orders_comparison' => $payload['orders_comparison'] ?? null,
+            'customers' => [
+                'unique_customers' => $customers['unique_customers'] ?? 0,
+                'prior_unique_customers' => $customers['prior_unique_customers'] ?? 0,
+                'top_customers' => array_slice($customers['top_customers'] ?? [], 0, 8),
+                'fastest_growth' => array_slice($customers['fastest_growth'] ?? [], 0, 5),
+                'fastest_decline' => array_slice($customers['fastest_decline'] ?? [], 0, 5),
+                'went_quiet' => array_slice($customers['went_quiet'] ?? [], 0, 10),
+                'new_or_returning' => array_slice($customers['new_or_returning'] ?? [], 0, 8),
+            ],
+            'projections' => $payload['projections'] ?? null,
+            'historical_weekly' => array_slice($payload['historical_weekly'] ?? [], -8),
+            'daily_trend_tail' => array_slice($payload['daily_trend'] ?? [], -14),
+        ];
+    }
+
     /** @param  array<string, mixed>  $payload */
-    private function fallback(array $payload, string $status): array
+    public function fallback(array $payload, string $status): array
     {
         $orders = $payload['orders'] ?? [];
         $cmp = $payload['orders_comparison']['orders_received'] ?? null;
@@ -101,7 +159,7 @@ class AiIntelligenceInsightService
                     $customers['unique_customers'] ?? 0,
                     $customers['prior_unique_customers'] ?? 0,
                 ),
-                'highlights' => array_filter([
+                'highlights' => array_values(array_filter([
                     ($customers['fastest_growth'][0]['customer_name'] ?? null)
                         ? 'Strongest growth: '.($customers['fastest_growth'][0]['customer_name'] ?? '')
                         : null,
@@ -111,7 +169,7 @@ class AiIntelligenceInsightService
                     count($customers['went_quiet'] ?? []) > 0
                         ? count($customers['went_quiet']).' previously active accounts went quiet'
                         : null,
-                ]),
+                ])),
             ],
             'predictions' => [
                 'summary' => sprintf(
@@ -152,7 +210,7 @@ Return ONLY valid JSON:
 Rules:
 - Use ONLY numbers from the payload. Never invent figures.
 - Use KES for currency.
-- Predictions must reference projections and historical_weekly data provided.
+- Predictions must reference projections and historical data provided.
 - Be direct, executive-friendly, no markdown.
 PROMPT;
     }
@@ -168,7 +226,11 @@ PROMPT;
 
         $decoded = json_decode($clean, true);
         if (! is_array($decoded)) {
-            throw new \RuntimeException('AI intelligence response was not valid JSON.');
+            throw new AiGenerationException(
+                'AI intelligence response was not valid JSON.',
+                'AI_PROVIDER_ERROR',
+                502,
+            );
         }
 
         return [
@@ -187,43 +249,5 @@ PROMPT;
             ],
             'actions' => array_values($decoded['actions'] ?? []),
         ];
-    }
-
-    private function callOpenAi(string $key, string $system, string $user): string
-    {
-        $response = Http::withToken($key)->timeout(60)->post('https://api.openai.com/v1/chat/completions', [
-            'model' => 'gpt-4o-mini',
-            'messages' => [
-                ['role' => 'system', 'content' => $system],
-                ['role' => 'user', 'content' => $user],
-            ],
-            'max_tokens' => 1800,
-            'response_format' => ['type' => 'json_object'],
-        ]);
-
-        if (! $response->successful()) {
-            throw new \RuntimeException('OpenAI error: '.($response->json('error.message') ?? $response->body()));
-        }
-
-        return $response->json('choices.0.message.content') ?? '';
-    }
-
-    private function callAnthropic(string $key, string $system, string $user): string
-    {
-        $response = Http::withHeaders([
-            'x-api-key' => $key,
-            'anthropic-version' => '2023-06-01',
-        ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-            'model' => 'claude-haiku-4-5-20251001',
-            'system' => $system,
-            'messages' => [['role' => 'user', 'content' => $user]],
-            'max_tokens' => 1800,
-        ]);
-
-        if (! $response->successful()) {
-            throw new \RuntimeException('Anthropic error: '.($response->json('error.message') ?? $response->body()));
-        }
-
-        return $response->json('content.0.text') ?? '';
     }
 }

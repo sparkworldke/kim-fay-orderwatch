@@ -13,7 +13,6 @@ use App\Services\Team\UserSessionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class OtpController extends Controller
@@ -35,13 +34,6 @@ class OtpController extends Controller
         $user = User::where('email', $email)->first();
 
         if (! $user) {
-            Log::info('otp_request', [
-                'email_hash' => hash('sha256', $email),
-                'purpose' => $purpose,
-                'ip' => $request->ip(),
-                'outcome' => 'email_not_found',
-            ]);
-
             return response()->json([
                 'message' => 'This email is not registered in OrderWatch.',
                 'code' => 'email_not_registered',
@@ -49,13 +41,6 @@ class OtpController extends Controller
         }
 
         if (! $user->isEligibleForOtp()) {
-            Log::warning('otp_request_blocked', [
-                'email_hash' => hash('sha256', $email),
-                'purpose' => $purpose,
-                'ip' => $request->ip(),
-                'outcome' => 'user_inactive_or_unverified',
-            ]);
-
             return response()->json([
                 'message' => 'This account is not active. Contact your administrator.',
                 'code' => 'account_inactive',
@@ -100,27 +85,11 @@ class OtpController extends Controller
         } catch (\Throwable $e) {
             $otpRecord->delete();
 
-            Log::error('otp_mail_failed', [
-                'email_hash' => hash('sha256', $email),
-                'purpose' => $purpose,
-                'mail_mailer' => config('mail.default'),
-                'mail_from' => config('mail.from.address'),
-                'exception' => $e::class,
-                'error' => $e->getMessage(),
-            ]);
-
             return response()->json([
                 'message' => 'Failed to send verification email. Please try again.',
                 'code' => 'otp_mail_failed',
             ], 503);
         }
-
-        Log::info('otp_request', [
-            'email_hash' => hash('sha256', $email),
-            'purpose' => $purpose,
-            'ip' => $request->ip(),
-            'outcome' => 'otp_dispatched',
-        ]);
 
         return response()->json([
             'message' => 'Verification code sent.',
@@ -246,13 +215,6 @@ class OtpController extends Controller
 
         $this->recordSignInLog($request, $user, $email, $loginMode, 'success');
         $sessions->open($user, $request, 'otp');
-
-        Log::info('otp_verify', [
-            'email_hash' => hash('sha256', $email),
-            'ip' => $request->ip(),
-            'login_mode' => $loginMode,
-            'outcome' => 'verified',
-        ]);
 
         $user->loadMissing('department');
 

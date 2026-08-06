@@ -8,6 +8,7 @@ use App\Models\AcumaticaDeadLetter;
 use App\Models\AcumaticaReconciliationResult;
 use App\Models\AcumaticaSyncLog;
 use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
+use App\Services\Cache\DomainCache;
 use Throwable;
 
 class AcumaticaCustomerSyncService
@@ -20,7 +21,7 @@ class AcumaticaCustomerSyncService
     ) {
     }
 
-    public function run(?int $triggeredByUserId = null): AcumaticaSyncLog
+    public function run(?int $triggeredByUserId = null, ?string $dateFrom = null, ?string $dateTo = null): AcumaticaSyncLog
     {
         $this->assertNoActiveSync(
             ['customers'],
@@ -36,6 +37,7 @@ class AcumaticaCustomerSyncService
             'failed_count'         => 0,
             'trigger_type'         => $triggeredByUserId ? 'manual' : 'background',
             'triggered_by_user_id' => $triggeredByUserId,
+            'filters' => array_filter(['date_from' => $dateFrom, 'date_to' => $dateTo]),
         ]);
 
         StructuredLogger::write('info', 'acumatica', 'customer_sync_started', [
@@ -47,6 +49,7 @@ class AcumaticaCustomerSyncService
             $this->shippingZoneSync->run(
                 triggeredByUserId: $triggeredByUserId,
                 allowCustomerFallback: false,
+                filters: array_filter(['date_from' => $dateFrom, 'date_to' => $dateTo]),
             );
 
             $customers = $this->client->fetchAllCustomers(fn () => $this->touchSyncRun($run));
@@ -111,6 +114,16 @@ class AcumaticaCustomerSyncService
                 'sync_run_id' => $run->id,
                 'error'       => $e->getMessage(),
             ]);
+        }
+
+        if ($run->status === 'completed') {
+            app(DomainCache::class)->bump(
+                DomainCache::ORDERS,
+                DomainCache::CUSTOMER_ANALYTICS,
+                DomainCache::SALES_PORTFOLIO,
+                DomainCache::SALES_INTELLIGENCE,
+                DomainCache::KP_CRM,
+            );
         }
 
         return $run->fresh();

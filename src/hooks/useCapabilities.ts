@@ -14,8 +14,15 @@ export type UserCapabilities = {
     is_customer_facing: boolean;
   } | null;
   department_role: string;
+  org_level?: string;
   is_consultant: boolean;
   employee_number: string | null;
+  has_reportees: boolean;
+  sales_intelligence_channels: string[];
+  /** COO / admin / store mgr / production mgr — MSI, safety & buffer bulk upload. */
+  can_manage_production_planning?: boolean;
+  can_manage_users: boolean;
+  unrestricted_business_access: boolean;
   idle_timeout_minutes: number;
 };
 
@@ -26,8 +33,14 @@ const FALLBACK: UserCapabilities = {
   mask_revenue: false,
   department: null,
   department_role: "member",
+  org_level: undefined,
   is_consultant: false,
   employee_number: null,
+  has_reportees: false,
+  sales_intelligence_channels: ["portfolio"],
+  can_manage_production_planning: false,
+  can_manage_users: false,
+  unrestricted_business_access: false,
   idle_timeout_minutes: 60,
 };
 

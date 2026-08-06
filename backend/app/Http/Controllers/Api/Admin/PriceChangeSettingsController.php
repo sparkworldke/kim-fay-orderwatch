@@ -32,11 +32,32 @@ class PriceChangeSettingsController extends Controller
             'erp_updater_emails.*' => ['email', 'max:255'],
             'mail_from_address' => ['sometimes', 'email', 'max:255'],
             'mail_from_name' => ['sometimes', 'string', 'max:255'],
+            // Full replace of the dynamic PCR notification list.
+            'mail_recipients' => ['sometimes', 'array'],
+            'mail_recipients.*' => ['email', 'max:255'],
+            // Incremental add/remove without replacing the whole list.
+            'attach_mail_recipients' => ['sometimes', 'array'],
+            'attach_mail_recipients.*' => ['email', 'max:255'],
+            'detach_mail_recipients' => ['sometimes', 'array'],
+            'detach_mail_recipients.*' => ['email', 'max:255'],
             'allow_admin_testing_override' => ['sometimes', 'boolean'],
         ]);
 
+        if (array_key_exists('attach_mail_recipients', $validated)) {
+            $this->pcr->attachMailRecipients($validated['attach_mail_recipients']);
+            unset($validated['attach_mail_recipients']);
+        }
+        if (array_key_exists('detach_mail_recipients', $validated)) {
+            $this->pcr->detachMailRecipients($validated['detach_mail_recipients']);
+            unset($validated['detach_mail_recipients']);
+        }
+
+        $settings = $validated === []
+            ? $this->pcr->settings()
+            : $this->pcr->saveSettings($validated);
+
         return response()->json([
-            'settings' => $this->pcr->saveSettings($validated),
+            'settings' => $settings,
             'stages' => $this->pcr->stages(activeOnly: false),
         ]);
     }

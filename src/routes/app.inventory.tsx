@@ -14,6 +14,7 @@ import { SkuDetailPanel } from "@/components/inventory/SkuDetailPanel";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,10 +37,12 @@ import {
 import type { InventoryItemExtended } from "@/hooks/useInventoryByWarehouse";
 import type { AcumaticaSyncLog } from "@/types/admin";
 import { downloadApiFile } from "@/lib/api";
+import { useQueueExportDownload } from "@/hooks/useExportDownloads";
 import { cn } from "@/lib/utils";
+import { DATE_PRESETS, type DatePresetId, resolveDatePreset } from "@/lib/date-presets";
 
 export const Route = createFileRoute("/app/inventory")({
-  head: () => ({ meta: [{ title: "Inventory — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Inventory — Kim-Fay Sight" }] }),
   validateSearch: (search: Record<string, unknown>) => ({
     sku: typeof search.sku === "string" ? search.sku : undefined,
     tab: search.tab === "stockout" ? "stockout" as const : "all" as const,
@@ -88,14 +91,20 @@ function InventoryPage() {
   const [activeTab, setActiveTab] = useState<"all" | "stockout">(tabFromUrl ?? "all");
   const [q, setQ] = useState("");
   const [lowStock, setLowStock] = useState(false);
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>("FGS");
   const [predictionStatus, setPredictionStatus] = useState("all");
   const [stockoutFilter, setStockoutFilter] = useState<InventoryStockoutFilter>("critical_or_oos");
   const [productType, setProductType] = useState("all");
   const [importWarehouseId, setImportWarehouseId] = useState("FGS");
+  const initialSyncRange = resolveDatePreset("this_month");
+  const [syncDatePreset, setSyncDatePreset] = useState<DatePresetId>("this_month");
+  const [syncDateFrom, setSyncDateFrom] = useState(initialSyncRange.from);
+  const [syncDateTo, setSyncDateTo] = useState(initialSyncRange.to);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isQueuingDownload, setIsQueuingDownload] = useState(false);
+  const queueExport = useQueueExportDownload();
   const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(skuFromUrl ?? null);
   const [brandFilter, setBrandFilter] = useState<BrandFilterValue>({
     partner_brand: "",
@@ -168,7 +177,15 @@ function InventoryPage() {
   }
 
   function handleUpdate() {
-    const body = importWarehouseId !== "all" ? { warehouse_id: importWarehouseId } : undefined;
+    if (!syncDateFrom || !syncDateTo || syncDateFrom > syncDateTo) {
+      toast.error("Select a valid sync date range.");
+      return;
+    }
+    const body = {
+      ...(importWarehouseId !== "all" ? { warehouse_id: importWarehouseId } : {}),
+      date_from: syncDateFrom,
+      date_to: syncDateTo,
+    };
     sync.mutate(body, {
       onSuccess: (res) => {
         if (res.sync_run.status === "completed") {
@@ -188,7 +205,15 @@ function InventoryPage() {
   }
 
   function handleSyncStocks() {
-    const body = importWarehouseId !== "all" ? { warehouse_id: importWarehouseId } : undefined;
+    if (!syncDateFrom || !syncDateTo || syncDateFrom > syncDateTo) {
+      toast.error("Select a valid sync date range.");
+      return;
+    }
+    const body = {
+      ...(importWarehouseId !== "all" ? { warehouse_id: importWarehouseId } : {}),
+      date_from: syncDateFrom,
+      date_to: syncDateTo,
+    };
     syncStocks.mutate(body, {
       onSuccess: (res) => {
         const msg = formatOpsSyncToast("Stocks", res.sync_run);
@@ -212,17 +237,36 @@ function InventoryPage() {
     });
   }
 
+  function applySyncDatePreset(preset: DatePresetId) {
+    setSyncDatePreset(preset);
+    if (preset !== "custom") {
+      const range = resolveDatePreset(preset);
+      setSyncDateFrom(range.from);
+      setSyncDateTo(range.to);
+    }
+  }
+
+  function exportFilters(): Record<string, string> {
+    const filters: Record<string, string> = {};
+    if (q) filters.q = q;
+    if (!isStockoutTab && lowStock) filters.low_stock = "1";
+    if (selectedWarehouse) filters["warehouse_id[]"] = selectedWarehouse;
+    if (!isStockoutTab && predictionStatus !== "all") filters.prediction_status = predictionStatus;
+    if (isStockoutTab) filters.stockout_filter = stockoutFilter;
+    if (productType !== "all") filters.product_type = productType;
+    if (brandFilter.partner_brand) filters.partner_brand = brandFilter.partner_brand;
+    if (brandFilter.brand) filters.brand = brandFilter.brand;
+    if (brandFilter.category) filters.category = brandFilter.category;
+    return filters;
+  }
+
   async function handleDownload() {
     const qs = new URLSearchParams();
-    if (q) qs.set("q", q);
-    if (!isStockoutTab && lowStock) qs.set("low_stock", "1");
-    if (selectedWarehouse) qs.append("warehouse_id[]", selectedWarehouse);
-    if (!isStockoutTab && predictionStatus !== "all") qs.set("prediction_status", predictionStatus);
-    if (isStockoutTab) qs.set("stockout_filter", stockoutFilter);
-    if (productType !== "all") qs.set("product_type", productType);
-    if (brandFilter.partner_brand) qs.set("partner_brand", brandFilter.partner_brand);
-    if (brandFilter.brand) qs.set("brand", brandFilter.brand);
-    if (brandFilter.category) qs.set("category", brandFilter.category);
+    const filters = exportFilters();
+    for (const [k, v] of Object.entries(filters)) {
+      if (k === "warehouse_id[]") qs.append("warehouse_id[]", v);
+      else qs.set(k, v);
+    }
 
     setIsDownloading(true);
     try {
@@ -240,6 +284,21 @@ function InventoryPage() {
     }
   }
 
+  async function handleQueueDownload() {
+    setIsQueuingDownload(true);
+    try {
+      const res = await queueExport.mutateAsync({
+        type: "inventory",
+        filters: exportFilters(),
+      });
+      toast.success(res.message || "Export queued. Open Downloads when ready.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to queue export.");
+    } finally {
+      setIsQueuingDownload(false);
+    }
+  }
+
   const anySyncPending = sync.isPending || syncStocks.isPending || anySyncActive;
 
   return (
@@ -252,6 +311,21 @@ function InventoryPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[145px]">
+            <Label className="text-xs">Sync dates (audit)</Label>
+            <Select value={syncDatePreset} onValueChange={(value) => applySyncDatePreset(value as DatePresetId)}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>{DATE_PRESETS.map((preset) => <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">From</Label>
+            <Input type="date" value={syncDateFrom} onChange={(e) => { setSyncDatePreset("custom"); setSyncDateFrom(e.target.value); }} className="h-9 w-36" />
+          </div>
+          <div>
+            <Label className="text-xs">To</Label>
+            <Input type="date" value={syncDateTo} onChange={(e) => { setSyncDatePreset("custom"); setSyncDateTo(e.target.value); }} className="h-9 w-36" />
+          </div>
           <div className="min-w-[150px]">
             <Label className="text-xs">Import warehouse</Label>
             <Select value={importWarehouseId} onValueChange={setImportWarehouseId}>
@@ -272,9 +346,17 @@ function InventoryPage() {
             <RefreshCw className={`mr-2 h-4 w-4 ${syncStocks.isPending ? "animate-spin" : ""}`} />
             {syncStocks.isPending || activeStocksSync ? "Syncing stocks…" : "Sync stocks only"}
           </Button>
-          <Button variant="outline" onClick={handleDownload} disabled={isDownloading}>
+          <Button variant="outline" onClick={handleDownload} disabled={isDownloading || isQueuingDownload}>
             <FileDown className={`mr-2 h-4 w-4 ${isDownloading ? "animate-pulse" : ""}`} />
             {isDownloading ? "Preparing..." : "Download Excel"}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => void handleQueueDownload()}
+            disabled={isDownloading || isQueuingDownload}
+          >
+            <FileDown className={`mr-2 h-4 w-4 ${isQueuingDownload ? "animate-pulse" : ""}`} />
+            {isQueuingDownload ? "Queuing…" : "Queue download"}
           </Button>
           <Button onClick={handleUpdate} disabled={anySyncPending}>
             <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />

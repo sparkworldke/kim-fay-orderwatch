@@ -59,7 +59,7 @@ import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/business-optimization")({
-  head: () => ({ meta: [{ title: "Business Optimization - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Business Optimization - Kim-Fay Sight" }] }),
   component: BusinessOptimizationPage,
 });
 

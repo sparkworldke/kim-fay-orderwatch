@@ -93,9 +93,9 @@ class CustomerSeeder extends Seeder
                     [
                         'user_id'                 => $matchedUser['id'],
                         'customer_acumatica_id'   => $customer->acumatica_id,
+                        'assignment_type'         => UserCustomerAssignment::TYPE_SERVICING,
                     ],
                     [
-                        'assignment_type' => 'primary',
                         'source'          => 'seeder',
                         'confidence'      => 100,
                     ],

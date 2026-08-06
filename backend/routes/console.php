@@ -1,6 +1,5 @@
 <?php
 
-use App\Console\Commands\EvaluateOrderMatchNotifications;
 use App\Console\Commands\PruneExpiredOtps;
 use App\Models\CronJob;
 use Illuminate\Foundation\Inspiring;
@@ -16,9 +15,28 @@ Schedule::command(PruneExpiredOtps::class)
     ->everyFifteenMinutes()
     ->withoutOverlapping(10, releaseOnTerminationSignals: false);
 
-Schedule::command(EvaluateOrderMatchNotifications::class)
-    ->hourly()
-    ->withoutOverlapping(15, releaseOnTerminationSignals: false);
+Schedule::command('orderwatch:sync-dtc-prices --source=scheduler')
+    ->dailyAt('05:30')
+    ->timezone((string) config('cron.timezone', config('app.timezone')))
+    ->withoutOverlapping(30, releaseOnTerminationSignals: false)
+    ->name('dtc-price-sync');
+
+Schedule::command('orderwatch:send-consultant-inactivity-digests')
+    ->hourlyAt(15)
+    ->timezone((string) config('cron.timezone', config('app.timezone')))
+    ->withoutOverlapping(20, releaseOnTerminationSignals: false)
+    ->name('sales-consultant-inactivity-digests');
+
+Schedule::command('production:summaries-refresh --recent')
+    ->everyFiveMinutes()
+    ->withoutOverlapping(20, releaseOnTerminationSignals: false)
+    ->name('production-summary-refresh');
+
+// Order-match notification emails (R5/R6) are paused — only System Health + Daily Report
+// remain active. Re-enable via cron_jobs row + notification_rules is_enabled when needed.
+// Schedule::command(EvaluateOrderMatchNotifications::class)
+//     ->hourly()
+//     ->withoutOverlapping(15, releaseOnTerminationSignals: false);
 
 // Single owner of the daily management email schedule.
 // Do not also register this command from cron_jobs (see skip below) or system crontab
@@ -29,10 +47,11 @@ Schedule::command('orderwatch:send-daily-report-fixed --source=scheduler')
     ->withoutOverlapping(30, releaseOnTerminationSignals: false)
     ->name('orderwatch-daily-report-fixed');
 
-Schedule::command('orderwatch:sync-monitor --source=scheduler')
-    ->everyMinute()
-    ->timezone((string) config('cron.timezone', config('app.timezone')))
-    ->withoutOverlapping(5, releaseOnTerminationSignals: false);
+// Sync-monitor alerts paused (high volume). Keep system-health-daily + daily report only.
+// Schedule::command('orderwatch:sync-monitor --source=scheduler')
+//     ->everyMinute()
+//     ->timezone((string) config('cron.timezone', config('app.timezone')))
+//     ->withoutOverlapping(5, releaseOnTerminationSignals: false);
 
 try {
     CronJob::ensureDefaults();
@@ -52,9 +71,13 @@ try {
         // Also block any legacy / renamed DB rows that still point at daily-report commands
         // (those were causing multiple emails when both the hard-coded schedule and a
         // cron_jobs row fired the same artisan command).
+        // otp:prune is hard-scheduled via PruneExpiredOtps::class; skip the cron_jobs row
+        // so it is not registered twice (and so --source is not forced on it twice).
         if (
             $job->job_key === 'daily-report-fixed-scheduler'
+            || $job->job_key === 'otp-prune'
             || str_contains($command, 'send-daily-report')
+            || str_contains($command, 'otp:prune')
         ) {
             continue;
         }
@@ -77,23 +100,18 @@ try {
             continue;
         }
 
-        $overlapMinutes = match (true) {
-            str_starts_with((string) $job->job_key, 'inventory-sync-') => 25,
-            $job->job_key === 'email-sales-order-auto-match' => 55,
-            $job->job_key === 'sales-order-status-sync' => 25,
-            $job->job_key === 'sales-order-prune-missing' => 50,
-            $job->job_key === 'inventory-sync-5h' => 220,
-            $job->job_key === 'backorders-daily-4pm' => 360,
-            in_array($job->job_key, ['fill-rate-nightly', 'fill-rate-noon'], true) => 360,
-            $job->job_key === 'system-health-daily' => 30,
-            default => 115,
-        };
-
+        // Overlap prevention is owned by CronExecutionService, which every DB-driven
+        // command already calls: it takes an atomic cache lock per job_key and now also
+        // recovers stale locks automatically. Layering Laravel's withoutOverlapping() on
+        // top here created a SECOND lock with a different TTL that was never released
+        // when a process died hard (releaseOnTerminationSignals:false) — so heavy jobs
+        // (full Sales Order import, Backorder) skipped every run as "previous run still
+        // active" after a deploy/restart. A single lock authority fixes that.
         foreach ($expressions as $expr) {
             Schedule::command($command.' --source=scheduler')
                 ->cron($expr)
-                ->timezone($timezone)
-                ->withoutOverlapping($overlapMinutes, releaseOnTerminationSignals: false);
+                ->name($job->job_key)
+                ->timezone($timezone);
         }
     }
 } catch (\Throwable $e) {

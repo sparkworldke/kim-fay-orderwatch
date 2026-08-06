@@ -76,14 +76,24 @@ class PriceChangeRequestController extends Controller
     public function decision(Request $request, PriceChangeRequest $priceChangeRequest): JsonResponse
     {
         $validated = $request->validate([
-            'decision' => ['required', Rule::in(['approved', 'rejected'])],
+            'decision' => ['required', Rule::in(['approved', 'rejected', 'countered'])],
             'comment' => ['required', 'string', 'min:2', 'max:5000'],
+            'revised_price' => ['nullable', 'required_if:decision,countered', 'numeric', 'min:0.01'],
         ]);
         $this->authorizeView($request, $priceChangeRequest);
 
-        $pcr = $this->pcr->decide($request->user(), $priceChangeRequest, $validated['decision'], $validated['comment']);
+        $pcr = $validated['decision'] === 'countered'
+            ? $this->pcr->counter($request->user(), $priceChangeRequest, (float) $validated['revised_price'], $validated['comment'])
+            : $this->pcr->decide($request->user(), $priceChangeRequest, $validated['decision'], $validated['comment']);
 
         return response()->json($this->pcr->present($request->user(), $pcr));
+    }
+
+    public function respondCounter(Request $request, PriceChangeRequest $priceChangeRequest): JsonResponse
+    {
+        $data=$request->validate(['action'=>['required',Rule::in(['accept','withdraw'])]]);
+        $this->authorizeView($request,$priceChangeRequest);
+        return response()->json($this->pcr->present($request->user(),$this->pcr->respondToCounter($request->user(),$priceChangeRequest,$data['action'])));
     }
 
     public function acknowledgeDuplicate(Request $request, PriceChangeRequest $priceChangeRequest): JsonResponse
@@ -124,13 +134,32 @@ class PriceChangeRequestController extends Controller
                 ->orWhere('acumatica_id', 'like', "%{$q}%"));
         }
 
-        return response()->json($query->limit(25)->get([
+        $customers = $query->limit(25)->get([
             'acumatica_id',
             'name',
             'customer_class',
             'payment_terms',
             'status',
-        ]));
+        ]);
+
+        $priceClasses = \App\Models\CustomerData::query()
+            ->whereIn('customer_acumatica_id', $customers->pluck('acumatica_id')->all())
+            ->get(['customer_acumatica_id', 'price_class_id', 'price_class_name'])
+            ->keyBy('customer_acumatica_id');
+
+        return response()->json($customers->map(function (AcumaticaCustomer $customer) use ($priceClasses) {
+            $pc = $priceClasses->get($customer->acumatica_id);
+
+            return [
+                'acumatica_id' => $customer->acumatica_id,
+                'name' => $customer->name,
+                'customer_class' => $customer->customer_class,
+                'price_class_id' => $pc?->price_class_id,
+                'price_class_name' => $pc?->price_class_name,
+                'payment_terms' => $customer->payment_terms,
+                'status' => $customer->status,
+            ];
+        })->values());
     }
 
     public function searchInventory(Request $request): JsonResponse

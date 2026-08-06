@@ -8,13 +8,18 @@ import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { setSession, setToken } from "@/lib/auth";
 import type { Role } from "@/lib/auth";
-import { apiFetch, getErrorMessage } from "@/lib/api";
+import { ApiError, apiFetch, getErrorMessage } from "@/lib/api";
 import { LogoImage } from "@/components/logo-image";
+import { SightEyes, SightEyesMark } from "@/components/sight-eyes";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in — Kim-Fay OrderWatch" },
+      { title: "Sign in — Kim-Fay Sight" },
+      {
+        name: "description",
+        content: "Kim-Fay Sight — see the business clearly. Sees every business procedure.",
+      },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -101,10 +106,20 @@ function AuthPage() {
   }, []);
 
   async function checkEmailRegistration(value: string): Promise<EmailValidation> {
-    const data = await apiFetch<EmailCheckResponse>("auth/email/check", {
-      method: "POST",
-      body: { email: value },
-    });
+    let data: EmailCheckResponse;
+    try {
+      data = await apiFetch<EmailCheckResponse>("auth/email/check", {
+        method: "POST",
+        body: { email: value },
+      });
+    } catch (error) {
+      // Compatibility with a backend deployment that predates the optional
+      // email pre-check. Login/OTP request remains the authoritative validator.
+      if (error instanceof ApiError && error.status === 404) {
+        return { status: "valid" };
+      }
+      throw error;
+    }
 
     if (data.eligible) return { status: "valid" };
 
@@ -117,7 +132,7 @@ function AuthPage() {
 
     return {
       status: "not-registered",
-      message: data.message ?? "This email is not registered in OrderWatch",
+      message: data.message ?? "This email is not registered in Sight",
     };
   }
 
@@ -223,7 +238,7 @@ function AuthPage() {
           loggedInAt: new Date().toISOString(),
           token: data.token,
         });
-        toast.success("Welcome to OrderWatch");
+        toast.success("Welcome to Sight");
         navigate({ to: "/app" });
       } catch (err: unknown) {
         showAuthError(
@@ -321,7 +336,7 @@ function AuthPage() {
         token: data.token,
       });
       if (timerRef.current) clearInterval(timerRef.current);
-      toast.success("Welcome to OrderWatch");
+      toast.success("Welcome to Sight");
       navigate({ to: "/app" });
     } catch (err: unknown) {
       showAuthError(getErrorMessage(err, "Verification failed"));
@@ -365,12 +380,23 @@ function AuthPage() {
           <div className="flex h-10 items-center overflow-hidden rounded-lg bg-white/95 px-3 shadow">
             <LogoImage className="h-7 w-auto max-w-[130px] object-contain" />
           </div>
+          <div className="leading-tight">
+            <p className="text-sm font-semibold tracking-wide">Kim-Fay Sight</p>
+            <p className="text-[11px] text-white/70">See the business clearly</p>
+          </div>
         </div>
 
-        <div className="relative z-10 max-w-md">
-          <h1 className="font-mono text-4xl font-semibold leading-tight">
-            Every Order.<br />Accounted For.
-          </h1>
+        <div className="relative z-10 flex flex-col items-start gap-8">
+          <SightEyes size={180} className="drop-shadow-lg" />
+          <div className="max-w-md">
+            <h1 className="font-mono text-4xl font-semibold leading-tight">
+              See the business<br />clearly.
+            </h1>
+            <p className="mt-4 text-base text-white/80 leading-relaxed">
+              Sight means sees every business procedure — orders, inventory,
+              fulfilment, and risk in one view.
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 text-xs text-white/60">
@@ -386,9 +412,16 @@ function AuthPage() {
       <div className="flex min-h-screen items-start justify-center overflow-y-auto bg-background px-6 py-8 sm:py-12 lg:items-center">
         <div className="w-full max-w-sm">
           {/* Mobile logo — shown on small screens where the brand panel is hidden */}
-          <div className="mb-8 flex items-center lg:hidden">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
             <div className="flex h-9 items-center overflow-hidden rounded-lg bg-white px-2 shadow-sm border">
               <LogoImage className="h-7 w-auto max-w-[130px] object-contain" />
+            </div>
+            <div className="flex items-center gap-2 text-primary">
+              <SightEyesMark className="h-6 w-12" />
+              <div className="leading-tight">
+                <p className="text-sm font-semibold text-foreground">Kim-Fay Sight</p>
+                <p className="text-[11px] text-muted-foreground">See the business clearly</p>
+              </div>
             </div>
           </div>
 
@@ -397,7 +430,7 @@ function AuthPage() {
               <div>
                 <h2 className="text-xl font-semibold">Sign in</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Sign in with your email and password to access OrderWatch.
+                  Sign in with your email and password to access Sight.
                 </p>
               </div>
 
@@ -523,7 +556,7 @@ function AuthPage() {
               </Button>
               <p className="text-center text-[11px] text-muted-foreground">
                 {loginMode === "otp-and-password"
-                  ? "Use your OrderWatch account password"
+                  ? "Use your Sight account password"
                   : "Passwordless · OTP expires in 15 minutes"}
               </p>
             </form>

@@ -19,35 +19,44 @@ class FillRateBusinessCategory
     /** Inventory ID prefixes classified as Kim-Fay manufactured products. */
     private const MANUFACTURED_PREFIXES = [
         'FAY', 'SIF', 'COS', 'TIS', 'ULT', 'STD', 'SHO', 'ANT',
-        'URI', 'TOI', 'AIR', 'ALK', 'DIS', 'KLE',
+        'URI', 'TOI', 'ALK', 'DIS', 'KLE', 'HYG', 'KIM',
     ];
 
-    /** Partner / third-party brand prefixes (Trading). */
+    /** Partner / third-party brand prefixes (Trading). Longer codes first (COWGT, APTML). */
     private const TRADING_PREFIXES = [
+        'COWGT', 'APTML', 'CONPA', 'DOVBW',
+        'VATOL', 'VATSH', 'VATCN', 'VATCR', 'HOBBW', 'AIROM',
         'DOV', 'REX', 'LUX', 'HUG', 'KOT', 'COW', 'APT', 'BIO',
-        'DAB', 'ORS', 'VAT', 'HOB', 'DUR', 'FEM', 'MIS',
+        'DAB', 'ORS', 'VAT', 'HOB', 'AIR', 'DUR', 'FEM', 'MIS',
         'MSW', 'IKO', 'CON', 'BIG',
     ];
 
     public function classify(?string $inventoryId, ?string $productType = null): string
     {
-        if ($productType === self::MANUFACTURED) {
+        $normalizedType = strtolower(trim((string) $productType));
+        if (in_array($normalizedType, [self::MANUFACTURED, 'manufacture', 'own brand', 'own_brand'], true)) {
             return self::MANUFACTURED;
         }
 
-        if ($productType === self::TRADING) {
+        if (in_array($normalizedType, [self::TRADING, 'partner', 'partners', 'third party', 'third_party'], true)) {
             return self::TRADING;
         }
 
         $upper = strtoupper(trim((string) $inventoryId));
 
-        foreach (self::TRADING_PREFIXES as $prefix) {
+        // Longest trading prefixes first (COWGT before COW; APTML before APT)
+        // so partner codes are not mis-classified vs manufactured (e.g. COW vs COS).
+        $trading = self::TRADING_PREFIXES;
+        usort($trading, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+        foreach ($trading as $prefix) {
             if (str_starts_with($upper, $prefix)) {
                 return self::TRADING;
             }
         }
 
-        foreach (self::MANUFACTURED_PREFIXES as $prefix) {
+        $manufactured = self::MANUFACTURED_PREFIXES;
+        usort($manufactured, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+        foreach ($manufactured as $prefix) {
             if (str_starts_with($upper, $prefix)) {
                 return self::MANUFACTURED;
             }

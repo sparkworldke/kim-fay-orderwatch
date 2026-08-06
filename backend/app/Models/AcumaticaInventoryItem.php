@@ -61,6 +61,36 @@ class AcumaticaInventoryItem extends Model
         return $this->hasMany(AcumaticaInventoryRunRateLog::class, 'inventory_item_id');
     }
 
+    public function warehouseBalances(): HasMany
+    {
+        return $this->hasMany(InventoryWarehouseBalance::class, 'inventory_item_id');
+    }
+
+    public function productionPlan(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ProductionSkuPlan::class, 'inventory_item_id');
+    }
+
+    public function catalogueProduct(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(Product::class, 'acumatica_inventory_item_id');
+    }
+
+    public function warehouseBalanceSnapshots(): HasMany
+    {
+        return $this->hasMany(InventoryWarehouseBalanceSnapshot::class, 'inventory_item_id');
+    }
+
+    public function productionMonthlyOutputs(): HasMany
+    {
+        return $this->hasMany(ProductionMonthlyOutput::class, 'inventory_item_id');
+    }
+
+    public function dtcPriceList(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(DtcPriceList::class, 'inventory_id', 'inventory_id');
+    }
+
     public function productCategory(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(AcumaticaProductCategory::class, 'product_category_id');

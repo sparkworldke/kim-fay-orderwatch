@@ -8,7 +8,7 @@ import {
   PencilLine,
   RefreshCw,
 } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { MaskedCurrency } from "@/components/MaskedCurrency";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -36,8 +36,10 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { CustomerLink, DateLink, DateWithActions, OrderLink } from "@/components/entity-links";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { ConsultantMultiSelect } from "@/components/orders/ConsultantMultiSelect";
 import { useReasonTaxonomy } from "@/hooks/useOperations";
-import { useOrderStats, useOrders, useRefreshOrderStatuses, useUpdateOrder } from "@/hooks/useOrders";
+import { useOrderFilterOptions, useOrderStats, useOrders, useRefreshOrderStatuses, useUpdateOrder } from "@/hooks/useOrders";
 import { useMatchOrders } from "@/hooks/admin/useAdminSettings";
 import {
   conflictAmountDelta,
@@ -59,7 +61,7 @@ import { formatPoLoadDuration } from "@/lib/po-load-time";
 import type { AcumaticaSalesOrder } from "@/types/admin";
 
 export const Route = createFileRoute("/app/orders")({
-  head: () => ({ meta: [{ title: "Orders — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Orders — Kim-Fay Sight" }] }),
   validateSearch: (s: Record<string, string>) => ({
     status:     typeof s.status     === "string" ? s.status     : undefined,
     order_type: typeof s.order_type === "string" ? s.order_type : undefined,
@@ -92,8 +94,7 @@ function OrdersPage() {
   const search = useSearch({ from: "/app/orders" });
   const [q, setQ]                   = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
-  const [repCode, setRepCode]       = useState("");
-  const [debouncedRepCode, setDebouncedRepCode] = useState("");
+  const [repCodes, setRepCodes]     = useState<string[]>([]);
   const [status, setStatus]         = useState(search.status ?? "all");
 
   const [matchStatus, setMatchStatus] = useState("all");
@@ -110,7 +111,42 @@ function OrdersPage() {
   const [draftRejectionNotes, setDraftRejectionNotes] = useState("");
   const [page, setPage]       = useState(1);
   const [perPage, setPerPage] = useState(50);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [segments, setSegments] = useState<Array<"KP" | "CS">>([]);
+  const [parentCustomerIds, setParentCustomerIds] = useState<string[]>([]);
+  const [outletIds, setOutletIds] = useState<string[]>([]);
   const resetPage = () => setPage(1);
+  const filterOptions = useOrderFilterOptions();
+  const parentOptions = useMemo(() => {
+    const parents = filterOptions.data?.parents ?? [];
+    return segments.length ? parents.filter((parent) => segments.includes(parent.segment)) : parents;
+  }, [filterOptions.data?.parents, segments]);
+  const parentLabels = useMemo(() => parentOptions.map((parent) => `${parent.name} · ${parent.id}`), [parentOptions]);
+  const selectedParentLabels = parentCustomerIds.map((id) => {
+    const parent = parentOptions.find((option) => option.id === id);
+    return parent ? `${parent.name} · ${parent.id}` : id;
+  });
+  const outletOptions = useMemo(() => {
+    const relevant = parentCustomerIds.length
+      ? parentOptions.filter((parent) => parentCustomerIds.includes(parent.id))
+      : parentOptions;
+    return relevant.flatMap((parent) => parent.outlets.map((outlet) => ({
+      ...outlet,
+      label: `${outlet.name} · ${outlet.id}`,
+    }))).filter((outlet, index, all) => all.findIndex((candidate) => candidate.id === outlet.id) === index);
+  }, [parentOptions, parentCustomerIds]);
+  const outletLabels = outletOptions.map((outlet) => outlet.label);
+  const selectedOutletLabels = outletIds.map((id) => outletOptions.find((option) => option.id === id)?.label ?? id);
+
+  useEffect(() => {
+    const validParentIds = new Set(parentOptions.map((parent) => parent.id));
+    setParentCustomerIds((current) => current.filter((id) => validParentIds.has(id)));
+  }, [parentOptions]);
+
+  useEffect(() => {
+    const validIds = new Set(outletOptions.map((outlet) => outlet.id));
+    setOutletIds((current) => current.filter((id) => validIds.has(id)));
+  }, [outletOptions]);
 
   const handleQ = (v: string) => {
     setQ(v);
@@ -118,15 +154,9 @@ function OrdersPage() {
     (handleQ as { _t?: ReturnType<typeof setTimeout> })._t = setTimeout(() => { setDebouncedQ(v); resetPage(); }, 400);
   };
 
-  const handleRepCode = (v: string) => {
-    setRepCode(v);
-    clearTimeout((handleRepCode as { _t?: ReturnType<typeof setTimeout> })._t);
-    (handleRepCode as { _t?: ReturnType<typeof setTimeout> })._t = setTimeout(() => { setDebouncedRepCode(v); resetPage(); }, 400);
-  };
-
   const { data, isLoading, isError, refetch } = useOrders({
     q:            debouncedQ || undefined,
-    rep_code:     debouncedRepCode || undefined,
+    rep_codes:     repCodes,
     status:       status !== "all" ? status : undefined,
     match_status: matchStatus !== "all" ? matchStatus : undefined,
     has_email:    hasEmailFilter === "yes" ? true : undefined,
@@ -137,13 +167,27 @@ function OrdersPage() {
     date_to:      dateTo   || undefined,
     page,
     per_page:     perPage,
+    brands,
+    segments,
+    parent_customer_ids: parentCustomerIds,
+    customer_ids: outletIds,
   });
 
   const updateOrder = useUpdateOrder();
   const reasonTaxonomy = useReasonTaxonomy();
   const orderStatusRefresh = useRefreshOrderStatuses();
   const matchOrders = useMatchOrders();
-  const orderStats  = useOrderStats({ q: debouncedQ || undefined, order_type: "SO", date_from: dateFrom || undefined, date_to: dateTo || undefined });
+  const orderStats  = useOrderStats({
+    q: debouncedQ || undefined,
+    order_type: "SO",
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+    brands,
+    segments,
+    parent_customer_ids: parentCustomerIds,
+    customer_ids: outletIds,
+    rep_codes: repCodes,
+  });
 
   const reasonOptions = workflowReasonOptionsForStatus(
     draftStatus,
@@ -257,10 +301,56 @@ function OrdersPage() {
           <Label className="text-xs">Search</Label>
           <Input value={q} onChange={(e) => handleQ(e.target.value)} placeholder="Order #, customer, PO…" className="h-9 w-48 text-sm" />
         </div>
-        <div className="grid gap-1.5">
-          <Label className="text-xs">Consultant</Label>
-          <Input value={repCode} onChange={(e) => handleRepCode(e.target.value)} placeholder="Name or rep code…" className="h-9 w-44 text-sm" />
+        <div className="w-44">
+          <MultiSelect
+            label="Brand"
+            options={filterOptions.data?.brands ?? []}
+            selected={brands}
+            onChange={(values) => { setBrands(values); resetPage(); }}
+            allLabel="All Brands"
+          />
         </div>
+        <div className="w-44">
+          <MultiSelect
+            label="Customer Segment"
+            options={["KP", "CS"]}
+            selected={segments}
+            onChange={(values) => { setSegments(values as Array<"KP" | "CS">); resetPage(); }}
+            allLabel="All Segments"
+          />
+        </div>
+        <div className="w-56">
+          <MultiSelect
+            label="Parent Customer"
+            options={parentLabels}
+            selected={selectedParentLabels}
+            onChange={(labels) => {
+              setParentCustomerIds(parentOptions.filter((parent) => labels.includes(`${parent.name} · ${parent.id}`)).map((parent) => parent.id));
+              resetPage();
+            }}
+            allLabel="All Parent Customers"
+          />
+        </div>
+        <div className="w-56">
+          <MultiSelect
+            label="Outlet / Branch"
+            options={outletLabels}
+            selected={selectedOutletLabels}
+            onChange={(labels) => {
+              setOutletIds(outletOptions.filter((outlet) => labels.includes(outlet.label)).map((outlet) => outlet.id));
+              resetPage();
+            }}
+            allLabel="All Outlets"
+          />
+        </div>
+        <ConsultantMultiSelect
+          groups={filterOptions.data?.consultant_groups ?? []}
+          selected={repCodes}
+          onChange={(next) => {
+            setRepCodes(next);
+            resetPage();
+          }}
+        />
         <div className="grid gap-1.5">
           <Label className="text-xs">From</Label>
           <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 w-36 text-sm" />
@@ -487,6 +577,9 @@ function OrdersPage() {
                             </div>
                             <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
                               <span>Last modified: <strong>{fmtDatetime(order.last_modified_at) || "—"}</strong></span>
+                              {fmtLeadTime(order.order_date, order.requested_on) && (
+                                <span>Created → Due: <strong>{fmtLeadTime(order.order_date, order.requested_on)}</strong></span>
+                              )}
                               <OrderCycleDuration order={order} />
                             </div>
                           </td>
@@ -1204,6 +1297,18 @@ function fmtDate(value: string | null | undefined): string {
   if (!value) return "";
   const d = parseDate(value);
   return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-KE", { year: "numeric", month: "short", day: "numeric" });
+}
+
+/** Day-level gap between Order Created and the requested/due date. */
+function fmtLeadTime(orderDate: string | null | undefined, requestedOn: string | null | undefined): string | null {
+  if (!orderDate || !requestedOn) return null;
+  const start = parseDate(orderDate).getTime();
+  const end = parseDate(requestedOn).getTime();
+  if (isNaN(start) || isNaN(end)) return null;
+  const diffDays = Math.round((end - start) / 86_400_000);
+  if (diffDays === 0) return "Same day";
+  if (diffDays < 0) return `${Math.abs(diffDays)}d overdue`;
+  return `${diffDays}d`;
 }
 
 function fmtDatetime(value: string | null | undefined): string {

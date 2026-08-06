@@ -93,8 +93,8 @@ class UserController extends Controller
 
         $users = $query
             ->with([
-                'department:id,slug,name,is_customer_facing',
-                'departments:id,slug,name,is_customer_facing',
+                'department:id,slug,name,segment,is_customer_facing',
+                'departments:id,slug,name,segment,is_customer_facing',
                 'sectorScopes',
                 'reportsTo:id,name,email',
             ])
@@ -104,8 +104,11 @@ class UserController extends Controller
                 'email',
                 'role',
                 'phone_number',
+                'whatsapp_number',
                 'rep_code',
                 'employee_number',
+                'designation',
+                'division',
                 'department_id',
                 'department_role',
                 'org_level',
@@ -262,6 +265,7 @@ class UserController extends Controller
 
         $suggestedPassword = $this->generateSuggestedPassword();
         $user->password = bcrypt($suggestedPassword);
+        $user->password_changed_at = null;
         if ($user->email_verified_at === null) {
             $user->email_verified_at = now();
         }
@@ -330,6 +334,7 @@ class UserController extends Controller
             : (string) $validated['password'];
 
         $user->password = bcrypt($plainPassword);
+        $user->password_changed_at = null;
         if ($user->email_verified_at === null) {
             $user->email_verified_at = now();
         }
@@ -753,8 +758,8 @@ class UserController extends Controller
     private function teamMemberPayload(User $user): array
     {
         $user->loadMissing([
-            'department:id,slug,name,is_customer_facing',
-            'departments:id,slug,name,is_customer_facing',
+            'department:id,slug,name,segment,is_customer_facing',
+            'departments:id,slug,name,segment,is_customer_facing',
             'sectorScopes',
             'reportsTo:id,name,email',
             'brandAssignments',
@@ -767,8 +772,11 @@ class UserController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'phone_number' => $user->phone_number,
+            'whatsapp_number' => $user->whatsapp_number,
             'rep_code' => $user->rep_code,
             'employee_number' => $user->employee_number,
+            'designation' => $user->designation,
+            'division' => $user->division,
             'department_id' => $user->department_id,
             'department_role' => $user->department_role,
             'org_level' => $user->org_level,

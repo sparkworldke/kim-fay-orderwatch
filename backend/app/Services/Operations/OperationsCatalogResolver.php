@@ -4,6 +4,7 @@ namespace App\Services\Operations;
 
 use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaInventoryItem;
+use App\Models\InventoryWarehouseBalance;
 use Illuminate\Support\Collection;
 
 /**
@@ -40,7 +41,8 @@ class OperationsCatalogResolver
      *   brand: string|null,
      *   posting_class: string|null,
      *   sub_trading_group: string|null,
-     *   supplier: string|null
+     *   supplier: string|null,
+     *   product_type: string|null
      * }>
      */
     public function classificationsForInventoryIds(array $inventoryIds): Collection
@@ -52,7 +54,7 @@ class OperationsCatalogResolver
 
         return AcumaticaInventoryItem::query()
             ->whereIn('inventory_id', $ids)
-            ->get(['inventory_id', 'description', 'brand', 'posting_class', 'sub_trading_group', 'supplier'])
+            ->get(['inventory_id', 'description', 'brand', 'posting_class', 'sub_trading_group', 'supplier', 'product_type'])
             ->keyBy('inventory_id')
             ->map(fn (AcumaticaInventoryItem $item) => [
                 'description'       => $item->description,
@@ -60,6 +62,7 @@ class OperationsCatalogResolver
                 'posting_class'     => $item->posting_class,
                 'sub_trading_group' => $item->sub_trading_group,
                 'supplier'          => $item->supplier,
+                'product_type'      => $item->product_type,
             ]);
     }
 
@@ -69,13 +72,15 @@ class OperationsCatalogResolver
      *   brand: string|null,
      *   posting_class: string|null,
      *   sub_trading_group: string|null,
-     *   supplier: string|null
+     *   supplier: string|null,
+     *   product_type: string|null
      * }>  $classifications
      * @return array{
      *   brand: string|null,
      *   posting_class: string|null,
      *   sub_trading_group: string|null,
-     *   supplier: string|null
+     *   supplier: string|null,
+     *   product_type: string|null
      * }
      */
     public function classificationFieldsFor(?string $inventoryId, Collection $classifications): array
@@ -86,6 +91,7 @@ class OperationsCatalogResolver
                 'posting_class'     => null,
                 'sub_trading_group' => null,
                 'supplier'          => null,
+                'product_type'      => null,
             ];
         }
 
@@ -96,6 +102,7 @@ class OperationsCatalogResolver
             'posting_class'     => $row['posting_class'] ?? null,
             'sub_trading_group' => $row['sub_trading_group'] ?? null,
             'supplier'          => $row['supplier'] ?? null,
+            'product_type'      => $row['product_type'] ?? null,
         ];
     }
 
@@ -138,23 +145,65 @@ class OperationsCatalogResolver
      * @param  list<string|null>  $inventoryIds
      * @return Collection<string, InventoryStockRow>
      */
-    public function stockForInventoryIds(array $inventoryIds): Collection
+    public function stockForInventoryIds(array $inventoryIds, string $warehouseId = 'FGS'): Collection
     {
         $ids = array_values(array_unique(array_filter($inventoryIds)));
         if ($ids === []) {
             return collect();
         }
 
-        return AcumaticaInventoryItem::query()
+        $warehouse = strtoupper(trim($warehouseId));
+        $balances = InventoryWarehouseBalance::query()
             ->whereIn('inventory_id', $ids)
-            ->get(['inventory_id', 'qty_on_hand', 'qty_available', 'default_uom', 'synced_at'])
+            ->where('warehouse_id', $warehouse)
+            ->get(['inventory_id', 'warehouse_id', 'qty_on_hand', 'qty_available', 'uom', 'synced_at'])
             ->keyBy('inventory_id')
-            ->map(fn (AcumaticaInventoryItem $item) => [
+            ->map(fn (InventoryWarehouseBalance $item) => [
+                'warehouse_id'  => $item->warehouse_id,
                 'qty_on_hand'   => (string) $item->qty_on_hand,
                 'qty_available' => $item->qty_available !== null ? (string) $item->qty_available : null,
-                'default_uom'   => $item->default_uom,
+                'default_uom'   => $item->uom,
                 'synced_at'     => $item->synced_at?->toIso8601String(),
             ]);
+
+        if ($warehouse === 'FGS') {
+            $missing = array_values(array_diff($ids, $balances->keys()->all()));
+            $legacy = AcumaticaInventoryItem::query()
+                ->whereIn('inventory_id', $missing)
+                ->get(['inventory_id', 'qty_on_hand', 'qty_available', 'default_uom', 'synced_at'])
+                ->keyBy('inventory_id')
+                ->map(fn (AcumaticaInventoryItem $item) => [
+                    'warehouse_id' => 'FGS',
+                    'qty_on_hand' => (string) $item->qty_on_hand,
+                    'qty_available' => $item->qty_available !== null ? (string) $item->qty_available : null,
+                    'default_uom' => $item->default_uom,
+                    'synced_at' => $item->synced_at?->toIso8601String(),
+                ]);
+            $balances = $balances->union($legacy);
+        }
+
+        return $balances;
+    }
+
+    /** @return Collection<string, Collection<string, array<string, string|null>>> */
+    public function stockForInventoryIdsByWarehouse(array $inventoryIds): Collection
+    {
+        $ids = array_values(array_unique(array_filter($inventoryIds)));
+        if ($ids === []) return collect();
+
+        return InventoryWarehouseBalance::query()
+            ->whereIn('inventory_id', $ids)
+            ->get(['inventory_id', 'warehouse_id', 'qty_on_hand', 'qty_available', 'uom', 'synced_at'])
+            ->groupBy('inventory_id')
+            ->map(fn (Collection $rows) => $rows->keyBy('warehouse_id')->map(
+                fn (InventoryWarehouseBalance $item) => [
+                    'warehouse_id' => $item->warehouse_id,
+                    'qty_on_hand' => (string) $item->qty_on_hand,
+                    'qty_available' => $item->qty_available !== null ? (string) $item->qty_available : null,
+                    'default_uom' => $item->uom,
+                    'synced_at' => $item->synced_at?->toIso8601String(),
+                ],
+            ));
     }
 
     public function resolveUom(?string $lineUom, ?string $inventoryId, Collection $inventoryStock): ?string

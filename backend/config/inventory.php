@@ -12,7 +12,10 @@ return [
     | midday wave starts 12:00 EAT, with a 30-minute gap between warehouses.
     |
     | Source list confirmed for Kim-Fay Acumatica (incl. MSA, FGS2, Export,
-    | FGS2 Returns) plus existing FG / raw-material sites.
+    | FGS2 Returns, TPFGS / Tatu Park FG) plus existing FG / raw-material sites.
+    |
+    | TPFGS is appended (not inserted mid-list) so existing per-warehouse cron
+    | stagger slots stay stable for warehouses already in production.
     |
     */
 
@@ -26,6 +29,7 @@ return [
         'PRMS',
         'RMS1',
         'TRMS',
+        'TPFGS',
     ],
 
     /*
@@ -44,6 +48,7 @@ return [
         'PRMS' => 'PRMS',
         'RMS1' => 'RMS1',
         'TRMS' => 'TRMS',
+        'TPFGS' => 'TPFGS (Tatu Park FG)',
     ],
 
     /*

@@ -20,7 +20,9 @@ class DepartmentController extends Controller
                 'id' => $dept->id,
                 'slug' => $dept->slug,
                 'name' => $dept->name,
+                'segment' => $dept->segment,
                 'is_customer_facing' => $dept->is_customer_facing,
+                'sort_order' => $dept->sort_order,
                 'brands' => $dept->brandAssignments->pluck('brand')->values(),
             ]);
 

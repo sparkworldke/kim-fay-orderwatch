@@ -15,7 +15,9 @@ return [
     |
     */
 
-    'default' => env('CACHE_STORE', 'database'),
+    'default' => env('CACHE_STORE', 'redis'),
+    'dashboard_store' => env('DASHBOARD_CACHE_STORE', 'redis'),
+    'dashboard_fallback_store' => env('DASHBOARD_CACHE_FALLBACK_STORE', 'database'),
 
     /*
     |--------------------------------------------------------------------------

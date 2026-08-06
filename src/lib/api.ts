@@ -3,7 +3,7 @@
 
 export const API_BASE_URL: string =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ??
-  "https://kim-fay-orderwatch.tools/backend/public/api";
+  "https://datacontroller.fayshop.co.ke/backend/public/api";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
@@ -85,6 +85,60 @@ function resolveApiUrl(path: string): string {
   return `${API_BASE_URL}/${clean}`;
 }
 
+// ─── 401 guard ───────────────────────────────────────────────────────────────
+//
+// A single 401 from a data endpoint must NOT immediately log the user out.
+// Token expiry is the only legitimate reason to kill the session, so we verify
+// by calling auth/me before clearing anything.  Concurrent 401s share one
+// in-flight verification so we never call clearSession() more than once.
+
+let _401verifyPromise: Promise<void> | null = null;
+
+async function handle401(): Promise<void> {
+  if (_401verifyPromise) {
+    // Another concurrent request already triggered a verification — wait for it.
+    return _401verifyPromise;
+  }
+
+  _401verifyPromise = (async () => {
+    try {
+      const { getToken } = await import("./auth");
+      if (!getToken()) {
+        // No token at all — definitely logged out already.
+        const { clearSession } = await import("./auth");
+        clearSession();
+        return;
+      }
+
+      // Re-validate. Use a plain fetch so we don't enter apiFetch recursively.
+      const meUrl = resolveApiUrl("auth/me");
+      const token = getToken();
+      const meRes = await fetch(meUrl, {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (meRes.status === 401) {
+        // Token is genuinely expired/revoked — clear session and redirect.
+        const { clearSession } = await import("./auth");
+        clearSession();
+      }
+      // Any other response (200, 5xx network blip, etc.) — keep the session alive.
+    } catch {
+      // Network failure during re-check — do not log the user out.
+    } finally {
+      // Reset so the next genuine 401 (e.g. after re-login) triggers a fresh check.
+      _401verifyPromise = null;
+    }
+  })();
+
+  return _401verifyPromise;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function apiFetch<T = unknown>(
   path: string,
   { body, token, headers, timeoutMs = 120_000, ...rest }: RequestOptions = {},
@@ -141,10 +195,11 @@ export async function apiFetch<T = unknown>(
 
   if (timeoutId !== null) window.clearTimeout(timeoutId);
 
-  // Global 401 handler — clear stale session + token, notify listeners, and bail
+  // Global 401 handler — verify via auth/me before clearing the session so that
+  // a single flaky 401 from a data endpoint does not immediately log the user out.
+  // Re-validation is deduplicated: concurrent 401s share one in-flight check.
   if (res.status === 401 && typeof window !== "undefined") {
-    const { clearSession } = await import("./auth");
-    clearSession();
+    await handle401();
     throw new ApiError("Unauthorized", 401, null);
   }
 
@@ -206,8 +261,7 @@ export async function downloadApiFile(
   }
 
   if (res.status === 401 && typeof window !== "undefined") {
-    const { clearSession } = await import("./auth");
-    clearSession();
+    await handle401();
     throw new ApiError("Unauthorized", 401, null);
   }
 

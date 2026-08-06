@@ -1,0 +1,101 @@
+﻿import type { BusinessLine, Site } from "@/types/Stock/inventory";
+
+export interface ProductSeed {
+  productName: string;
+  brand: string;
+  category: string;
+  businessLine: BusinessLine;
+  site?: Site;
+  machine?: string;
+}
+
+const C: BusinessLine = "Consumer Sales";
+const P: BusinessLine = "Kim-Fay Professional";
+
+export const MANUFACTURED_SEEDS: ProductSeed[] = [
+  { productName: "Fay Advanced Multifold Hand Towels 12 x 240 Sheets", brand: "Fay", category: "Hand Towels", businessLine: P, site: "HQ", machine: "NEW HANDTOWEL M/C" },
+  { productName: "Fay Kitchen Towels 2 Rolls", brand: "Fay", category: "Kitchen Towels", businessLine: C, site: "HQ", machine: "PERINI" },
+  { productName: "Fay Eco Kitchen Towels", brand: "Fay", category: "Kitchen Towels", businessLine: C, site: "Tatu", machine: "PERINI" },
+  { productName: "Fay Water Wipes 56s", brand: "Fay", category: "Wet Wipes", businessLine: C, site: "HQ", machine: "Wipes One" },
+  { productName: "Fay Sensitive Wipes 56s", brand: "Fay", category: "Wet Wipes", businessLine: C, site: "HQ", machine: "Wipes Two" },
+  { productName: "Fay Everyday Wipes 56s", brand: "Fay", category: "Wet Wipes", businessLine: C, site: "HQ", machine: "Wipes One" },
+  { productName: "Fay Antibacterial Wipes 56s", brand: "Fay", category: "Wet Wipes", businessLine: P, site: "HQ", machine: "Wipes Two" },
+  { productName: "Cosy Poa Toilet Paper 4 x 10s White", brand: "Cosy Poa", category: "Toilet Paper", businessLine: C, site: "Tatu", machine: "New TP Continuous" },
+  { productName: "Cosy Poa Toilet Paper 4 x 10s Pink", brand: "Cosy Poa", category: "Toilet Paper", businessLine: C, site: "Tatu", machine: "OLD TP" },
+  { productName: "Cosy Serviettes 18 x 100 Sheets", brand: "Cosy", category: "Serviettes", businessLine: C, site: "HQ", machine: "DINNER" },
+  { productName: "Cosy Cocktail Serviettes 30 x 100", brand: "Cosy", category: "Serviettes", businessLine: C, site: "HQ", machine: "COCKTAIL" },
+  { productName: "Sifa Facial Tissues 100s", brand: "Sifa", category: "Facial Tissues", businessLine: C, site: "HQ", machine: "POCKET PACK" },
+  { productName: "Sifa Facial Tissues 150s", brand: "Sifa", category: "Facial Tissues", businessLine: C, site: "HQ", machine: "ROTARY" },
+  { productName: "Tishu Poa Toilet Paper 4 x 10s", brand: "Tishu Poa", category: "Toilet Paper", businessLine: C, site: "Tatu", machine: "4 DECK" },
+  { productName: "Tishu Poa Toilet Paper 10 x 10s", brand: "Tishu Poa", category: "Toilet Paper", businessLine: C, site: "Tatu", machine: "New TP Continuous" },
+  { productName: "Ultra Clean Scouring Pads", brand: "Ultra Clean", category: "Scouring Pads", businessLine: C, site: "HQ", machine: "SCOURING PAD M/C" },
+  { productName: "Ultra Clean Heavy Duty Scourers 6s", brand: "Ultra Clean", category: "Scouring Pads", businessLine: P, site: "HQ", machine: "SCOURING PAD M/C" },
+  { productName: "Ultra Clean Multi-purpose Cloths 5s", brand: "Ultra Clean", category: "Household Cleaning", businessLine: C, site: "HQ", machine: "Box Packing" },
+  { productName: "Kleenex Facial Tissues 100s", brand: "Kleenex", category: "Facial Tissues", businessLine: C, site: "HQ", machine: "ROTARY" },
+  { productName: "Kleenex Pocket Tissues 10 x 10s", brand: "Kleenex", category: "Facial Tissues", businessLine: C, site: "HQ", machine: "POCKET PACK" },
+  { productName: "Fay Cling Film", brand: "Fay", category: "Cling Film", businessLine: C, site: "HQ", machine: "NEW FOIL" },
+  { productName: "Fay Aluminium Foil", brand: "Fay", category: "Aluminium Foil", businessLine: C, site: "HQ", machine: "OLD FOIL" },
+  { productName: "Fay Baking Paper", brand: "Fay", category: "Baking Paper", businessLine: C, site: "HQ", machine: "NEW FOIL" },
+  { productName: "Fay Hand Wash", brand: "Fay", category: "Hand Wash", businessLine: C, site: "HQ", machine: "Sanitizer Line" },
+  { productName: "Fay Sanitizer 500ml", brand: "Fay", category: "Sanitizers", businessLine: P, site: "HQ", machine: "Sanitizer Line" },
+  { productName: "Fay Toilet Paper 4 x 10s Prix 150 Sheets", brand: "Fay", category: "Toilet Paper", businessLine: C, site: "HQ", machine: "New TP Start Stop" },
+  { productName: "Kimfay Professional Jumbo Roll 2ply", brand: "Kimfay", category: "Away-from-Home Tissue", businessLine: P, site: "Tatu", machine: "PERINI" },
+  { productName: "Kimfay Professional Centre Feed Roll", brand: "Kimfay", category: "Away-from-Home Tissue", businessLine: P, site: "Tatu", machine: "New TP Continuous" },
+  { productName: "Kimfay Professional V-Fold Hand Towels", brand: "Kimfay", category: "Hand Towels", businessLine: P, site: "HQ", machine: "V Fold" },
+  { productName: "Kimfay Professional Surface Wipes 100s", brand: "Kimfay", category: "Professional Hygiene", businessLine: P, site: "HQ", machine: "Wipes Two" },
+  { productName: "Kimfay Professional Floor Cleaner Pads", brand: "Kimfay", category: "Household Cleaning", businessLine: P, site: "HQ", machine: "MANUAL" },
+  { productName: "Cosy Kitchen Towels 6 Rolls", brand: "Cosy", category: "Kitchen Towels", businessLine: C, site: "HQ", machine: "PERINI" },
+  { productName: "Cosy Poa Dinner Serviettes 12 x 100", brand: "Cosy Poa", category: "Serviettes", businessLine: C, site: "HQ", machine: "DINNER" },
+  { productName: "Kimfay Professional Sanitizer Refill 5L", brand: "Kimfay", category: "Sanitizers", businessLine: P, site: "HQ", machine: "Sanitizer Line" },
+];
+
+export const PARTNER_SEEDS: ProductSeed[] = [
+  { productName: "Dove Body Wash 400ml", brand: "Dove", category: "Body Wash", businessLine: C },
+  { productName: "Dove Men+Care Body Wash 400ml", brand: "Dove", category: "Body Wash", businessLine: C },
+  { productName: "Dove Shower Gel 250ml", brand: "Dove", category: "Shower Gels", businessLine: C },
+  { productName: "Dove Roll-On 50ml", brand: "Dove", category: "Roll-Ons", businessLine: C },
+  { productName: "Dove Beauty Bar Soap 100g", brand: "Dove", category: "Bar Soaps", businessLine: C },
+  { productName: "Rexona Deodorant Spray 150ml", brand: "Rexona", category: "Deodorant Sprays", businessLine: C },
+  { productName: "Rexona Roll-On 50ml", brand: "Rexona", category: "Roll-Ons", businessLine: C },
+  { productName: "Lux Bar Soap 175g", brand: "Lux", category: "Bar Soaps", businessLine: C },
+  { productName: "Lux Shower Gel 250ml", brand: "Lux", category: "Shower Gels", businessLine: C },
+  { productName: "Hobby Body Lotion 400ml", brand: "Hobby", category: "Body Lotions", businessLine: C },
+  { productName: "Hobby Hand Cream 75ml", brand: "Hobby", category: "Body Lotions", businessLine: C },
+  { productName: "Fem Hair Removal Cream 120g", brand: "Fem", category: "Hair Removal", businessLine: C },
+  { productName: "Fem Bleach Cream 24g", brand: "Fem", category: "Hair Removal", businessLine: C },
+  { productName: "Vatika Shampoo 400ml", brand: "Vatika", category: "Shampoos", businessLine: C },
+  { productName: "Vatika Conditioner 400ml", brand: "Vatika", category: "Conditioners", businessLine: C },
+  { productName: "Vatika Hair Oil 300ml", brand: "Vatika", category: "Hair Care", businessLine: C },
+  { productName: "Dabur Amla Hair Oil 200ml", brand: "Dabur", category: "Hair Care", businessLine: C },
+  { productName: "Dabur Herbal Toothpaste 150g", brand: "Dabur", category: "Toothpaste", businessLine: C },
+  { productName: "Dermoviva Body Lotion 400ml", brand: "Dermoviva", category: "Body Lotions", businessLine: C },
+  { productName: "Dermoviva Soap 100g", brand: "Dermoviva", category: "Bar Soaps", businessLine: C },
+  { productName: "ORS Olive Oil Braid Spray 236ml", brand: "ORS", category: "Braid Sprays", businessLine: C },
+  { productName: "ORS Olive Oil Moisturizing Lotion 251ml", brand: "ORS", category: "Hair Care", businessLine: C },
+  { productName: "ORS Hair Mayonnaise 227g", brand: "ORS", category: "Hair Care", businessLine: C },
+  { productName: "Huggies Pure Wipes 56s", brand: "Huggies", category: "Baby Wipes", businessLine: C },
+  { productName: "Huggies Baby Wipes 64s", brand: "Huggies", category: "Baby Wipes", businessLine: C },
+  { productName: "Huggies Dry Pants Large 44s", brand: "Huggies", category: "Baby Diapers", businessLine: C },
+  { productName: "Huggies Dry Pants Medium 52s", brand: "Huggies", category: "Baby Diapers", businessLine: C },
+  { productName: "Huggies Ultra Diapers 44s", brand: "Huggies", category: "Baby Diapers", businessLine: C },
+  { productName: "Kotex Ultra Thin Pads 16s", brand: "Kotex", category: "Feminine Care", businessLine: C },
+  { productName: "Kotex Maxi Pads 10s", brand: "Kotex", category: "Feminine Care", businessLine: C },
+  { productName: "Kotex Liners 20s", brand: "Kotex", category: "Feminine Care", businessLine: P },
+  { productName: "Bio-Oil Skincare Oil 125ml", brand: "Bio Oil", category: "Skincare Oils", businessLine: C },
+  { productName: "Bio-Oil Skincare Oil 60ml", brand: "Bio Oil", category: "Skincare Oils", businessLine: C },
+  { productName: "Duracell AA Alkaline 4 Pack", brand: "Duracell", category: "Batteries", businessLine: C },
+  { productName: "Duracell AAA Alkaline 4 Pack", brand: "Duracell", category: "Batteries", businessLine: C },
+  { productName: "Duracell AA Alkaline 8 Pack", brand: "Duracell", category: "Batteries", businessLine: P },
+  { productName: "Duracell CR2032 Coin Cell", brand: "Duracell", category: "Coin Cells", businessLine: C },
+  { productName: "Duracell CR2016 Coin Cell", brand: "Duracell", category: "Coin Cells", businessLine: C },
+  { productName: "Miswak Toothpaste 120g", brand: "Miswak", category: "Toothpaste", businessLine: C },
+  { productName: "Miswak Mouthwash 250ml", brand: "Miswak", category: "Oral Care", businessLine: C },
+  { productName: "Miswak Toothbrush Medium", brand: "Miswak", category: "Oral Care", businessLine: C },
+  { productName: "Airoma Air Freshener 300ml", brand: "Airoma", category: "Air Care", businessLine: P },
+  { productName: "Airoma Auto Freshener Refill", brand: "Airoma", category: "Air Care", businessLine: P },
+  { productName: "Airoma Surface Spray 500ml", brand: "Airoma", category: "Household Cleaning", businessLine: P },
+  { productName: "Aptamil Infant Formula Stage 1", brand: "Aptamil", category: "Baby Nutrition", businessLine: C },
+  { productName: "Aptamil Infant Formula Stage 2", brand: "Aptamil", category: "Baby Nutrition", businessLine: C },
+  { productName: "Cow & Gate Infant Formula Stage 1", brand: "Cow & Gate", category: "Baby Nutrition", businessLine: C },
+  { productName: "Cow & Gate Growing Up Milk 800g", brand: "Cow & Gate", category: "Baby Nutrition", businessLine: C },
+];

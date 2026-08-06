@@ -5,8 +5,8 @@ export const SALES_PROMPT_TYPE_LABEL: Record<SalesPromptType, string> = {
   not_billed_month: "Month close gap",
   debt_collection: "Debt collection",
   volume_delta: "Volume delta",
-  whitespot_customer: "Customer whitespot",
-  whitespot_product: "Product whitespot",
+  whitespot_customer: "Customer items not ordered",
+  whitespot_product: "Product items not ordered",
   incentive_review: "Incentive review",
 };
 

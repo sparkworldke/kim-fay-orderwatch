@@ -32,7 +32,7 @@ import { StatusBadge } from "@/components/status-badge";
 import type { AcumaticaSalesOrder } from "@/types/admin";
 
 export const Route = createFileRoute("/app/orders-by-date/$date")({
-  head: () => ({ meta: [{ title: "Orders by Date — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Orders by Date — Kim-Fay Sight" }] }),
   component: OrdersByDatePage,
 });
 

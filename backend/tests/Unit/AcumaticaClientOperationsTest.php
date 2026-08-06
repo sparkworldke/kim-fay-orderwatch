@@ -19,6 +19,7 @@ class AcumaticaClientOperationsTest extends TestCase
     {
         parent::setUp();
 
+        Cache::flush();
         Cache::put('acumatica_access_token', 'test-token');
 
         AcumaticaConfig::create([
@@ -59,9 +60,13 @@ class AcumaticaClientOperationsTest extends TestCase
         app(AcumaticaClient::class)->fetchOrdersForFillRatePage('2026-06-01', '2026-06-30');
 
         $url = $this->salesOrderRequestUrl();
+        $decoded = urldecode($url);
 
-        $this->assertStringContainsString("OrderType eq 'SO'", urldecode($url));
-        $this->assertStringContainsString("Status ne 'Completed'", urldecode($url));
+        // Fill-rate needs all statuses in the date window (incl. completed) to measure fill.
+        $this->assertStringContainsString("OrderType eq 'SO'", $decoded);
+        $this->assertStringContainsString("Date ge datetimeoffset'2026-06-01T00:00:00'", $decoded);
+        $this->assertStringContainsString("Date le datetimeoffset'2026-06-30T23:59:59'", $decoded);
+        $this->assertStringNotContainsString("Status ne 'Completed'", $decoded);
         $this->assertStringContainsString('$expand=Details', $url);
         $this->assertStringNotContainsString('$select=', $url);
         $this->assertStringNotContainsString('$expand=DocumentDetails', $url);
@@ -96,8 +101,11 @@ class AcumaticaClientOperationsTest extends TestCase
 
     public function test_fetch_stock_items_does_not_use_select(): void
     {
+        // Client probes stockItem then StockItem; fake both casings.
         Http::fake([
-            'https://kimfay.acumatica.com/entity/IpayV2/22.200.001/StockItem/*' => Http::response([]),
+            'https://kimfay.acumatica.com/entity/IpayV2/22.200.001/stockItem*' => Http::response([]),
+            'https://kimfay.acumatica.com/entity/IpayV2/22.200.001/StockItem*' => Http::response([]),
+            '*' => Http::response([], 404),
         ]);
 
         $client = app(AcumaticaClient::class);
@@ -106,7 +114,7 @@ class AcumaticaClientOperationsTest extends TestCase
         Http::assertSent(function ($request) {
             $url = $request->url();
 
-            return str_contains($url, '/StockItem/')
+            return (str_contains($url, '/StockItem') || str_contains($url, '/stockItem'))
                 && ! str_contains($url, '$select=');
         });
     }
@@ -201,6 +209,50 @@ class AcumaticaClientOperationsTest extends TestCase
                 'Description' => ['value' => 'Nairobi Zone'],
             ]),
         );
+    }
+
+    public function test_fetch_sales_orders_by_numbers_is_not_gated_by_invoice_flag(): void
+    {
+        config(['services.acumatica.sales_invoice_detail_filter_supported' => false]);
+        Http::fake(['*' => Http::response([])]);
+
+        $rows = app(AcumaticaClient::class)->fetchSalesOrdersByNumbers(['SO370000', 'SO370001']);
+
+        $this->assertSame([], $rows);
+        $url = $this->salesOrderRequestUrl();
+        $decoded = urldecode($url);
+        $this->assertStringContainsString("OrderNbr eq 'SO370000'", $decoded);
+        $this->assertStringContainsString("OrderNbr eq 'SO370001'", $decoded);
+        $this->assertStringNotContainsString('SalesInvoice', $url);
+        $this->assertStringNotContainsString('Details/any', $decoded);
+    }
+
+    public function test_fetch_sales_invoices_for_sales_orders_throws_when_detail_filter_unsupported(): void
+    {
+        config(['services.acumatica.sales_invoice_detail_filter_supported' => false]);
+        Http::fake(['*' => Http::response([])]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('SalesInvoice detail filtering is unavailable');
+
+        app(AcumaticaClient::class)->fetchSalesInvoicesForSalesOrders(['SO370000']);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_fetch_sales_invoices_for_sales_orders_queries_when_detail_filter_supported(): void
+    {
+        config(['services.acumatica.sales_invoice_detail_filter_supported' => true]);
+        Http::fake(['*' => Http::response([])]);
+
+        $rows = app(AcumaticaClient::class)->fetchSalesInvoicesForSalesOrders(['SO370000']);
+
+        $this->assertSame([], $rows);
+        $url = $this->entityRequestUrl('/SalesInvoice/');
+        $decoded = urldecode($url);
+        $this->assertStringContainsString('Details/any', $decoded);
+        $this->assertStringContainsString("OrderNbr eq 'SO370000'", $decoded);
+        $this->assertStringContainsString('Released eq true', $decoded);
     }
 
     private function entityRequestUrl(string $entityPath): string

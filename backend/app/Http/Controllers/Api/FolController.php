@@ -6,19 +6,24 @@ use App\Http\Controllers\Controller;
 use App\Models\AcumaticaCustomer;
 use App\Models\AcumaticaInventoryItem;
 use App\Models\FolRequest;
+use App\Models\FolRequestAttachment;
+use App\Services\Attachments\AttachmentPreviewService;
 use App\Services\Fol\FolRequestService;
 use App\Services\Fol\FolSettingsService;
 use App\Support\DataScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FolController extends Controller
 {
     public function __construct(
         private readonly FolRequestService $fol,
         private readonly FolSettingsService $folSettings,
+        private readonly AttachmentPreviewService $attachmentPreview,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -49,6 +54,17 @@ class FolController extends Controller
         $fol = $this->fol->createDraft($request->user(), $validated);
 
         return response()->json($this->fol->present($fol), 201);
+    }
+
+    public function update(Request $request, FolRequest $folRequest): JsonResponse
+    {
+        $this->fol->ensureCan($request->user(), 'kp.fol.request');
+        $this->authorizeRequestView($request, $folRequest);
+
+        $validated = $request->validate($this->requestRules());
+        $fol = $this->fol->updateDraft($request->user(), $folRequest, $validated);
+
+        return response()->json($this->fol->present($fol));
     }
 
     public function show(Request $request, FolRequest $folRequest): JsonResponse
@@ -116,6 +132,77 @@ class FolController extends Controller
         }
 
         return response()->json($this->fol->present($folRequest->fresh()));
+    }
+
+    /** Remove an attachment from a draft FOL only. */
+    public function destroyAttachment(Request $request, FolRequestAttachment $attachment): JsonResponse
+    {
+        $this->fol->ensureCan($request->user(), 'kp.fol.request');
+        $this->authorizeAttachment($request, $attachment);
+
+        return response()->json($this->fol->present(
+            $this->fol->deleteAttachment($request->user(), $attachment),
+        ));
+    }
+
+    /** Authenticated download (Content-Disposition: attachment). */
+    public function downloadAttachment(Request $request, FolRequestAttachment $attachment): StreamedResponse
+    {
+        $this->authorizeAttachment($request, $attachment);
+
+        return $this->streamAttachment($attachment, asDownload: true);
+    }
+
+    /** Authenticated inline view (PDF / image in browser). */
+    public function viewAttachment(Request $request, FolRequestAttachment $attachment): StreamedResponse
+    {
+        $this->authorizeAttachment($request, $attachment);
+
+        return $this->streamAttachment($attachment, asDownload: false);
+    }
+
+    /**
+     * Structured preview for dashboard viewer (table for Excel/CSV, metadata for image/PDF).
+     *
+     * @return JsonResponse
+     */
+    public function previewAttachment(Request $request, FolRequestAttachment $attachment): JsonResponse
+    {
+        $this->authorizeAttachment($request, $attachment);
+
+        if (! Storage::disk('local')->exists($attachment->path)) {
+            return response()->json(['message' => 'Attachment file missing on server.'], 404);
+        }
+
+        $bytes = Storage::disk('local')->get($attachment->path) ?? '';
+        $preview = $this->attachmentPreview->preview(
+            $bytes,
+            (string) $attachment->original_name,
+            $attachment->mime,
+            (int) $attachment->size,
+        );
+
+        return response()->json([
+            ...$preview,
+            'id' => $attachment->id,
+            'download_url' => url("/api/kp/fol/attachments/{$attachment->id}/download"),
+            'view_url' => url("/api/kp/fol/attachments/{$attachment->id}/view"),
+        ]);
+    }
+
+    /**
+     * Signed public view for email recipients (no login). Valid 14 days.
+     * Dispositions: view (inline) or download.
+     */
+    public function publicAttachment(Request $request, FolRequestAttachment $attachment): StreamedResponse
+    {
+        if (! $request->hasValidSignature()) {
+            abort(403, 'This attachment link is invalid or has expired.');
+        }
+
+        $asDownload = $request->query('disposition') === 'download';
+
+        return $this->streamAttachment($attachment, asDownload: $asDownload);
     }
 
     public function linkSalesOrder(Request $request, FolRequest $folRequest): JsonResponse
@@ -234,9 +321,17 @@ class FolController extends Controller
         $this->fol->ensureCan($request->user(), 'kp.fol.view');
 
         $q = trim((string) $request->input('q', ''));
+        $purpose = trim((string) $request->input('purpose', ''));
         $query = AcumaticaInventoryItem::query()
             ->where('is_fol_eligible', true)
             ->orderBy('inventory_id');
+
+        if ($purpose === 'fol_item') {
+            // Legacy categories remain orderable until administrators reclassify them.
+            $query->whereIn('fol_category', ['fol_item', 'both', 'dispenser', 'manu', 'batteries', 'maintenance']);
+        } elseif ($purpose === 'consumable') {
+            $query->whereIn('fol_category', ['consumable', 'both']);
+        }
 
         if ($q !== '') {
             $query->where(function ($scoped) use ($q) {
@@ -245,13 +340,51 @@ class FolController extends Controller
             });
         }
 
-        return response()->json($query->limit(25)->get([
+        $items = $query->limit(25)->get([
             'inventory_id',
             'description',
             'fol_category',
             'default_uom',
             'qty_on_hand',
-        ]));
+            'sales_price',
+        ]);
+
+        // Prefer inventory sales_price; fall back to most recent SO line unit price.
+        $ids = $items->pluck('inventory_id')->filter()->values()->all();
+        $lastPrices = [];
+        if ($ids !== []) {
+            $rows = \Illuminate\Support\Facades\DB::table('acumatica_sales_order_lines as l')
+                ->join('acumatica_sales_orders as o', 'o.id', '=', 'l.sales_order_id')
+                ->whereIn('l.inventory_id', $ids)
+                ->where('l.unit_price', '>', 0)
+                ->orderByDesc('o.order_date')
+                ->orderByDesc('l.id')
+                ->get(['l.inventory_id', 'l.unit_price']);
+            foreach ($rows as $row) {
+                $inv = (string) $row->inventory_id;
+                if (! isset($lastPrices[$inv])) {
+                    $lastPrices[$inv] = (float) $row->unit_price;
+                }
+            }
+        }
+
+        $payload = $items->map(function ($item) use ($lastPrices) {
+            $sales = (float) ($item->sales_price ?? 0);
+            $fallback = $lastPrices[(string) $item->inventory_id] ?? null;
+            $unitPrice = $sales > 0 ? $sales : $fallback;
+
+            return [
+                'inventory_id' => $item->inventory_id,
+                'description' => $item->description,
+                'fol_category' => $item->fol_category,
+                'default_uom' => $item->default_uom,
+                'qty_on_hand' => $item->qty_on_hand,
+                'sales_price' => $unitPrice,
+                'price_source' => $sales > 0 ? 'inventory' : ($unitPrice ? 'last_so' : null),
+            ];
+        })->values();
+
+        return response()->json($payload);
     }
 
     public function metrics(Request $request): JsonResponse
@@ -269,20 +402,32 @@ class FolController extends Controller
             abort(403, 'Forbidden.');
         }
 
+        $inventoryIds = $validated['inventory_id'] ?? [];
         $metrics = $this->fol->metricsForCustomer(
             $customer->acumatica_id,
-            $validated['inventory_id'] ?? [],
+            $inventoryIds,
         );
 
+        // Per-line prior FOL issued (used when adding cart lines + line table).
         $prior = [];
-        foreach ($validated['inventory_id'] ?? [] as $inventoryId) {
+        foreach ($inventoryIds as $inventoryId) {
             $prior[$inventoryId] = $this->fol->priorIssued($customer->acumatica_id, $inventoryId);
+        }
+        // Prefer richer by_sku from prior_fol when available.
+        foreach (($metrics['prior_fol']['by_sku'] ?? []) as $inv => $row) {
+            $prior[$inv] = [
+                'qty' => $row['qty'] ?? 0,
+                'date' => $row['date'] ?? null,
+                'public_ref' => $row['public_ref'] ?? null,
+                'product_description' => $row['product_description'] ?? null,
+            ];
         }
 
         return response()->json([
             'customer' => $customer,
             'metrics' => $metrics,
             'prior_issued' => $prior,
+            'prior_fol' => $metrics['prior_fol'] ?? null,
         ]);
     }
 
@@ -290,19 +435,28 @@ class FolController extends Controller
     {
         return [
             'customer_acumatica_id' => ['required', 'string', 'max:50'],
-            'request_origin' => ['required', Rule::in(['sales_consultant_visit', 'customer_call', 'email', 'other'])],
+            'request_origin' => ['required', Rule::in(['sales_consultant_visit', 'customer_call', 'email'])],
             'request_origin_other' => ['nullable', 'string', 'max:255'],
             'requestor_first_name' => ['required', 'string', 'max:100'],
             'requestor_last_name' => ['required', 'string', 'max:100'],
             'requestor_phone' => ['required', 'string', 'max:50'],
             'requestor_email' => ['required', 'email', 'max:255'],
+            'requestor_contact_id' => ['nullable', 'integer', 'exists:customer_contacts,id'],
+            'save_requestor_as_contact' => ['sometimes', 'boolean'],
+            'requestor_designation_key' => ['nullable', 'string', 'max:50'],
+            'requestor_designation_label' => ['nullable', 'string', 'max:120'],
+            'requestor_is_primary' => ['sometimes', 'boolean'],
             'issue_types' => ['required', 'array', 'min:1'],
             'issue_types.*' => ['string', Rule::in(['new_dispenser', 'fol_batteries', 'maintenance_parts', 'replacement'])],
             'reason_text' => ['required', 'string', 'min:20'],
             'installation_required' => ['sometimes', 'boolean'],
             'installation_location' => ['nullable', 'required_if:installation_required,true', 'string', 'max:2000'],
             'customer_has_submitted_po' => ['sometimes', 'boolean'],
+            'consumable_inventory_ids' => ['sometimes', 'array', 'max:100'],
+            'consumable_inventory_ids.*' => ['string', 'max:100', 'distinct'],
             'consumables_last_purchase_date' => ['nullable', 'date'],
+            'consumables_sales_3m_kes' => ['nullable', 'numeric', 'min:0'],
+            'consumables_volume_3m' => ['nullable', 'numeric', 'min:0'],
             'consumables_sales_6m_kes' => ['nullable', 'numeric', 'min:0'],
             'consumables_volume_6m' => ['nullable', 'numeric', 'min:0'],
             'consumables_metrics_source' => ['nullable', Rule::in(['system_so', 'manual_override'])],
@@ -310,6 +464,7 @@ class FolController extends Controller
             'debt_explanation' => ['required', 'string', 'max:3000'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.inventory_id' => ['required', 'string', 'max:100'],
+            'lines.*.line_type' => ['nullable', Rule::in(['fol_item'])],
             'lines.*.qty_requested' => ['required', 'numeric', 'min:1'],
             'lines.*.qty_previously_issued' => ['nullable', 'numeric', 'min:0'],
             'lines.*.date_last_issue' => ['nullable', 'date'],
@@ -324,5 +479,57 @@ class FolController extends Controller
         if (! $allowed) {
             abort(403, 'Forbidden.');
         }
+    }
+
+    private function authorizeAttachment(Request $request, FolRequestAttachment $attachment): void
+    {
+        $folRequest = $attachment->request;
+        if (! $folRequest) {
+            abort(404);
+        }
+        $this->fol->ensureCan($request->user(), 'kp.fol.view');
+        $this->authorizeRequestView($request, $folRequest);
+    }
+
+    private function streamAttachment(FolRequestAttachment $attachment, bool $asDownload): StreamedResponse
+    {
+        if (! Storage::disk('local')->exists($attachment->path)) {
+            abort(404, 'Attachment file missing on server.');
+        }
+
+        $mime = $attachment->mime ?: 'application/octet-stream';
+        $name = $attachment->original_name ?: 'attachment';
+        $disposition = $asDownload ? 'attachment' : 'inline';
+
+        return Storage::disk('local')->response(
+            $attachment->path,
+            $name,
+            [
+                'Content-Type' => $mime,
+                'Content-Disposition' => $disposition.'; filename="'.addslashes($name).'"',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
+    }
+
+    /**
+     * Temporary signed URLs for embedding in outbound FOL emails.
+     *
+     * @return array{view_url: string, download_url: string}
+     */
+    public static function signedAttachmentUrls(FolRequestAttachment $attachment, int $days = 14): array
+    {
+        $view = URL::temporarySignedRoute(
+            'fol.attachments.public',
+            now()->addDays($days),
+            ['attachment' => $attachment->id, 'disposition' => 'view'],
+        );
+        $download = URL::temporarySignedRoute(
+            'fol.attachments.public',
+            now()->addDays($days),
+            ['attachment' => $attachment->id, 'disposition' => 'download'],
+        );
+
+        return ['view_url' => $view, 'download_url' => $download];
     }
 }

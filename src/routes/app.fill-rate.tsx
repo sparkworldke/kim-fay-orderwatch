@@ -1,7 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { BarChart3, FileDown, Gauge, List, PackageX, RefreshCw, Search } from "lucide-react";
+import { BarChart3, FileDown, Gauge, List, PackageX, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useAuth } from "@/lib/auth";
 import {
   CustomerLink,
   DateWithActions,
@@ -39,6 +50,7 @@ import {
   useFillRateOutOfStockReport,
   useFillRateSummary,
   useSyncFillRate,
+  useTruncateFillRate,
   type FillRateSort,
   type ContributionRow,
 } from "@/hooks/useOperations";
@@ -48,7 +60,9 @@ import {
   type BusinessCategoryKey,
 } from "@/components/operations/BusinessCategorySkuSheet";
 import { downloadApiFile } from "@/lib/api";
+import { useQueueExportDownload } from "@/hooks/useExportDownloads";
 import { formatNumber } from "@/lib/format";
+import { DATE_PRESETS, type DatePresetId, resolveDatePreset } from "@/lib/date-presets";
 
 type FillRateSearch = {
   shipping_zone_id?: string;
@@ -76,7 +90,7 @@ export const Route = createFileRoute("/app/fill-rate")({
         ? search.delivery_sla
         : undefined,
   }),
-  head: () => ({ meta: [{ title: "Fill Rate — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Fill Rate — Kim-Fay Sight" }] }),
   component: FillRatePage,
 });
 
@@ -104,6 +118,9 @@ function FillRatePage() {
   const [sort, setSort] = useState<FillRateSort>("high_to_low");
   const [dateFrom, setDateFrom] = useState(initialDateFrom ?? startOfMonth());
   const [dateTo, setDateTo] = useState(initialDateTo ?? today());
+  const [datePreset, setDatePreset] = useState<DatePresetId>(
+    initialDateFrom || initialDateTo ? "custom" : "this_month",
+  );
   const [customerGroup, setCustomerGroup] = useState("all");
   const [productLine, setProductLine] = useState("all");
   const [reasonCode, setReasonCode] = useState("all");
@@ -114,6 +131,8 @@ function FillRatePage() {
   const [perPage, setPerPage] = useState(50);
   const [selectedOrder, setSelectedOrder] = useState<FillRateSnapshot | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isQueuingDownload, setIsQueuingDownload] = useState(false);
+  const queueExport = useQueueExportDownload();
   /** Default off: fill rate excludes out-of-stock shortfall lines. Toggle on to include them. */
   const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
   const [oosBrand, setOosBrand] = useState<string>("all");
@@ -169,6 +188,35 @@ function FillRatePage() {
     shipping_zone_id: listFilters.shipping_zone_id,
   });
   const sync = useSyncFillRate();
+  const truncateFillRate = useTruncateFillRate();
+  const { session } = useAuth();
+  const isAdmin = session?.role === "Administrator";
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearMode, setClearMode] = useState<"range" | "all">("range");
+
+  function handleClearData() {
+    if (clearMode === "range" && (!dateFrom || !dateTo || dateFrom > dateTo)) {
+      toast.error("Select a valid date range before clearing data.");
+      return;
+    }
+    truncateFillRate.mutate(clearMode === "all" ? { clear_all: true } : { date_from: dateFrom, date_to: dateTo }, {
+      onSuccess: (res) => {
+        toast.success(res.message);
+        setClearDialogOpen(false);
+      },
+      onError: (e: Error) => toast.error(e.message),
+    });
+  }
+
+  function applyDatePreset(preset: DatePresetId) {
+    setDatePreset(preset);
+    if (preset !== "custom") {
+      const range = resolveDatePreset(preset);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+      setPage(1);
+    }
+  }
 
   function handleUpdate() {
     if (!dateFrom || !dateTo) {
@@ -239,7 +287,7 @@ function FillRatePage() {
       const message = error instanceof Error ? error.message : "Unable to download fill rate.";
       if (message.includes("504") || /gateway time|timed out|timeout/i.test(message)) {
         toast.error(
-          "Export timed out. Narrow the date range or filters (under ~8,000 orders) and try again.",
+          "Export timed out. Use “Queue download” for large ranges, then open Downloads.",
           { duration: 8000 },
         );
       } else {
@@ -247,6 +295,43 @@ function FillRatePage() {
       }
     } finally {
       setIsDownloading(false);
+    }
+  }
+
+  async function handleQueueDownload() {
+    if (!dateFrom || !dateTo) {
+      toast.error("Set a date range first");
+      return;
+    }
+    if (dateFrom > dateTo) {
+      toast.error("Start date must be before end date");
+      return;
+    }
+    const filters: Record<string, string> = {};
+    if (q) filters.q = q;
+    if (status !== "all") filters.status = status;
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+    if (customerGroup !== "all") filters.customer_group = customerGroup;
+    if (productLine !== "all") filters.product_line = productLine;
+    if (reasonCode !== "all") filters.reason_code = reasonCode;
+    if (shippingZoneId !== "all") filters.shipping_zone_id = shippingZoneId;
+    if (deliverySla === "breach" || deliverySla === "warning") filters.delivery_sla = deliverySla;
+    if (segment !== "all") filters.segment = segment;
+    if (brandFilter.partner_brand) filters.partner_brand = brandFilter.partner_brand;
+    if (brandFilter.brand) filters.brand = brandFilter.brand;
+    if (brandFilter.category) filters.category = brandFilter.category;
+    filters.include_out_of_stock = includeOutOfStock ? "1" : "0";
+    filters.sort = sort;
+
+    setIsQueuingDownload(true);
+    try {
+      const res = await queueExport.mutateAsync({ type: "fill_rate", filters });
+      toast.success(res.message || "Export queued. Open Downloads when ready.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to queue export.");
+    } finally {
+      setIsQueuingDownload(false);
     }
   }
 
@@ -262,6 +347,17 @@ function FillRatePage() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant="outline"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setClearDialogOpen(true)}
+              disabled={truncateFillRate.isPending}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {truncateFillRate.isPending ? "Clearing…" : "Clear data"}
+            </Button>
+          )}
           <Button onClick={handleUpdate} disabled={sync.isPending}>
             <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
             {sync.isPending ? "Updating…" : "Update fill rate"}
@@ -269,20 +365,69 @@ function FillRatePage() {
         </div>
       </div>
 
+      {isAdmin && (
+        <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear fill-rate data?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes fill-rate snapshots from OrderWatch. Sales orders and backorders are not touched.
+              </AlertDialogDescription>
+              <div className="grid gap-2 pt-2">
+                <Label>Clear scope</Label>
+                <Select value={clearMode} onValueChange={(value) => setClearMode(value as "range" | "all")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="range">Selected range: {dateFrom} to {dateTo}</SelectItem>
+                    <SelectItem value="all">All fill-rate data</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleClearData}
+              >
+                {clearMode === "all" ? "Clear all fill-rate data" : "Clear selected range"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
       <OperationsSyncStatus />
 
       <div className="flex flex-wrap items-end gap-3">
         <div>
+          <Label>Date preset</Label>
+          <Select value={datePreset} onValueChange={(value) => applyDatePreset(value as DatePresetId)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {DATE_PRESETS.map((preset) => <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
           <Label htmlFor="fr-from">From</Label>
-          <Input id="fr-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input id="fr-from" type="date" value={dateFrom} onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); }} />
         </div>
         <div>
           <Label htmlFor="fr-to">To</Label>
-          <Input id="fr-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input id="fr-to" type="date" value={dateTo} onChange={(e) => { setDatePreset("custom"); setDateTo(e.target.value); }} />
         </div>
-        <Button variant="outline" onClick={handleDownload} disabled={isDownloading}>
+        <Button variant="outline" onClick={handleDownload} disabled={isDownloading || isQueuingDownload}>
           <FileDown className={`mr-2 h-4 w-4 ${isDownloading ? "animate-pulse" : ""}`} />
           {isDownloading ? "Preparing…" : "Download Excel"}
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => void handleQueueDownload()}
+          disabled={isDownloading || isQueuingDownload}
+        >
+          <FileDown className={`mr-2 h-4 w-4 ${isQueuingDownload ? "animate-pulse" : ""}`} />
+          {isQueuingDownload ? "Queuing…" : "Queue download"}
         </Button>
         <div className="w-40">
           <Label>Segment</Label>

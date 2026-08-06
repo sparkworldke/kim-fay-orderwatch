@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\SignInLog;
 use App\Models\User;
 use App\Services\Team\UserCapabilitiesService;
 use App\Services\Team\UserSessionService;
@@ -28,12 +29,16 @@ class AuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
+            $this->recordSignInLog($request, $user, (string) $request->email, 'password', 'failure');
+
             return response()->json([
                 'message' => 'Invalid credentials. Please check your email and password.',
             ], 422);
         }
 
         if (! $user->is_active) {
+            $this->recordSignInLog($request, $user, $user->email, 'password', 'failure');
+
             return response()->json([
                 'message' => 'Your account is not active. Please contact an administrator.',
             ], 403);
@@ -44,11 +49,29 @@ class AuthController extends Controller
 
         $token = $user->createToken('api-token')->plainTextToken;
         $sessions->open($user, $request, 'password');
+        $this->recordSignInLog($request, $user, $user->email, 'password', 'success');
 
         return response()->json([
             'token' => $token,
             'user'  => $this->formatUser($user),
             'capabilities' => $capabilities->forUser($user),
+        ]);
+    }
+
+    private function recordSignInLog(
+        Request $request,
+        ?User $user,
+        string $email,
+        string $loginMode,
+        string $status,
+    ): void {
+        SignInLog::create([
+            'user_id' => $user?->id,
+            'email_hash' => hash('sha256', strtolower(trim($email))),
+            'ip_address' => $request->ip() ?? '',
+            'user_agent' => $request->userAgent() ?? '',
+            'login_mode' => $loginMode,
+            'status' => $status,
         ]);
     }
 
@@ -111,6 +134,9 @@ class AuthController extends Controller
             'email' => $user->email,
             'role' => $user->role ?? 'Administrator',
             'rep_code' => $user->rep_code,
+            'phone_number' => $user->phone_number,
+            'whatsapp_number' => $user->whatsapp_number,
+            'must_change_password' => $user->password_changed_at === null,
             'employee_number' => $user->employee_number,
             'department_id' => $user->department_id,
             'department_role' => $user->department_role,

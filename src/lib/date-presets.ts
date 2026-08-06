@@ -2,9 +2,9 @@ export type DatePresetId =
   | "today"
   | "yesterday"
   | "this_week"
-  | "last_7_days"
+  | "last_week"
   | "this_month"
-  | "last_30_days"
+  | "last_month"
   | "custom";
 
 export interface DateRangeValue {
@@ -20,11 +20,11 @@ export interface DatePreset {
 export const DATE_PRESETS: DatePreset[] = [
   { id: "today", label: "Today" },
   { id: "yesterday", label: "Yesterday" },
-  { id: "this_week", label: "This week" },
-  { id: "last_7_days", label: "Last 7 days" },
-  { id: "this_month", label: "This month" },
-  { id: "last_30_days", label: "Last 30 days" },
-  { id: "custom", label: "Custom" },
+  { id: "this_week", label: "This Week" },
+  { id: "last_week", label: "Last Week" },
+  { id: "this_month", label: "This Month" },
+  { id: "last_month", label: "Last Month" },
+  { id: "custom", label: "Date Range" },
 ];
 
 /** Calendar date in the user's local timezone (not UTC). */
@@ -54,19 +54,25 @@ export function resolveDatePreset(preset: DatePresetId): DateRangeValue {
       monday.setDate(monday.getDate() + mondayOffset);
       return { from: localDateIso(monday), to: localDateIso(start) };
     }
-    case "last_7_days": {
-      const from = new Date(start);
-      from.setDate(from.getDate() - 6);
-      return { from: localDateIso(from), to: localDateIso(start) };
+    case "last_week": {
+      const day = start.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const thisMonday = new Date(start);
+      thisMonday.setDate(thisMonday.getDate() + mondayOffset);
+      const from = new Date(thisMonday);
+      from.setDate(from.getDate() - 7);
+      const to = new Date(thisMonday);
+      to.setDate(to.getDate() - 1);
+      return { from: localDateIso(from), to: localDateIso(to) };
     }
     case "this_month": {
       const from = new Date(start.getFullYear(), start.getMonth(), 1);
       return { from: localDateIso(from), to: localDateIso(start) };
     }
-    case "last_30_days": {
-      const from = new Date(start);
-      from.setDate(from.getDate() - 29);
-      return { from: localDateIso(from), to: localDateIso(start) };
+    case "last_month": {
+      const from = new Date(start.getFullYear(), start.getMonth() - 1, 1);
+      const to = new Date(start.getFullYear(), start.getMonth(), 0);
+      return { from: localDateIso(from), to: localDateIso(to) };
     }
     default:
       return { from: localDateIso(start), to: localDateIso(start) };

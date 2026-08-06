@@ -17,6 +17,11 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
+use App\Models\FulfillmentHistorySnapshot;
+use App\Models\AcumaticaCustomer;
+use App\Models\AcumaticaInventoryItem;
+use App\Models\User;
+use App\Services\Cache\DomainCache;
 
 class OrderController extends Controller
 {
@@ -30,12 +35,43 @@ class OrderController extends Controller
     {
         $query = $this->scopedOrderQuery($request)
             ->leftJoin('acumatica_customers as ac', 'acumatica_sales_orders.customer_acumatica_id', '=', 'ac.acumatica_id')
+            ->select($this->orderIndexColumns())
             ->withCount('lines')
             ->when($request->boolean('with_fulfillment'), fn ($q) => $q
-                ->withAvg('lines', 'fill_rate_pct')
                 ->withSum('lines', 'backorder_qty')
                 ->addSelect([
                     'acumatica_sales_orders.raw_payload',
+                    // Quantity-weighted fill rate: SUM(capped shipped qty) / SUM(order_qty) × 100.
+                    // This matches FillRateCalculator::compute() and the SO detail page.
+                    // The old withAvg('lines','fill_rate_pct') averaged per-line percentages
+                    // which gives wrong results when line qtys differ (e.g. 80% instead of 69%).
+                    DB::raw('(
+                        SELECT CASE
+                            WHEN SUM(COALESCE(l.order_qty, 0)) > 0
+                            THEN ROUND(
+                                SUM(
+                                    CASE
+                                        WHEN COALESCE(l.shipped_qty, 0) > COALESCE(l.qty_on_shipments, 0)
+                                            THEN CASE
+                                                WHEN COALESCE(l.shipped_qty, 0) > COALESCE(l.order_qty, 0)
+                                                    THEN COALESCE(l.order_qty, 0)
+                                                ELSE COALESCE(l.shipped_qty, 0)
+                                            END
+                                        ELSE CASE
+                                            WHEN COALESCE(l.qty_on_shipments, 0) > COALESCE(l.order_qty, 0)
+                                                THEN COALESCE(l.order_qty, 0)
+                                            ELSE COALESCE(l.qty_on_shipments, 0)
+                                        END
+                                    END
+                                ) * 100.0 / SUM(COALESCE(l.order_qty, 0)),
+                                2
+                            )
+                            ELSE NULL
+                        END
+                        FROM acumatica_sales_order_lines AS l
+                        WHERE l.sales_order_id = acumatica_sales_orders.id
+                          AND COALESCE(l.order_qty, 0) > 0
+                    ) AS lines_avg_fill_rate_pct'),
                     DB::raw('(
                         SELECT COALESCE(SUM(
                             CASE
@@ -47,8 +83,7 @@ class OrderController extends Controller
                         FROM acumatica_sales_order_lines AS l
                         WHERE l.sales_order_id = acumatica_sales_orders.id
                     ) AS revenue_lost'),
-                ]))
-            ->select($this->orderIndexColumns());
+                ]));
 
         $this->applySort($query, (string) $request->input('sort', 'latest'));
 
@@ -64,9 +99,9 @@ class OrderController extends Controller
             $query->where('acumatica_sales_orders.customer_acumatica_id', $request->input('customer_id'));
         }
 
-        if (! \App\Support\SalesConsultantScope::appliesTo($request->user()) && $request->filled('rep_code')) {
-            $query->where('acumatica_sales_orders.sales_consultant_rep_code', strtoupper(trim((string) $request->input('rep_code'))));
-        }
+        $this->applyBusinessFilters($query, $request);
+
+        $this->applyConsultantFilters($query, $request);
 
         if ($request->has('status')) {
             $query->where('acumatica_sales_orders.status', $request->input('status'));
@@ -122,6 +157,19 @@ class OrderController extends Controller
             return response()->json(['message' => 'Order not found.'], 404);
         }
 
+        $inventoryIds = DataScope::scopedInventoryIds($request->user());
+        if ($inventoryIds !== null) {
+            $order->setRelation('lines', $order->lines
+                ->whereIn('inventory_id', $inventoryIds)
+                ->values());
+            if ($order->lines->isEmpty()) {
+                return response()->json(['message' => 'Order not found.'], 404);
+            }
+            $order->order_total = round((float) $order->lines->sum(
+                fn ($line) => (float) $line->order_qty * (float) $line->unit_price,
+            ), 2);
+        }
+
         // Resolve name inline for the detail view too
         if (! $order->customer_name && $order->customer) {
             $order->customer_name = $order->customer->name;
@@ -129,6 +177,20 @@ class OrderController extends Controller
 
         $this->attachMatchDiscrepanciesToOrder($order);
         $this->attachLineInventoryClassifications($order);
+        $history = FulfillmentHistorySnapshot::with('lines')->where('order_nbr', $order->acumatica_order_nbr)->first();
+        if ($history && $inventoryIds !== null) {
+            $history->setRelation('lines', $history->lines->whereIn('inventory_id', $inventoryIds)->values());
+        }
+        // Finalized documents cannot still ship — line open_qty is often stale
+        // (frozen at first sync), so the current outstanding balance is 0.
+        $finalized = in_array(strtolower(trim((string) $order->status)), ['completed', 'cancelled', 'closed', 'invoiced'], true);
+        $currentAmount = $finalized
+            ? 0.0
+            : $order->lines->sum(fn ($line) => max((float) $line->open_qty, 0) * max((float) $line->unit_price, 0));
+        $order->setAttribute('fulfillment_history', $history);
+        $order->setAttribute('historical_shortfall_amount', (float) ($history?->historical_shortfall_amount ?? 0));
+        $order->setAttribute('current_outstanding_amount', round($currentAmount, 2));
+        $order->setAttribute('delivered_later', $history !== null && (float) $history->historical_shortfall_amount > 0 && $currentAmount <= 0);
 
         return response()->json($order);
     }
@@ -151,6 +213,8 @@ class OrderController extends Controller
         if ($request->has('customer_id')) {
             $base->where('acumatica_sales_orders.customer_acumatica_id', $request->input('customer_id'));
         }
+        $this->applyBusinessFilters($base, $request);
+        $this->applyConsultantFilters($base, $request);
         if ($request->has('status')) {
             $base->where('acumatica_sales_orders.status', $request->input('status'));
         }
@@ -206,6 +270,196 @@ class OrderController extends Controller
         ]);
     }
 
+    public function filterOptions(Request $request): JsonResponse
+    {
+        $customersQuery = AcumaticaCustomer::query()->where('status', '!=', 'Inactive');
+        $scopedCustomerIds = DataScope::scopedCustomerAcumaticaIds($request->user());
+        if ($scopedCustomerIds !== null) {
+            $customersQuery->whereIn('acumatica_id', $scopedCustomerIds);
+        }
+        $customers = $customersQuery
+            ->orderBy('name')
+            ->get(['acumatica_id', 'parent_acumatica_id', 'name', 'customer_class']);
+        $byId = $customers->keyBy('acumatica_id');
+        $groups = [];
+
+        foreach ($customers as $customer) {
+            $rootId = $customer->parent_acumatica_id && $byId->has($customer->parent_acumatica_id)
+                ? $customer->parent_acumatica_id
+                : $customer->acumatica_id;
+            $root = $byId->get($rootId, $customer);
+            $groups[$rootId] ??= [
+                'id' => $rootId,
+                'name' => $root->name ?: $rootId,
+                'segment' => str_starts_with(strtoupper(trim((string) $root->customer_class)), 'KP') ? 'KP' : 'CS',
+                'outlets' => [],
+            ];
+            if ($customer->acumatica_id !== $rootId) {
+                $groups[$rootId]['outlets'][] = [
+                    'id' => $customer->acumatica_id,
+                    'name' => $customer->name ?: $customer->acumatica_id,
+                ];
+            }
+        }
+
+        foreach ($groups as &$group) {
+            if ($group['outlets'] === []) {
+                $group['outlets'][] = ['id' => $group['id'], 'name' => $group['name']];
+            }
+        }
+        unset($group);
+
+        $brands = AcumaticaInventoryItem::query()
+            ->whereNotNull('brand')->where('brand', '!=', '')
+            ->distinct()->orderBy('brand')->pluck('brand')->values();
+
+        $visibleRepCodes = $this->scopedOrderQuery($request)
+            ->whereNotNull('sales_consultant_rep_code')
+            ->where('sales_consultant_rep_code', '!=', '')
+            ->distinct()
+            ->pluck('sales_consultant_rep_code')
+            ->map(fn ($code) => strtoupper(trim((string) $code)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $users = User::query()
+            ->where('is_active', true)
+            ->whereNotNull('rep_code')
+            ->whereIn(DB::raw('UPPER(rep_code)'), $visibleRepCodes->all())
+            ->orderBy('name')
+            ->get(['id', 'name', 'rep_code', 'reports_to_user_id', 'org_level', 'department_role']);
+
+        $allUsers = $users->keyBy('id');
+        $ancestorIds = $users->pluck('reports_to_user_id')->filter()->unique();
+        while ($ancestorIds->isNotEmpty()) {
+            $missingIds = $ancestorIds->diff($allUsers->keys());
+            if ($missingIds->isEmpty()) {
+                break;
+            }
+            $ancestors = User::query()
+                ->whereIn('id', $missingIds->all())
+                ->get(['id', 'name', 'reports_to_user_id', 'org_level', 'department_role']);
+            if ($ancestors->isEmpty()) {
+                break;
+            }
+            foreach ($ancestors as $ancestor) {
+                $allUsers->put($ancestor->id, $ancestor);
+            }
+            $ancestorIds = $ancestors->pluck('reports_to_user_id')->filter()->unique();
+        }
+
+        $consultantGroups = [];
+        foreach ($users as $consultant) {
+            $manager = $consultant->reports_to_user_id
+                ? $allUsers->get($consultant->reports_to_user_id)
+                : null;
+            $groupLeader = $manager;
+            $cursor = $manager;
+            $visited = [];
+
+            while ($cursor !== null && ! in_array($cursor->id, $visited, true)) {
+                $visited[] = $cursor->id;
+                if ($cursor->org_level === 'hod' || $cursor->department_role === 'hod') {
+                    $groupLeader = $cursor;
+                    break;
+                }
+                $cursor = $cursor->reports_to_user_id
+                    ? $allUsers->get($cursor->reports_to_user_id)
+                    : null;
+            }
+
+            $groupId = $groupLeader ? (string) $groupLeader->id : 'unassigned';
+            $consultantGroups[$groupId] ??= [
+                'id' => $groupId,
+                'name' => $groupLeader?->name ?? 'Unassigned consultants',
+                'is_hod' => $groupLeader !== null
+                    && ($groupLeader->org_level === 'hod' || $groupLeader->department_role === 'hod'),
+                'members' => [],
+            ];
+            $consultantGroups[$groupId]['members'][] = [
+                'id' => $consultant->id,
+                'name' => $consultant->name,
+                'rep_code' => strtoupper(trim((string) $consultant->rep_code)),
+            ];
+        }
+
+        foreach ($consultantGroups as &$consultantGroup) {
+            usort($consultantGroup['members'], fn ($a, $b) => strcasecmp($a['name'], $b['name']));
+        }
+        unset($consultantGroup);
+
+        return response()->json([
+            'segments' => [
+                ['id' => 'KP', 'name' => 'KP (Kim-Fay Professional)'],
+                ['id' => 'CS', 'name' => 'Consumer Sales'],
+            ],
+            'brands' => $brands,
+            'parents' => collect($groups)->sortBy('name')->values(),
+            'consultant_groups' => collect($consultantGroups)
+                ->sortBy(fn ($group) => [
+                    $group['name'] === 'Unassigned consultants' ? 1 : 0,
+                    strtolower($group['name']),
+                ])
+                ->values(),
+        ]);
+    }
+
+    private function applyConsultantFilters($query, Request $request): void
+    {
+        $repCodes = array_merge(
+            (array) $request->input('rep_codes', []),
+            $request->filled('rep_code') ? [(string) $request->input('rep_code')] : [],
+        );
+        $repCodes = array_values(array_unique(array_filter(array_map(
+            fn ($code) => strtoupper(trim((string) $code)),
+            $repCodes,
+        ))));
+
+        if ($repCodes !== []) {
+            $query->whereIn('acumatica_sales_orders.sales_consultant_rep_code', $repCodes);
+        }
+    }
+
+    private function applyBusinessFilters($query, Request $request): void
+    {
+        $segments = array_values(array_filter((array) $request->input('segments', [])));
+        if ($segments !== []) {
+            $query->where(function ($segmentQuery) use ($segments) {
+                if (in_array('KP', $segments, true)) {
+                    $segmentQuery->orWhereRaw("UPPER(TRIM(COALESCE(ac.customer_class, ''))) LIKE 'KP%'");
+                }
+                if (in_array('CS', $segments, true)) {
+                    $segmentQuery->orWhereRaw("UPPER(TRIM(COALESCE(ac.customer_class, ''))) NOT LIKE 'KP%'");
+                }
+            });
+        }
+
+        $customerIds = array_values(array_filter((array) $request->input('customer_ids', [])));
+        $parentIds = array_values(array_filter((array) $request->input('parent_customer_ids', [])));
+        if ($customerIds === [] && $parentIds !== []) {
+            $familyIds = AcumaticaCustomer::query()
+                ->whereIn('parent_acumatica_id', $parentIds)
+                ->orWhereIn('acumatica_id', $parentIds)
+                ->pluck('acumatica_id')->all();
+            $customerIds = array_values(array_unique([...$customerIds, ...$familyIds]));
+        }
+        if ($customerIds !== []) {
+            $query->whereIn('acumatica_sales_orders.customer_acumatica_id', $customerIds);
+        }
+
+        $brands = array_values(array_filter((array) $request->input('brands', [])));
+        if ($brands !== []) {
+            $query->whereExists(function ($brandQuery) use ($brands) {
+                $brandQuery->selectRaw('1')
+                    ->from('acumatica_sales_order_lines as brand_lines')
+                    ->join('acumatica_inventory_items as brand_items', 'brand_items.inventory_id', '=', 'brand_lines.inventory_id')
+                    ->whereColumn('brand_lines.sales_order_id', 'acumatica_sales_orders.id')
+                    ->whereIn('brand_items.brand', $brands);
+            });
+        }
+    }
+
     public function store(Request $request): JsonResponse
     {
         return response()->json(['message' => 'Orders are managed via Acumatica sync.'], 405);
@@ -253,6 +507,17 @@ class OrderController extends Controller
             'workflow_sub_reason_code' => $workflow['workflow_sub_reason_code'],
             'workflow_reason_label' => $workflow['workflow_reason_label'],
         ]));
+        app(DomainCache::class)->bump(
+            DomainCache::ORDERS,
+            DomainCache::BACKORDERS,
+            DomainCache::FILL_RATE,
+            DomainCache::BUSINESS_OPTIMIZATION,
+            DomainCache::NOT_DELIVERED,
+            DomainCache::CUSTOMER_ANALYTICS,
+            DomainCache::SALES_PORTFOLIO,
+            DomainCache::SALES_INTELLIGENCE,
+            DomainCache::KP_CRM,
+        );
 
         return response()->json($order->withCount('lines')->first());
     }
@@ -512,6 +777,13 @@ class OrderController extends Controller
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+        app(DomainCache::class)->bump(
+            DomainCache::ORDERS,
+            DomainCache::CUSTOMER_ANALYTICS,
+            DomainCache::SALES_PORTFOLIO,
+            DomainCache::SALES_INTELLIGENCE,
+            DomainCache::KP_CRM,
+        );
 
         return response()->json([
             'message' => 'Consultant assigned successfully.',

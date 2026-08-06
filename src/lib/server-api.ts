@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = "https://kim-fay-orderwatch.tools/backend/public/api";
+const DEFAULT_API_BASE = "https://datacontroller.fayshop.co.ke/backend/public/api";
 
 /** API base for server-side (SSR) requests — may use HTTP to avoid TLS issues in local dev. */
 export function getServerApiBaseUrl(): string {

@@ -123,6 +123,9 @@ export interface AcumaticaSalesOrderLine {
   order_qty: string;
   shipped_qty?: string | null;
   qty_on_shipments?: string | null;
+  invoiced_qty?: string | null;
+  invoice_reconciliation_status?: "reconciled" | "unavailable" | null;
+  fulfillment_source?: string | null;
   open_qty?: string | null;
   cancelled_qty?: string | null;
   qty_at_approval?: string | null;
@@ -159,7 +162,15 @@ export interface AcumaticaSalesOrder {
   customer?: AcumaticaCustomerSummary | null;
   customer_order: string | null;
   status: string | null;
-  match_status: "pending" | "matched" | "matched_discrepancies" | "needs_review" | "unmatched" | "duplicate" | "escalated" | "missing";
+  match_status:
+    | "pending"
+    | "matched"
+    | "matched_discrepancies"
+    | "needs_review"
+    | "unmatched"
+    | "duplicate"
+    | "escalated"
+    | "missing";
   flag_source: "acumatica" | "email" | null;
   rejection_reason: string | null;
   rejection_reason_code: string | null;
@@ -192,6 +203,29 @@ export interface AcumaticaSalesOrder {
   revenue_lost?: string | number | null;
   lines?: AcumaticaSalesOrderLine[];
   synced_at: string | null;
+  historical_shortfall_amount?: number;
+  current_outstanding_amount?: number;
+  delivered_later?: boolean;
+  fulfillment_history?: {
+    observed_at: string;
+    source: string;
+    total_ordered_qty: string;
+    total_delivered_qty: string;
+    total_missing_qty: string;
+    historical_shortfall_amount: string;
+    lines: Array<{
+      id: number;
+      inventory_id: string;
+      description: string | null;
+      order_qty: string;
+      delivered_qty: string;
+      cancelled_qty: string;
+      open_qty: string;
+      unit_price: string;
+      shortfall_amount: string;
+      uom: string | null;
+    }>;
+  } | null;
 }
 
 export interface ReconciliationResult {
@@ -237,11 +271,20 @@ export interface Department {
   id: number;
   slug: string;
   name: string;
+  segment: string | null;
   is_customer_facing: boolean;
+  sort_order?: number;
   brands?: string[];
 }
 
-export type OrgLevel = "executive" | "c_suite" | "hod" | "sales" | "brandsops" | "operations" | "gap";
+export type OrgLevel =
+  | "executive"
+  | "c_suite"
+  | "hod"
+  | "sales"
+  | "brandsops"
+  | "operations"
+  | "gap";
 export type DataScopeMode = "org_wide" | "scoped" | "deny_all";
 export type ProductTypeScope = "manufactured" | "trading" | "both";
 export type SectorScope = "GT" | "MT" | "KP" | "ALL";
@@ -258,8 +301,11 @@ export interface TeamMember {
   email: string;
   role: string;
   phone_number: string | null;
+  whatsapp_number: string | null;
   rep_code: string | null;
   employee_number: string | null;
+  designation: string | null;
+  division: string | null;
   department_id: number | null;
   department_role: string | null;
   org_level: OrgLevel | null;
@@ -391,6 +437,12 @@ export interface AuditLogEntry {
   id: string;
   timestamp: string;
   actor_user_id: number | null;
+  /** Resolved display name from users table */
+  actor_name?: string | null;
+  actor_email?: string | null;
+  actor_role?: string | null;
+  /** Prefer this in UI: "Jane Doe <jane@…>" or "system" */
+  actor_label?: string | null;
   actor_ip: string | null;
   action_type: string;
   resource_type: string;
@@ -464,7 +516,10 @@ export interface CronRunLog {
   unmatched_count: number;
   skipped_count: number;
   error_count: number;
-  step_status: Record<string, { status: string; duration_ms: number; metrics: Record<string, number>; errors?: string[] }> | null;
+  step_status: Record<
+    string,
+    { status: string; duration_ms: number; metrics: Record<string, number>; errors?: string[] }
+  > | null;
   error_summary: string | null;
   metadata: Record<string, unknown> | null;
 }

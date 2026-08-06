@@ -6,6 +6,7 @@ use App\Models\AcumaticaSalesOrder;
 use App\Models\Email;
 use App\Models\EmailImportConfig;
 use App\Models\MailboxAccount;
+use App\Services\Admin\AiConnectorService;
 use App\Services\Email\OrderMatchingService;
 use App\Services\OrderMatch\OrderMatchAiMatchingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -219,5 +220,48 @@ class CustomerPoMatchingGuardrailTest extends TestCase
         $this->assertSame(1.0, (float) $prediction->confidence);
         $this->assertSame('exact', $prediction->match_type);
         $this->assertSame($order->id, $prediction->order_id);
+    }
+
+    public function test_order_match_ai_prefers_openai_before_anthropic(): void
+    {
+        $capture = new \stdClass();
+        $capture->preferenceOrder = null;
+
+        $this->app->instance(AiConnectorService::class, new class($capture) extends AiConnectorService {
+            public function __construct(private readonly object $capture)
+            {
+            }
+
+            public function resolveKey(array $preferenceOrder = ['openai', 'anthropic']): array
+            {
+                $this->capture->preferenceOrder = $preferenceOrder;
+
+                return ['openai', null];
+            }
+        });
+
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-AI-CANDIDATE',
+            'order_type' => 'SO',
+            'customer_order' => 'DIFFERENT-PO',
+            'order_date' => now(),
+            'status' => 'Open',
+        ]);
+
+        $email = Email::create([
+            'mailbox_account_id' => $this->mailbox->id,
+            'message_id' => 'openai-preference',
+            'subject' => 'PO ABC-12345',
+            'from_email' => 'buyer@example.com',
+            'received_at' => now(),
+            'folder' => 'Inbox',
+            'extracted_po_number' => 'ABC-12345',
+            'canonical_po' => 'ABC-12345',
+            'po_extraction_attempted' => true,
+        ]);
+
+        app(OrderMatchAiMatchingService::class)->score($email);
+
+        $this->assertSame(['openai', 'anthropic'], $capture->preferenceOrder);
     }
 }

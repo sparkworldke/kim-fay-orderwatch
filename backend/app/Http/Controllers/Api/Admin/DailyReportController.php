@@ -9,6 +9,8 @@ use App\Services\Admin\AuditLogger;
 use App\Services\Reports\DailyReportRunnerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class DailyReportController extends Controller
 {
@@ -98,6 +100,7 @@ class DailyReportController extends Controller
             'send_to.*' => ['email'],
             'cc' => ['sometimes', 'array'],
             'cc.*' => ['email'],
+            'report_date' => ['sometimes', 'date_format:Y-m-d', 'before_or_equal:today'],
         ]);
 
         $config = DailyReportConfig::singleton();
@@ -108,17 +111,141 @@ class DailyReportController extends Controller
             return response()->json(['message' => 'Add at least one Reply-To or CC recipient before sending a test.'], 422);
         }
 
-        $run = $this->runner->run($config, 'manual_test', true, null, $sendTo, $cc);
+        $asOf = $this->asOfForReportDate($config, $validated['report_date'] ?? null);
+        $run = $this->runner->run($config, 'manual_test', true, $asOf, $sendTo, $cc, ignoreSendTimeWindow: true);
 
         $this->audit->log('daily_report_test_sent', 'daily_report_run', $run->id, [
             'status' => $run->status,
             'recipient_count' => $run->recipient_count,
+            'report_date' => $run->report_date?->toDateString(),
+            'error_summary' => $run->error_summary,
         ], $request->user()?->id, $request->ip());
 
-        return response()->json([
-            'message' => $run->status === 'completed' ? 'Test report sent.' : 'Test report finished with issues.',
+        // Always 200 when a run row was created — client needs run + history refresh.
+        return response()->json($this->presentSendResult($run, 'Test report'));
+    }
+
+    /**
+     * Generate and send the report for a selected calendar day (the day the report covers).
+     * Example: report_date=2026-07-16 → "16 July report".
+     */
+    public function send(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'report_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'force' => ['sometimes', 'boolean'],
+            'recipients' => ['sometimes', 'array'],
+            'recipients.*' => ['email'],
+            'send_to' => ['sometimes', 'array'],
+            'send_to.*' => ['email'],
+            'cc' => ['sometimes', 'array'],
+            'cc.*' => ['email'],
+        ]);
+
+        $config = DailyReportConfig::singleton();
+        $sendTo = $validated['send_to'] ?? null;
+        $cc = $validated['cc'] ?? ($validated['recipients'] ?? null);
+
+        if (($sendTo ?? $config->replyTo()) === [] && ($cc ?? $config->recipients()) === []) {
+            return response()->json(['message' => 'Add at least one Send To or CC recipient before sending the report.'], 422);
+        }
+
+        $reportDate = $validated['report_date'];
+        $force = (bool) ($validated['force'] ?? true);
+        $asOf = $this->asOfForReportDate($config, $reportDate);
+        $label = Carbon::createFromFormat('Y-m-d', $reportDate)->format('j M Y');
+
+        try {
+            $run = $this->runner->run(
+                $config,
+                'manual_send',
+                force: $force,
+                asOf: $asOf,
+                overrideSendTo: $sendTo,
+                overrideCc: $cc,
+                ignoreSendTimeWindow: true,
+            );
+        } catch (\Throwable $e) {
+            Log::error('daily_report_manual_send_exception', [
+                'report_date' => $reportDate,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => "Report for {$label} failed before a run could finish: ".$e->getMessage(),
+                'run' => null,
+            ], 500);
+        }
+
+        Log::info('daily_report_manual_send_completed', [
+            'run_id' => $run->id,
+            'report_date' => $reportDate,
+            'status' => $run->status,
+            'delivery_status' => $run->delivery_status,
+            'ai_status' => $run->ai_status,
+            'recipient_count' => $run->recipient_count,
+            'error_summary' => $run->error_summary,
+            'force' => $force,
+        ]);
+
+        $this->audit->log('daily_report_manual_sent', 'daily_report_run', $run->id, [
+            'status' => $run->status,
+            'report_date' => $reportDate,
+            'force' => $force,
+            'recipient_count' => $run->recipient_count,
+            'delivery_status' => $run->delivery_status,
+            'error_summary' => $run->error_summary,
+        ], $request->user()?->id, $request->ip());
+
+        // Always 200 when a run row exists so the UI can show history + error_summary.
+        return response()->json($this->presentSendResult($run, "Report for {$label}"));
+    }
+
+    /**
+     * @return array{ok:bool,message:string,run:array<string,mixed>}
+     */
+    private function presentSendResult(DailyReportRun $run, string $labelPrefix): array
+    {
+        $ok = in_array($run->status, ['completed', 'partial'], true)
+            && in_array((string) $run->delivery_status, ['sent', 'partial', 'skipped'], true);
+
+        if ($run->status === 'skipped') {
+            $message = $run->error_summary
+                ? "{$labelPrefix} was skipped: {$run->error_summary}"
+                : "{$labelPrefix} was skipped.";
+        } elseif ($ok) {
+            $message = "{$labelPrefix} sent.";
+        } else {
+            $detail = trim((string) ($run->error_summary ?: ''));
+            $message = $detail !== ''
+                ? "{$labelPrefix} finished with issues: {$detail}"
+                : "{$labelPrefix} finished with issues (status={$run->status}, delivery={$run->delivery_status}).";
+        }
+
+        return [
+            'ok' => $ok,
+            'message' => $message,
             'run' => $this->presentRun($run),
-        ], $run->status === 'failed' ? 500 : 200);
+        ];
+    }
+
+    /**
+     * Report covers calendar day D; runner derives report_date as asOf−1 day.
+     * So asOf = D + 1 day (noon in config timezone).
+     */
+    private function asOfForReportDate(DailyReportConfig $config, ?string $reportDate): ?Carbon
+    {
+        if ($reportDate === null || $reportDate === '') {
+            return null;
+        }
+
+        $timezone = $config->timezone ?: 'Africa/Nairobi';
+
+        return Carbon::createFromFormat('Y-m-d', $reportDate, $timezone)
+            ->startOfDay()
+            ->addDay()
+            ->setTime(12, 0, 0);
     }
 
     public function resendLast(Request $request): JsonResponse

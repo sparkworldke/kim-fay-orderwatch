@@ -26,7 +26,7 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/app/so-imports")({
-  head: () => ({ meta: [{ title: "Sales Order Imports — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Sales Order Imports — Kim-Fay Sight" }] }),
   component: SoImportsPage,
 });
 

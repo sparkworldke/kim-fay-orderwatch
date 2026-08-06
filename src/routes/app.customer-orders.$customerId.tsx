@@ -16,6 +16,7 @@ import {
 import {
   BranchesCard,
   CommonProductsCard,
+  CustomerBackorderCard,
   DocumentsTable,
   EmptyBlock,
   ErrorBlock,
@@ -24,6 +25,7 @@ import {
   SuggestedOrdersCard,
   summarizeDocuments,
 } from "@/components/customer-orders-shared";
+import { CustomerContactsCard } from "@/components/customer-contacts-card";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useCommonProducts, useSuggestedOrders } from "@/hooks/useCustomers";
 import { useOrders, type OrderFilters } from "@/hooks/useOrders";
@@ -32,7 +34,7 @@ import type { AcumaticaCustomer } from "@/types/admin";
 import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/app/customer-orders/$customerId")({
-  head: () => ({ meta: [{ title: "Customer Documents - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Customer Documents - Kim-Fay Sight" }] }),
   component: CustomerDocumentsPage,
 });
 
@@ -41,6 +43,23 @@ type SortOption = NonNullable<OrderFilters["sort"]>;
 const WHITESPOT_PAGE_SIZE = 8;
 const DOCUMENTS_PAGE_SIZE = 15;
 const COMMON_PRODUCTS_PAGE_SIZE = 20;
+
+/** Local (non-UTC) date string in YYYY-MM-DD, matching <input type="date">. */
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Default filter range: first of the current month through today. */
+function monthToDateRange() {
+  const now = new Date();
+  return {
+    from: toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: toDateInputValue(now),
+  };
+}
 
 function CustomerDocumentsPage() {
   const { customerId } = useParams({ from: "/app/customer-orders/$customerId" });
@@ -54,8 +73,8 @@ function CustomerDocumentsPage() {
 }
 
 function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateFrom, setDateFrom] = useState(() => monthToDateRange().from);
+  const [dateTo, setDateTo] = useState(() => monthToDateRange().to);
   const [sort, setSort] = useState<SortOption>("latest");
   const [docsPage, setDocsPage] = useState(1);
 
@@ -129,11 +148,14 @@ function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
 
       {branches.length > 0 && <BranchesCard customerId={customerId} branches={branches} />}
 
+      <CustomerContactsCard customerId={customerId} />
+
       <MetricsGrid summary={summary} loading={orders.isLoading} />
 
       <Card className="rounded-lg shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Filters</CardTitle>
+          <p className="text-sm text-muted-foreground">Defaults to the current month to date.</p>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div className="grid gap-1.5">
@@ -158,6 +180,14 @@ function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Backorder card: grouped by InventoryID → accordion of SO numbers (MTD by default). */}
+      <CustomerBackorderCard
+        customerId={customerId}
+        dateFrom={dateFrom || undefined}
+        dateTo={dateTo || undefined}
+        includeBranches
+      />
 
       <Card className="rounded-lg shadow-sm">
         <CardContent className="p-4">
@@ -200,7 +230,7 @@ function CustomerDocumentsIndex({ customerId }: { customerId: string }) {
               <AccordionTrigger>
                 <div className="flex items-center gap-2">
                   <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-base font-semibold">Whitespot</span>
+                  <span className="text-base font-semibold">Items not ordered</span>
                   <Badge variant="secondary" className="ml-2">{whitespotCount}</Badge>
                 </div>
               </AccordionTrigger>

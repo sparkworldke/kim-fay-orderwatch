@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { useCapabilities } from "@/hooks/useCapabilities";
 import { formatKES } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -10,33 +9,16 @@ type Props = {
   compact?: boolean;
 };
 
-const MASKED_LABEL = "KES •••••";
-
 export function useMaskedKESFormatter() {
-  const { maskRevenue } = useCapabilities();
-
   return useCallback(
     (n: number | string | null | undefined, opts: { compact?: boolean } = {}) => {
-      if (maskRevenue) {
-        return MASKED_LABEL;
-      }
       return formatKES(Number(n ?? 0), opts);
     },
-    [maskRevenue],
+    [],
   );
 }
 
 export function MaskedCurrency({ value, className, currency = "KES", compact = false }: Props) {
-  const { maskRevenue } = useCapabilities();
-
-  if (maskRevenue) {
-    return (
-      <span className={cn("select-none blur-sm", className)} aria-label="Revenue hidden">
-        {MASKED_LABEL}
-      </span>
-    );
-  }
-
   const numeric = typeof value === "number" ? value : Number(value ?? 0);
 
   if (compact) {

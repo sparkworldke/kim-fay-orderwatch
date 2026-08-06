@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Table,
   TableBody,
@@ -21,10 +22,9 @@ import {
 } from "@/components/ui/table";
 import { MaskedKES } from "@/components/MaskedCurrency";
 import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/app/sales-consultants")({
-  head: () => ({ meta: [{ title: "Sales Consultants - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Sales Consultants - Kim-Fay Sight" }] }),
   component: SalesConsultantsPage,
 });
 
@@ -41,11 +41,20 @@ type SalesConsultant = {
   completed_orders: number;
   assigned_revenue: number;
   last_order_date: string | null;
+  outlet_count: number;
+  channels: string[];
+  regions: string[];
+  department: string | null;
+  department_role: string | null;
+  org_level: string | null;
+  reports_to_user_id: number | null;
+  outlets: Array<{ id: string; name: string; region: string | null }>;
 };
 
 type SalesConsultantsResponse = {
-  scope: "all" | "own";
+  scope: "team" | "own";
   rep_code: string | null;
+  period?: { from: string; to: string; label: string; timezone: string };
   items: SalesConsultant[];
   message?: string;
 };
@@ -92,9 +101,11 @@ function SalesConsultantsPage() {
 }
 
 function SalesConsultantsIndex() {
-  const { session } = useAuth();
   const [searchInput, setSearchInput] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+  const [selectedConsultants, setSelectedConsultants] = useState<string[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearchDebounced(searchInput), 350);
@@ -103,17 +114,38 @@ function SalesConsultantsIndex() {
 
   const { data, isLoading, error } = useSalesConsultants(searchDebounced);
   const items = data?.items ?? [];
+  const regionOptions = useMemo(
+    () => [...new Set(items.flatMap((item) => item.outlets.map((outlet) => outlet.region).filter((value): value is string => Boolean(value))))].sort(),
+    [items],
+  );
+  const customerOptions = useMemo(() => {
+    const outlets = items.flatMap((item) => item.outlets)
+      .filter((outlet) => selectedRegions.length === 0 || (outlet.region && selectedRegions.includes(outlet.region)));
+    return [...new Map(outlets.map((outlet) => [outlet.id, { value: outlet.id, label: outlet.name }])).values()]
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [items, selectedRegions]);
+  const consultantOptions = useMemo(() => items
+    .filter((item) => item.outlets.some((outlet) =>
+      (selectedRegions.length === 0 || (outlet.region && selectedRegions.includes(outlet.region)))
+      && (selectedCustomers.length === 0 || selectedCustomers.includes(outlet.id)),
+    ) || (selectedRegions.length === 0 && selectedCustomers.length === 0))
+    .map((item) => ({ value: String(item.id), label: item.name }))
+    .sort((a, b) => a.label.localeCompare(b.label)), [items, selectedRegions, selectedCustomers]);
   const filteredItems = useMemo(() => {
     const q = searchDebounced.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (item) =>
+    return items.filter((item) => {
+      const matchesRegion = selectedRegions.length === 0 || item.outlets.some((outlet) => outlet.region && selectedRegions.includes(outlet.region));
+      const matchesCustomer = selectedCustomers.length === 0 || item.outlets.some((outlet) => selectedCustomers.includes(outlet.id));
+      const matchesConsultant = selectedConsultants.length === 0 || selectedConsultants.includes(String(item.id));
+      const matchesSearch = !q ||
         item.name.toLowerCase().includes(q) ||
         (item.rep_code ?? "").toLowerCase().includes(q) ||
-        (item.employee_number ?? "").toLowerCase().includes(q),
-    );
-  }, [items, searchDebounced]);
-  const displayItems = searchDebounced.trim() ? filteredItems : items;
+        (item.employee_number ?? "").toLowerCase().includes(q) ||
+        item.outlets.some((outlet) => outlet.name.toLowerCase().includes(q) || outlet.id.toLowerCase().includes(q));
+      return matchesRegion && matchesCustomer && matchesConsultant && matchesSearch;
+    });
+  }, [items, searchDebounced, selectedRegions, selectedCustomers, selectedConsultants]);
+  const displayItems = filteredItems;
   const totals = displayItems.reduce(
     (acc, item) => ({
       assignedOrders: acc.assignedOrders + item.assigned_orders,
@@ -124,24 +156,38 @@ function SalesConsultantsIndex() {
     { assignedOrders: 0, activeOrders: 0, completedOrders: 0, assignedRevenue: 0 },
   );
   const ownProfile = data?.scope === "own";
-  const canImport = session?.role === "Administrator" || session?.role === "Customer Service Manager";
+  const departmentGroups = useMemo(() => {
+    const groups = new Map<string, SalesConsultant[]>();
+    displayItems.forEach((item) => {
+      const department = item.department ?? "Unassigned team";
+      groups.set(department, [...(groups.get(department) ?? []), item]);
+    });
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [displayItems]);
 
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            {ownProfile ? "Sales Consultant Profile" : "Sales Consultants"}
+            {ownProfile ? "My Profile" : "My Team"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {ownProfile
-              ? "Your Sales Operations profile and assigned sales order activity."
-              : "Consultant assignments and sales order activity by Rep Code."}
+              ? "Your profile, portfolio, and current sales activity."
+              : "Only members in your reporting hierarchy, grouped by department and channel."}
           </p>
         </div>
-        {ownProfile && data?.rep_code && (
-          <Badge variant="secondary" className="mt-1 font-mono">Rep Code {data.rep_code}</Badge>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {data?.period && (
+            <Badge variant="outline" className="mt-1">
+              {data.period.label}
+            </Badge>
+          )}
+          {ownProfile && data?.rep_code && (
+            <Badge variant="secondary" className="mt-1 font-mono">Rep Code {data.rep_code}</Badge>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -150,20 +196,101 @@ function SalesConsultantsIndex() {
         </div>
       )}
 
+      <Card className="border-primary/15 bg-muted/10">
+        <CardContent className="p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Filter reporting tree</p>
+              <p className="text-xs text-muted-foreground">Choose one or more regions, outlets, and consultants. Options narrow from left to right.</p>
+            </div>
+            {(selectedRegions.length > 0 || selectedCustomers.length > 0 || selectedConsultants.length > 0) && (
+              <Button variant="ghost" size="sm" onClick={() => {
+                setSelectedRegions([]);
+                setSelectedCustomers([]);
+                setSelectedConsultants([]);
+              }}>Clear filters</Button>
+            )}
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <MultiSelect
+              label="1. Region"
+              options={regionOptions}
+              selected={selectedRegions}
+              onChange={(values) => {
+                setSelectedRegions(values);
+                setSelectedCustomers([]);
+                setSelectedConsultants([]);
+              }}
+              emptyLabel="All regions"
+              allLabel="All regions"
+              searchPlaceholder="Search regions..."
+            />
+            <MultiSelect
+              label="2. Customer / outlet"
+              options={customerOptions}
+              selected={selectedCustomers}
+              onChange={(values) => {
+                setSelectedCustomers(values);
+                setSelectedConsultants([]);
+              }}
+              emptyLabel="All outlets"
+              allLabel="All outlets"
+              searchPlaceholder="Search outlet name or ID..."
+            />
+            <MultiSelect
+              label="3. Consultant"
+              options={consultantOptions}
+              selected={selectedConsultants}
+              onChange={setSelectedConsultants}
+              emptyLabel="All consultants"
+              allLabel="All consultants"
+              searchPlaceholder="Search consultants..."
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline">{displayItems.length} consultant(s)</Badge>
+            <Badge variant="outline">{new Set(displayItems.flatMap((item) => item.outlets.map((outlet) => outlet.id))).size} outlet(s)</Badge>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label={ownProfile ? "Profiles shown" : "Consultants"} value={displayItems.length} loading={isLoading} icon={Users} />
-        <MetricCard label="Assigned orders" value={totals.assignedOrders} loading={isLoading} icon={BriefcaseBusiness} />
-        <MetricCard label="Active orders" value={totals.activeOrders} loading={isLoading} icon={UserCheck} />
-        <MetricCard label="Assigned revenue" value={<MaskedKES value={totals.assignedRevenue} />} loading={isLoading} text />
+        <MetricCard tone="blue" label={ownProfile ? "Profile" : "Team members"} value={displayItems.length} loading={isLoading} icon={Users} />
+        <MetricCard tone="violet" label="Orders this period" value={totals.assignedOrders} loading={isLoading} icon={BriefcaseBusiness} />
+        <MetricCard tone="emerald" label="Active orders" value={totals.activeOrders} loading={isLoading} icon={UserCheck} />
+        <MetricCard tone="amber" label="Revenue this period" value={<MaskedKES value={totals.assignedRevenue} />} loading={isLoading} text />
       </div>
 
-      {canImport && <ConsultantImportPanel />}
+      {!ownProfile && departmentGroups.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {departmentGroups.map(([department, members], index) => {
+            const outlets = members.reduce((total, member) => total + member.outlet_count, 0);
+            const channels = [...new Set(members.flatMap((member) => member.channels))];
+            return (
+              <Card key={department} className={`overflow-hidden border-l-4 ${departmentTone(index)}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{department}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{members.length} member(s) · {outlets.toLocaleString("en-KE")} outlets</p>
+                    </div>
+                    <Badge variant="secondary">Team</Badge>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {channels.length ? channels.map((channel) => <ChannelBadge key={channel} channel={channel} />) : <Badge variant="outline">No channel</Badge>}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       <Card className="rounded-lg shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="text-base">
-              {ownProfile ? "Profile" : "Consultant Directory"}
+              {ownProfile ? "Profile" : "Reporting hierarchy"}
             </CardTitle>
             <div className="relative w-full max-w-xs">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -192,15 +319,17 @@ function SalesConsultantsIndex() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Consultant</TableHead>
+                  <TableHead>Team member</TableHead>
                   <TableHead>Rep Code</TableHead>
                   <TableHead>Emp. No.</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Assigned</TableHead>
+                  <TableHead>Department / Coverage</TableHead>
+                  <TableHead className="text-right">Outlets</TableHead>
+                  <TableHead className="text-right">Orders {data?.period ? "(period)" : ""}</TableHead>
                   <TableHead className="text-right">Active</TableHead>
                   <TableHead className="text-right">Completed</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead>Last Order</TableHead>
+                  <TableHead className="text-right">Revenue {data?.period ? "(period)" : ""}</TableHead>
+                  <TableHead>Last Order (all-time)</TableHead>
                   <TableHead className="text-right">Details</TableHead>
                 </TableRow>
               </TableHeader>
@@ -230,6 +359,17 @@ function SalesConsultantsIndex() {
                         {item.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
+                    <TableCell className="max-w-[260px]">
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="secondary">{item.department ?? "Unassigned"}</Badge>
+                        {item.department_role && item.department_role !== "member" ? <Badge variant="outline">{item.department_role.toUpperCase()}</Badge> : null}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {item.channels.length ? item.channels.map((channel) => <ChannelBadge key={channel} channel={channel} />) : <Badge variant="outline">No channel</Badge>}
+                      </div>
+                      {item.regions.length ? <div className="mt-1 text-[10px] text-muted-foreground">{item.regions.join(", ")}</div> : null}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{item.outlet_count.toLocaleString("en-KE")}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.assigned_orders.toLocaleString("en-KE")}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.active_orders.toLocaleString("en-KE")}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.completed_orders.toLocaleString("en-KE")}</TableCell>
@@ -238,22 +378,15 @@ function SalesConsultantsIndex() {
                       <DateLink value={item.last_order_date} emptyText="-">{formatDate(item.last_order_date)}</DateLink>
                     </TableCell>
                     <TableCell className="text-right">
-                      {item.rep_code ? (
-                        <Button asChild variant="ghost" size="sm">
-                          <Link
-                            to="/app/sales-consultants/$id"
-                            params={{ id: item.rep_code ?? String(item.id) }}
-                          >
-                            <Eye className="mr-1.5 h-3.5 w-3.5" />
-                            View
-                          </Link>
-                        </Button>
-                      ) : (
-                        <Button variant="ghost" size="sm" disabled>
+                      <Button asChild variant="ghost" size="sm">
+                        <Link
+                          to="/app/sales-consultants/$id"
+                          params={{ id: String(item.id) }}
+                        >
                           <Eye className="mr-1.5 h-3.5 w-3.5" />
                           View
-                        </Button>
-                      )}
+                        </Link>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -390,15 +523,23 @@ function MetricCard({
   loading,
   icon: Icon,
   text = false,
+  tone = "blue",
 }: {
   label: string;
   value: number | string | ReactNode;
   loading: boolean;
   icon?: typeof Users;
   text?: boolean;
+  tone?: "blue" | "violet" | "emerald" | "amber";
 }) {
+  const tones = {
+    blue: "border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20",
+    violet: "border-violet-200 bg-violet-50/50 dark:border-violet-900 dark:bg-violet-950/20",
+    emerald: "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20",
+    amber: "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20",
+  };
   return (
-    <Card className="rounded-lg shadow-sm">
+    <Card className={`rounded-lg shadow-sm ${tones[tone]}`}>
       <CardContent className="flex items-center justify-between p-4">
         <div>
           <p className="text-sm text-muted-foreground">{label}</p>
@@ -410,6 +551,24 @@ function MetricCard({
       </CardContent>
     </Card>
   );
+}
+
+function ChannelBadge({ channel }: { channel: string }) {
+  const normalized = channel.toUpperCase();
+  const tone = normalized === "MT1"
+    ? "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+    : normalized === "MT2"
+      ? "border-violet-200 bg-violet-100 text-violet-800 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-200"
+      : normalized === "KP"
+        ? "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+        : normalized === "GT"
+          ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          : "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200";
+  return <Badge variant="outline" className={tone}>{channel}</Badge>;
+}
+
+function departmentTone(index: number) {
+  return ["border-l-blue-500", "border-l-violet-500", "border-l-emerald-500", "border-l-amber-500", "border-l-rose-500"][index % 5];
 }
 
 function formatMoney(value: number | string | null | undefined) {

@@ -1,1 +1,0 @@
-returns, variance, POD, fillrate: trading - stock msa order /manufactured 0 -

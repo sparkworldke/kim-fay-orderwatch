@@ -27,15 +27,18 @@ export function CustomerAssignmentFields({ member }: { member: TeamMember }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [assignmentType, setAssignmentType] = useState<"owner" | "servicing">("servicing");
   const [source, setSource] = useState<"so_match" | "customer_endpoint" | "upload">("so_match");
   const [batch, setBatch] = useState<CustomerAssignmentBatch | null>(null);
   const searchResults = useCustomerSearch(search);
 
   useEffect(() => {
     if (assignments.data) {
-      setSelected(assignments.data.map((a) => a.customer_acumatica_id));
+      setSelected(assignments.data
+        .filter((a) => assignmentType === "servicing" ? ["servicing", "primary"].includes(a.assignment_type) : a.assignment_type === "owner")
+        .map((a) => a.customer_acumatica_id));
     }
-  }, [assignments.data]);
+  }, [assignments.data, assignmentType]);
 
   if (!member.is_consultant && member.org_level !== "sales") {
     return null;
@@ -53,7 +56,7 @@ export function CustomerAssignmentFields({ member }: { member: TeamMember }) {
   }
 
   function save() {
-    sync.mutate({ userId: member.id, customer_acumatica_ids: selected });
+    sync.mutate({ userId: member.id, customer_acumatica_ids: selected, assignment_type: assignmentType });
   }
 
   async function runPreview() {
@@ -69,7 +72,7 @@ export function CustomerAssignmentFields({ member }: { member: TeamMember }) {
   async function runApply() {
     if (!batch) return;
     try {
-      const result = await applyBatch.mutateAsync(batch.id);
+      const result = await applyBatch.mutateAsync({ batchId: batch.id, assignment_type: assignmentType });
       setBatch(result);
     } catch {
       // hook handles toast
@@ -98,6 +101,13 @@ export function CustomerAssignmentFields({ member }: { member: TeamMember }) {
     <div className="grid gap-2 md:col-span-2">
       <div className="flex items-center justify-between gap-2">
         <Label>Customer / outlet assignments</Label>
+        <Select value={assignmentType} onValueChange={(value) => setAssignmentType(value as "owner" | "servicing")}>
+          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="servicing">Servicing rep</SelectItem>
+            <SelectItem value="owner">Owner</SelectItem>
+          </SelectContent>
+        </Select>
         <Button type="button" size="sm" disabled={sync.isPending} onClick={save}>
           {sync.isPending ? "Saving..." : "Save customers"}
         </Button>

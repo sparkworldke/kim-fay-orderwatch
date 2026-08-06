@@ -19,8 +19,8 @@ class OtpMail extends Mailable
     {
         $subject = match ($this->purpose) {
             'password-update' => 'Your password update verification code',
-            'welcome' => 'Welcome to Kim-Fay OrderWatch - your verification code',
-            default => 'Your Kim-Fay OrderWatch verification code',
+            'welcome' => 'Welcome to Kim-Fay Sight - your verification code',
+            default => 'Your Kim-Fay Sight verification code',
         };
 
         return new Envelope(
@@ -59,7 +59,7 @@ class OtpMail extends Mailable
             HTML,
             'welcome' => <<<HTML
                 <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.6;">
-                    Welcome to Kim-Fay OrderWatch! You can use this verification code to sign in, or you can set up a permanent password first.
+                    Welcome to Kim-Fay Sight! You can use this verification code to sign in, or you can set up a permanent password first.
                 </p>
                 <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.8;">
                     <strong>Option 1: Sign in immediately with this OTP</strong><br>
@@ -93,7 +93,7 @@ class OtpMail extends Mailable
                             <tr>
                                 <td style="background-color:#1a1a2e;padding:28px 40px;text-align:center;">
                                     <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.5px;">
-                                        Kim-Fay OrderWatch
+                                        Kim-Fay Sight
                                     </span>
                                 </td>
                             </tr>
@@ -137,7 +137,7 @@ class OtpMail extends Mailable
                                         If you did not request this, please ignore this email.
                                     </p>
                                     <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">
-                                        <a href="{$appUrl}" style="color:#4f6ef7;text-decoration:none;">Open OrderWatch</a>
+                                        <a href="{$appUrl}" style="color:#4f6ef7;text-decoration:none;">Open Sight</a>
                                         <span style="color:#d1d5db;"> &bull; </span>
                                         <a href="{$authUrl}" style="color:#4f6ef7;text-decoration:none;">Sign-in page</a>
                                     </p>

@@ -325,7 +325,7 @@ class TeamManagementTest extends TestCase
         $this->assertSame(1500.0, (float) $response->json('revenue_bleeding.backorder_revenue_at_risk'));
     }
 
-    public function test_operations_org_level_sees_all_sectors(): void
+    public function test_non_production_operations_user_does_not_receive_unrestricted_business_access(): void
     {
         $dispatch = Department::query()->where('slug', 'dispatch')->firstOrFail();
         $user = User::factory()->create([
@@ -355,8 +355,8 @@ class TeamManagementTest extends TestCase
             ->pluck('acumatica_id')
             ->all();
 
-        $this->assertContains('KP-OPS-1', $visibleIds);
-        $this->assertContains('GT-OPS-1', $visibleIds);
+        $this->assertNotContains('KP-OPS-1', $visibleIds);
+        $this->assertNotContains('GT-OPS-1', $visibleIds);
     }
 
     public function test_hod_sees_reportee_customer_data(): void
@@ -413,8 +413,59 @@ class TeamManagementTest extends TestCase
         ]);
 
         $this->assertContains('MT-HOD-RPT-1', $visibleIds);
-        $this->assertContains('MT-OTHER-1', $visibleIds);
+        $this->assertNotContains('MT-OTHER-1', $visibleIds);
         $this->assertNotContains('GT-HOD-BLOCK-1', $visibleIds);
+    }
+
+    public function test_consultant_visibility_excludes_rep_code_customers_under_mapped_only_gate(): void
+    {
+        $department = Department::query()->where('slug', 'mt_consumer_sales')->firstOrFail();
+        $consultant = User::factory()->create([
+            'role' => 'Sales Consultant',
+            'rep_code' => 'P-UNION',
+            'is_consultant' => true,
+            'is_super_admin' => false,
+            'data_scope_mode' => 'scoped',
+            'department_id' => $department->id,
+            'is_active' => true,
+        ]);
+
+        foreach (['ASSIGNED-01', 'REP-01', 'HIDDEN-01'] as $customerId) {
+            AcumaticaCustomer::query()->create([
+                'acumatica_id' => $customerId,
+                'name' => $customerId,
+                'customer_class' => 'MT-CHAIN',
+                'status' => 'Active',
+            ]);
+        }
+
+        UserCustomerAssignment::query()->create([
+            'user_id' => $consultant->id,
+            'customer_acumatica_id' => 'ASSIGNED-01',
+            'assignment_type' => UserCustomerAssignment::TYPE_SERVICING,
+        ]);
+        AcumaticaSalesOrder::query()->create([
+            'acumatica_order_nbr' => 'SO-UNION-01',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'REP-01',
+            'customer_name' => 'Rep customer',
+            'status' => 'Open',
+            'order_total' => 100,
+            'sales_consultant_rep_code' => 'P-UNION',
+        ]);
+
+        $visibleIds = AcumaticaCustomer::query()
+            ->tap(fn ($query) => DataScope::applyCustomerScope($query, $consultant))
+            ->orderBy('acumatica_id')
+            ->pluck('acumatica_id')
+            ->all();
+
+        // PRD §7.3 — mapped-only consultant gate: the consultant has an active
+        // servicing assignment, so they see ONLY their mapped customer ID.
+        // Rep-code SO matches (REP-01) must NOT be unioned into the portfolio.
+        $this->assertSame(['ASSIGNED-01'], $visibleIds);
+        $this->assertNotContains('REP-01', $visibleIds);
+        $this->assertNotContains('HIDDEN-01', $visibleIds);
     }
 
     public function test_admin_can_create_team_member_with_department_fields(): void
@@ -629,6 +680,7 @@ class TeamManagementTest extends TestCase
         $this->actingAs($admin, 'sanctum')
             ->putJson("/api/admin/users/{$user->id}/customer-assignments", [
                 'customer_acumatica_ids' => ['CARREFOUR-01', 'CARREFOUR-02'],
+                'assignment_type' => 'servicing',
             ])
             ->assertOk();
 
@@ -636,6 +688,28 @@ class TeamManagementTest extends TestCase
             'user_id' => $user->id,
             'customer_acumatica_id' => 'CARREFOUR-01',
         ]);
+    }
+
+    public function test_owner_and_servicing_assignments_coexist_without_overwrite(): void
+    {
+        $admin = User::factory()->create(['role' => 'Administrator', 'is_super_admin' => true, 'is_active' => true]);
+        $owner = User::factory()->create(['role' => 'HOD', 'is_active' => true]);
+        $servicing = User::factory()->create(['role' => 'Sales Consultant', 'is_consultant' => true, 'is_active' => true]);
+
+        $this->actingAs($admin, 'sanctum')->putJson("/api/admin/users/{$owner->id}/customer-assignments", [
+            'customer_acumatica_ids' => ['SHARED-01'], 'assignment_type' => 'owner',
+        ])->assertOk();
+        $this->actingAs($admin, 'sanctum')->putJson("/api/admin/users/{$servicing->id}/customer-assignments", [
+            'customer_acumatica_ids' => ['SHARED-01'], 'assignment_type' => 'servicing',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('user_customer_assignments', [
+            'user_id' => $owner->id, 'customer_acumatica_id' => 'SHARED-01', 'assignment_type' => 'owner',
+        ]);
+        $this->assertDatabaseHas('user_customer_assignments', [
+            'user_id' => $servicing->id, 'customer_acumatica_id' => 'SHARED-01', 'assignment_type' => 'servicing',
+        ]);
+        $this->assertSame(2, UserCustomerAssignment::where('customer_acumatica_id', 'SHARED-01')->count());
     }
 
     public function test_customer_assignment_upload_accepts_excel_defined_rep_codes_and_reports_row_errors(): void
@@ -702,7 +776,9 @@ class TeamManagementTest extends TestCase
         $this->assertStringContainsString('Rep code is required.', $rows->firstWhere('customer_acumatica_id', 'CUST-UP-4')['message']);
 
         $apply = $this->actingAs($admin, 'sanctum')
-            ->postJson("/api/admin/customer-assignments/batches/{$response->json('id')}/apply")
+            ->postJson("/api/admin/customer-assignments/batches/{$response->json('id')}/apply", [
+                'assignment_type' => 'servicing',
+            ])
             ->assertOk()
             ->assertJsonPath('status', 'applied')
             ->assertJsonPath('stats_json.created', 2);
@@ -799,7 +875,9 @@ class TeamManagementTest extends TestCase
                 ->assertCreated();
 
             $this->actingAs($admin, 'sanctum')
-                ->postJson("/api/admin/customer-assignments/batches/{$batch->json('id')}/apply")
+                    ->postJson("/api/admin/customer-assignments/batches/{$batch->json('id')}/apply", [
+                        'assignment_type' => 'servicing',
+                    ])
                 ->assertOk();
         }
 

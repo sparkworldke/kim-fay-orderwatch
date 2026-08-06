@@ -23,6 +23,9 @@ export interface Session {
   name: string;
   role: Role;
   rep_code?: string | null;
+  phone_number?: string | null;
+  whatsapp_number?: string | null;
+  must_change_password?: boolean;
   loggedInAt: string;
   token: string; // Sanctum Bearer token
   /** True when an admin is viewing the app as another user. */
@@ -92,6 +95,9 @@ export type AuthUserPayload = {
   email: string;
   role: string;
   rep_code?: string | null;
+  phone_number?: string | null;
+  whatsapp_number?: string | null;
+  must_change_password?: boolean;
 };
 
 export type ImpersonationPayload = {
@@ -113,6 +119,9 @@ export function applyAuthResponse(data: {
     name: data.user.name,
     role: data.user.role as Role,
     rep_code: data.user.rep_code ?? null,
+    phone_number: data.user.phone_number ?? null,
+    whatsapp_number: data.user.whatsapp_number ?? null,
+    must_change_password: data.user.must_change_password ?? false,
     loggedInAt: new Date().toISOString(),
     token: data.token,
     is_impersonating: data.impersonation?.active ?? false,
@@ -127,6 +136,9 @@ export function syncSessionFromMe(me: {
   email: string;
   role: string;
   rep_code?: string | null;
+  phone_number?: string | null;
+  whatsapp_number?: string | null;
+  must_change_password?: boolean;
   impersonation?: ImpersonationPayload | null;
 }) {
   const existing = getSession();
@@ -139,6 +151,9 @@ export function syncSessionFromMe(me: {
     name: me.name,
     role: me.role as Role,
     rep_code: me.rep_code ?? null,
+    phone_number: me.phone_number ?? null,
+    whatsapp_number: me.whatsapp_number ?? null,
+    must_change_password: me.must_change_password ?? false,
     loggedInAt: existing?.loggedInAt ?? new Date().toISOString(),
     token,
     is_impersonating: me.impersonation?.active ?? false,
@@ -167,9 +182,16 @@ export function nameFromEmail(email: string) {
 }
 
 export function useAuth() {
-  const [session, setSessionState] = useState<Session | null>(null);
+  // Initialize synchronously from localStorage so session is never a false null
+  // on the first render. Without this, components that read session on mount
+  // (role checks, revenue masking, etc.) would flicker or make wrong decisions
+  // before the useEffect fires after paint.
+  const [session, setSessionState] = useState<Session | null>(() =>
+    typeof window !== "undefined" ? getSession() : null,
+  );
   useEffect(() => {
     const update = () => setSessionState(getSession());
+    // Re-sync in case localStorage changed between the initial read and mount.
     update();
     window.addEventListener("kf_session_change", update);
     window.addEventListener("storage", update);

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { getToken, useAuth } from "@/lib/auth";
 import { canSeeAdminTab } from "@/lib/nav-permissions";
-import { Activity, AlertTriangle, ArrowUpRight, Bot, Boxes, ChevronDown, ChevronRight, Clock, Copy, Database, Download, FlaskConical, Gauge, History, KeyRound, Mail, PackageX, Pencil, Play, RefreshCw, RotateCcw, Search, ShieldCheck, Sparkles, Timer, ToggleLeft, Trash2, Upload, UserCog, UserPlus, Users, X } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, Bot, Boxes, CalendarDays, ChevronDown, ChevronRight, Clock, Copy, Database, Download, FlaskConical, Gauge, History, KeyRound, Loader2, Mail, PackageX, Pencil, Play, RefreshCw, RotateCcw, Search, ShieldCheck, Sparkles, Timer, ToggleLeft, Trash2, Upload, UserCog, UserPlus, Users, X } from "lucide-react";
 import { useRef, useEffect, useState, type ChangeEvent, type ComponentType, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { UserSessionsSheet } from "@/components/admin/UserSessionsSheet";
@@ -36,6 +36,7 @@ import {
   useMailSettings,
   useAiKeys,
   useAuditLogs,
+  exportAuditActivityExcel,
   useDeadLetters,
   useCronJobs,
   useCronRuns,
@@ -43,15 +44,11 @@ import {
   useDailyReportRuns,
   useDiagnoseSyncHealth,
   useResendDailyReport,
+  useSendDailyReport,
   useTestDailyReport,
   useUpdateDailyReportConfig,
   useDeliverySlaConfig,
   useUpdateDeliverySlaConfig,
-  useFolSettings,
-  useUpdateFolSettings,
-  useUpdateFolStages,
-  type FolApprovalStageConfig,
-  type FolSettings,
   useDeleteAiKey,
   useNotificationRules,
   usePermissions,
@@ -100,11 +97,14 @@ import {
 } from "@/hooks/useOperations";
 import type { AcumaticaCustomerSummary, AcumaticaLookupType, AcumaticaSyncLog, MailSettings, MailSettingsInput, NotificationRule, Role, TeamMember, RepCodeHistoryEntry } from "@/types/admin";
 import { DATE_PRESETS, type DatePresetId, resolveDatePreset } from "@/lib/date-presets";
+import { formatSyncLogName } from "@/lib/format";
 import { useConsultantOptions } from "@/hooks/useSalesConsultants";
 import { API_BASE_URL } from "@/lib/api";
+import { ProductCataloguePanel } from "@/components/admin/ProductCataloguePanel";
+import { SalesConsultantDigestPanel } from "@/components/admin/SalesConsultantDigestPanel";
 
 export const Route = createFileRoute("/app/administration")({
-  head: () => ({ meta: [{ title: "Administration - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Administration - Kim-Fay Sight" }] }),
   component: AdminPage,
 });
 
@@ -120,6 +120,7 @@ const INVENTORY_IMPORT_WAREHOUSES = [
   "PRMS",
   "RMS1",
   "TRMS",
+  "TPFGS",
 ] as const;
 
 function isActiveSyncLog(log: AcumaticaSyncLog) {
@@ -144,11 +145,12 @@ const ADMIN_TABS = [
   { value: "reconciliation", label: "Reconciliation", perm: "reconciliation", panel: ReconciliationPanel },
   { value: "ai", label: "AI Keys", perm: "ai-keys", panel: AiKeysPanel },
   { value: "team", label: "Team Members", perm: "team", panel: TeamMembersPanel },
+  { value: "products", label: "Product Catalogue", perm: "products", panel: ProductCataloguePanel },
+  { value: "consultant-alerts", label: "Consultant Alerts", perm: "consultant-alerts", panel: SalesConsultantDigestPanel },
   { value: "roles", label: "Roles", perm: "roles", panel: RolesPanel },
   { value: "permissions", label: "Permissions", perm: "permissions", panel: PermissionsPanel },
   { value: "notifications", label: "Notification Rules", perm: "notifications", panel: NotificationRulesPanel },
   { value: "daily-notifications", label: "Daily Notifications", perm: "daily-notifications", panel: DailyNotificationsPanel },
-  { value: "fol", label: "FOL Settings", perm: "fol", panel: FolSettingsPanel },
   { value: "impersonation", label: "Impersonation", perm: "impersonation", panel: ImpersonationPanel },
   { value: "audit", label: "Audit Logs", perm: "audit", panel: AuditLogsPanel },
   { value: "cron-jobs", label: "Cron Jobs", perm: "cron-jobs", panel: CronJobsPanel },
@@ -679,7 +681,7 @@ function MailSettingsPanel({
             type="password"
           />
           <Field label="From address" value={form.from_address} onChange={(from_address) => setForm((v) => ({ ...v, from_address }))} placeholder="noreply@kimfay.com" />
-          <Field label="From name" value={form.from_name} onChange={(from_name) => setForm((v) => ({ ...v, from_name }))} placeholder="Kim-Fay OrderWatch" />
+          <Field label="From name" value={form.from_name} onChange={(from_name) => setForm((v) => ({ ...v, from_name }))} placeholder="Kim-Fay Sight" />
         </div>
       )}
 
@@ -826,22 +828,52 @@ function SyncPanel() {
   const syncCustomerOrders = useSyncCustomerOrders();
   const stopSync = useStopSyncLog();
 
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const initialSyncRange = resolveDatePreset("this_month");
+  const [datePreset, setDatePreset] = useState<DatePresetId>("this_month");
+  const [dateFrom, setDateFrom] = useState(initialSyncRange.from);
+  const [dateTo, setDateTo] = useState(initialSyncRange.to);
 
   // Customer search state for selective sync
   const [customerQ, setCustomerQ] = useState("");
   const [selectedCustomers, setSelectedCustomers] = useState<AcumaticaCustomerSummary[]>([]);
+  /** When true: recheck existing local SOs in range only (status/delete); no full import. */
+  const [ordersUpdatesOnly, setOrdersUpdatesOnly] = useState(false);
   const customerSearch = useAcumaticaCustomerSearch(customerQ, customerQ.length >= 2);
   const activeCustomerSync = findActiveSyncRun(syncLogs.data, ["customers"]);
-  const activeOrderSync = findActiveSyncRun(syncLogs.data, ["sales_orders"]);
+  const activeOrderSync = findActiveSyncRun(syncLogs.data, ["sales_orders", "sales_order_status_updates"]);
   const activeCustomerOrderSync = findActiveSyncRun(syncLogs.data, ["customer_orders"]);
 
   function handleOrderSync(e: FormEvent) {
     e.preventDefault();
     if (!dateFrom || !dateTo) { toast.error("Both dates are required"); return; }
     if (dateFrom > dateTo)    { toast.error("Start date must be before end date"); return; }
-    syncOrders.mutate({ date_from: dateFrom, date_to: dateTo });
+    syncOrders.mutate({
+      date_from: dateFrom,
+      date_to: dateTo,
+      mode: ordersUpdatesOnly ? "updates_only" : "full",
+      updates_only: ordersUpdatesOnly,
+    });
+  }
+
+  function applySyncDatePreset(preset: DatePresetId) {
+    setDatePreset(preset);
+    if (preset !== "custom") {
+      const range = resolveDatePreset(preset);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+    }
+  }
+
+  function hasValidSyncDates() {
+    if (!dateFrom || !dateTo) {
+      toast.error("Both sync dates are required");
+      return false;
+    }
+    if (dateFrom > dateTo) {
+      toast.error("Start date must be before end date");
+      return false;
+    }
+    return true;
   }
 
   function toggleCustomer(c: AcumaticaCustomerSummary) {
@@ -854,13 +886,36 @@ function SyncPanel() {
 
   return (
     <div className="space-y-4">
+      <Panel title="Acumatica Sync Date Range" icon={CalendarDays}>
+        <p className="mb-3 text-sm text-muted-foreground">
+          This range filters order imports. Customer catalog syncs remain current snapshots and record the range for audit.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="grid gap-1.5">
+            <Label>Date preset</Label>
+            <Select value={datePreset} onValueChange={(value) => applySyncDatePreset(value as DatePresetId)}>
+              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>{DATE_PRESETS.map((preset) => <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label>From</Label>
+            <Input type="date" value={dateFrom} onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); }} className="w-40" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label>To</Label>
+            <Input type="date" value={dateTo} onChange={(e) => { setDatePreset("custom"); setDateTo(e.target.value); }} className="w-40" />
+          </div>
+        </div>
+      </Panel>
+
       {/* All-customer sync */}
       <Panel title="Customer Sync" icon={RefreshCw}>
         <p className="mb-3 text-sm text-muted-foreground">
           Pulls all customer records from Acumatica and upserts them locally. Runs validation and flags missing emails or addresses.
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => syncCustomers.mutate()} disabled={syncCustomers.isPending || !!activeCustomerSync}>
+          <Button onClick={() => { if (hasValidSyncDates()) syncCustomers.mutate({ date_from: dateFrom, date_to: dateTo }); }} disabled={syncCustomers.isPending || !!activeCustomerSync}>
             {syncCustomers.isPending || activeCustomerSync ? "Syncing…" : "Sync All Customers"}
           </Button>
           {activeCustomerSync && (
@@ -879,18 +934,26 @@ function SyncPanel() {
       <Panel title="Sales Order Sync — Date Range" icon={RefreshCw}>
         <p className="mb-3 text-sm text-muted-foreground">
           Import sales orders created within the specified date window. All order attributes and line items are captured.
+          Use <strong>Check updates only</strong> to recheck already-imported SOs in that range (status changes and
+          orders removed in Acumatica) without a full re-import.
         </p>
-        <form onSubmit={handleOrderSync} className="flex flex-wrap items-end gap-3">
-          <div className="grid gap-1.5">
-            <Label>Start date</Label>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>End date</Label>
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40" />
+        <form onSubmit={handleOrderSync} className="flex flex-wrap items-end gap-4">
+          <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+            <Switch
+              id="orders-updates-only"
+              checked={ordersUpdatesOnly}
+              onCheckedChange={setOrdersUpdatesOnly}
+            />
+            <Label htmlFor="orders-updates-only" className="cursor-pointer text-sm font-normal">
+              Check updates only
+            </Label>
           </div>
           <Button type="submit" disabled={syncOrders.isPending || !!activeOrderSync}>
-            {syncOrders.isPending || activeOrderSync ? "Syncing…" : "Sync Orders"}
+            {syncOrders.isPending || activeOrderSync
+              ? "Syncing…"
+              : ordersUpdatesOnly
+                ? "Check SO Updates"
+                : "Sync Orders"}
           </Button>
           {activeOrderSync && (
             <Button
@@ -908,7 +971,7 @@ function SyncPanel() {
       {/* Selective customer order sync */}
       <Panel title="Selective Customer Order Sync" icon={Search}>
         <p className="mb-3 text-sm text-muted-foreground">
-          Search for specific customers and sync all their historical and active sales orders including full line-item details.
+          Search for specific customers and sync their sales orders in the selected date range, including full line-item details.
         </p>
         <div className="space-y-3">
           <div className="relative">
@@ -973,7 +1036,7 @@ function SyncPanel() {
                 ))}
               </div>
               <Button
-                onClick={() => syncCustomerOrders.mutate({ customer_ids: selectedCustomers.map((c) => c.acumatica_id) })}
+                onClick={() => { if (hasValidSyncDates()) syncCustomerOrders.mutate({ customer_ids: selectedCustomers.map((c) => c.acumatica_id), date_from: dateFrom, date_to: dateTo }); }}
                 disabled={syncCustomerOrders.isPending || !!activeCustomerOrderSync}
                 size="sm"
               >
@@ -1011,9 +1074,9 @@ function SyncPanel() {
         {syncLogs.isError   && <ErrorBlock message="Sync logs could not be loaded." onRetry={() => syncLogs.refetch()} />}
         {syncLogs.data && (
           <MiniTable
-            headers={["Type", "Status", "Records", "Success", "Failed", "Started", "Duration", "Action"]}
+            headers={["Name", "Status", "Records", "Success", "Failed", "Started", "Duration", "Action"]}
             rows={syncLogs.data.map((log) => [
-              log.sync_type,
+              formatSyncLogName(log),
               log.stop_requested_at && log.status === "running" ? "stopping" : log.status,
               String(log.record_count),
               String(log.success_count),
@@ -1025,6 +1088,7 @@ function SyncPanel() {
               isActiveSyncLog(log) ? "Stop available" : "—",
             ])}
             empty="No sync runs yet."
+            firstColClassName="min-w-[14rem] max-w-[22rem] whitespace-normal break-words font-medium"
           />
         )}
       </Panel>
@@ -1102,308 +1166,6 @@ function DeliverySlaConfigPanel() {
         </div>
       )}
     </Panel>
-  );
-}
-
-// -------------------------------------------------------------------------
-// FOL Settings — dynamic approval stages, mail, attachments (admin-editable)
-// -------------------------------------------------------------------------
-
-function FolSettingsPanel() {
-  const { data, isLoading, refetch } = useFolSettings();
-  const saveSettings = useUpdateFolSettings();
-  const saveStages = useUpdateFolStages();
-  const [settings, setSettings] = useState<Partial<FolSettings>>({});
-  const [stages, setStages] = useState<FolApprovalStageConfig[]>([]);
-  const [mimesText, setMimesText] = useState("");
-  const [ccText, setCcText] = useState("");
-
-  useEffect(() => {
-    if (!data) return;
-    setSettings({
-      mail_from_address: data.mail_from_address,
-      mail_from_name: data.mail_from_name,
-      max_attachment_kb: data.max_attachment_kb,
-      attachment_mimes: data.attachment_mimes,
-      invoicing_roles: data.invoicing_roles,
-      cc_watcher_emails: data.cc_watcher_emails,
-      duplicate_policy: data.duplicate_policy,
-      consumables_months: data.consumables_months,
-      require_attachment: data.require_attachment,
-      allow_admin_on_all_stages: data.allow_admin_on_all_stages,
-    });
-    setStages(data.stages.map((s) => ({ ...s, role_names: [...s.role_names], user_ids: [...s.user_ids] })));
-    setMimesText(data.attachment_mimes.join(", "));
-    setCcText((data.cc_watcher_emails ?? []).join(", "));
-  }, [data]);
-
-  function updateStage(index: number, patch: Partial<FolApprovalStageConfig>) {
-    setStages((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
-  }
-
-  function addStage() {
-    const n = stages.length + 1;
-    setStages((prev) => [
-      ...prev,
-      {
-        key: `stage_${n}`,
-        name: `Stage ${n}`,
-        sort_order: n,
-        is_active: true,
-        assignee_mode: "role",
-        role_names: ["Administrator"],
-        user_ids: [],
-        require_comment: true,
-        sla_hours: 48,
-      },
-    ]);
-  }
-
-  function removeStage(index: number) {
-    setStages((prev) => prev.filter((_, i) => i !== index).map((s, i) => ({ ...s, sort_order: i + 1 })));
-  }
-
-  function toggleRole(index: number, role: string) {
-    setStages((prev) =>
-      prev.map((s, i) => {
-        if (i !== index) return s;
-        const has = s.role_names.includes(role);
-        return {
-          ...s,
-          role_names: has ? s.role_names.filter((r) => r !== role) : [...s.role_names, role],
-        };
-      }),
-    );
-  }
-
-  function toggleInvoicingRole(role: string) {
-    setSettings((prev) => {
-      const list = prev.invoicing_roles ?? [];
-      const has = list.includes(role);
-      return {
-        ...prev,
-        invoicing_roles: has ? list.filter((r) => r !== role) : [...list, role],
-      };
-    });
-  }
-
-  if (isLoading || !data) return <PanelSkeleton />;
-
-  const roles = data.available_roles ?? [];
-
-  return (
-    <div className="space-y-4">
-      <Panel title="FOL Mail & Attachments" icon={Mail}>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Runtime FOL config is stored in the database. Change stages and recipients here without redeploying code.
-          Defaults fall back to <code className="text-xs">config/fol.php</code> / env when unset.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field
-            label="Mail from address"
-            value={settings.mail_from_address ?? ""}
-            onChange={(v) => setSettings((s) => ({ ...s, mail_from_address: v }))}
-            placeholder="kp@fayshop.co.ke"
-          />
-          <Field
-            label="Mail from name"
-            value={settings.mail_from_name ?? ""}
-            onChange={(v) => setSettings((s) => ({ ...s, mail_from_name: v }))}
-            placeholder="FOL KP Approvals"
-          />
-          <Field
-            label="Max attachment KB"
-            type="number"
-            value={String(settings.max_attachment_kb ?? 15360)}
-            onChange={(v) => setSettings((s) => ({ ...s, max_attachment_kb: Number(v) || 15360 }))}
-          />
-          <Field
-            label="Consumables lookback (months)"
-            type="number"
-            value={String(settings.consumables_months ?? 6)}
-            onChange={(v) => setSettings((s) => ({ ...s, consumables_months: Number(v) || 6 }))}
-          />
-          <div className="sm:col-span-2">
-            <Field
-              label="Allowed attachment extensions (comma-separated)"
-              value={mimesText}
-              onChange={setMimesText}
-              placeholder="pdf, xlsx, jpg, png"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <Field
-              label="CC watcher emails (all stage + invoicing mails)"
-              value={ccText}
-              onChange={setCcText}
-              placeholder="ops@kimfay.com, audit@kimfay.com"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Duplicate open FOL policy</Label>
-            <Select
-              value={settings.duplicate_policy ?? "warn"}
-              onValueChange={(v) => setSettings((s) => ({ ...s, duplicate_policy: v as FolSettings["duplicate_policy"] }))}
-            >
-              <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="warn">Warn</SelectItem>
-                <SelectItem value="block">Block</SelectItem>
-                <SelectItem value="allow">Allow</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col justify-end gap-2 pb-1">
-            <label className="flex items-center gap-2 text-sm">
-              <Switch
-                checked={!!settings.require_attachment}
-                onCheckedChange={(v) => setSettings((s) => ({ ...s, require_attachment: v }))}
-              />
-              Require attachment on submit
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch
-                checked={!!settings.allow_admin_on_all_stages}
-                onCheckedChange={(v) => setSettings((s) => ({ ...s, allow_admin_on_all_stages: v }))}
-              />
-              Admin can approve any stage (testing / break-glass)
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <Label className="text-xs">Invoicing notification roles (N5)</Label>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {roles.map((role) => {
-              const on = (settings.invoicing_roles ?? []).includes(role);
-              return (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => toggleInvoicingRole(role)}
-                  className={`rounded-full border px-2.5 py-1 text-xs ${on ? "border-primary bg-primary text-primary-foreground" : "bg-background"}`}
-                >
-                  {role}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="mt-4 flex gap-2">
-          <Button
-            size="sm"
-            disabled={saveSettings.isPending}
-            onClick={() =>
-              saveSettings.mutate({
-                ...settings,
-                attachment_mimes: mimesText.split(/[,\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean),
-                cc_watcher_emails: ccText.split(/[,\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean),
-              })
-            }
-          >
-            {saveSettings.isPending ? "Saving…" : "Save FOL settings"}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => refetch()}>Reset</Button>
-        </div>
-      </Panel>
-
-      <Panel title="FOL Approval Stages" icon={ShieldCheck}>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Dynamic multi-step chain (e.g. HOD → CCO). Order by sort. Each active stage needs roles and/or specific users.
-          Administrators can always act on every stage when the toggle above is on.
-        </p>
-        <div className="space-y-3">
-          {stages.map((stage, index) => (
-            <div key={`${stage.key}-${index}`} className="rounded-lg border bg-muted/20 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-semibold">Stage {stage.sort_order}: {stage.name}</h4>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 text-xs">
-                    <Switch checked={stage.is_active} onCheckedChange={(v) => updateStage(index, { is_active: v })} />
-                    Active
-                  </label>
-                  <Button size="sm" variant="ghost" className="h-7 text-destructive" onClick={() => removeStage(index)} disabled={stages.length <= 1}>
-                    Remove
-                  </Button>
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Field label="Key" value={stage.key} onChange={(v) => updateStage(index, { key: v.replace(/\s+/g, "_").toLowerCase() })} />
-                <Field label="Display name" value={stage.name} onChange={(v) => updateStage(index, { name: v })} />
-                <Field label="Sort order" type="number" value={String(stage.sort_order)} onChange={(v) => updateStage(index, { sort_order: Number(v) || 1 })} />
-                <Field
-                  label="SLA hours"
-                  type="number"
-                  value={stage.sla_hours != null ? String(stage.sla_hours) : ""}
-                  onChange={(v) => updateStage(index, { sla_hours: v === "" ? null : Number(v) || null })}
-                />
-              </div>
-              <div className="mt-3">
-                <Label className="text-xs">Assignee roles</Label>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {roles.map((role) => {
-                    const on = stage.role_names.includes(role);
-                    return (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => toggleRole(index, role)}
-                        className={`rounded-full border px-2 py-0.5 text-[11px] ${on ? "border-primary bg-primary text-primary-foreground" : "bg-background"}`}
-                      >
-                        {role}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="mt-3">
-                <Label className="text-xs">Specific users (optional)</Label>
-                <Select
-                  value="__add__"
-                  onValueChange={(v) => {
-                    if (v === "__add__") return;
-                    const id = Number(v);
-                    if (!stage.user_ids.includes(id)) {
-                      updateStage(index, { user_ids: [...stage.user_ids, id] });
-                    }
-                  }}
-                >
-                  <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Add user…" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__add__">Add user…</SelectItem>
-                    {(data.users ?? []).map((u) => (
-                      <SelectItem key={u.id} value={String(u.id)}>{u.name} ({u.email})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {stage.user_ids.map((id) => {
-                    const u = data.users?.find((x) => x.id === id);
-                    return (
-                      <Badge key={id} variant="secondary" className="gap-1 text-[10px]">
-                        {u?.name ?? id}
-                        <button type="button" className="ml-0.5" onClick={() => updateStage(index, { user_ids: stage.user_ids.filter((x) => x !== id) })}>×</button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              </div>
-              <label className="mt-3 flex items-center gap-2 text-xs">
-                <Switch checked={stage.require_comment} onCheckedChange={(v) => updateStage(index, { require_comment: v })} />
-                Require comment on decision
-              </label>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={addStage}>Add stage</Button>
-          <Button size="sm" disabled={saveStages.isPending} onClick={() => saveStages.mutate(stages)}>
-            {saveStages.isPending ? "Saving…" : "Save approval stages"}
-          </Button>
-        </div>
-      </Panel>
-    </div>
   );
 }
 
@@ -1608,13 +1370,20 @@ function OperationsUpdatePanel() {
   const [fillDatePreset, setFillDatePreset] = useState<DatePresetId>("this_month");
   const [fillDateFrom, setFillDateFrom] = useState(monthRange.from);
   const [fillDateTo, setFillDateTo] = useState(monthRange.to);
+  const [inventoryDatePreset, setInventoryDatePreset] = useState<DatePresetId>("this_month");
+  const [inventoryDateFrom, setInventoryDateFrom] = useState(monthRange.from);
+  const [inventoryDateTo, setInventoryDateTo] = useState(monthRange.to);
   const [inventoryWarehouseId, setInventoryWarehouseId] = useState("FGS");
   const activeInventorySync = findActiveSyncRun(syncLogs.data, ["inventory"]);
   const activeInventoryStocksSync = findActiveSyncRun(syncLogs.data, ["inventory_stocks"]);
   const activeBackordersSync = findActiveSyncRun(syncLogs.data, ["backorders"]);
   const activeFillRateSync = findActiveSyncRun(syncLogs.data, ["fill_rate"]);
   const hasActiveInventoryModule = !!activeInventorySync || !!activeInventoryStocksSync;
-  const inventorySyncBody = inventoryWarehouseId !== "all" ? { warehouse_id: inventoryWarehouseId } : undefined;
+  const inventorySyncBody = {
+    ...(inventoryWarehouseId !== "all" ? { warehouse_id: inventoryWarehouseId } : {}),
+    date_from: inventoryDateFrom,
+    date_to: inventoryDateTo,
+  };
 
   function runUpdate(
     label: string,
@@ -1705,6 +1474,23 @@ function OperationsUpdatePanel() {
               </SelectContent>
             </Select>
           </div>
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <div className="grid gap-1">
+              <Label className="text-xs">Dates (audit)</Label>
+              <Select value={inventoryDatePreset} onValueChange={(value) => applyOpsDatePreset(value as DatePresetId, setInventoryDatePreset, setInventoryDateFrom, setInventoryDateTo)}>
+                <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>{DATE_PRESETS.map((preset) => <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">From</Label>
+              <Input type="date" value={inventoryDateFrom} onChange={(e) => { setInventoryDatePreset("custom"); setInventoryDateFrom(e.target.value); }} className="h-8 w-36 text-xs" />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs">To</Label>
+              <Input type="date" value={inventoryDateTo} onChange={(e) => { setInventoryDatePreset("custom"); setInventoryDateTo(e.target.value); }} className="h-8 w-36 text-xs" />
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
@@ -1776,8 +1562,8 @@ function OperationsUpdatePanel() {
               <Select value={backorderDatePreset} onValueChange={(value) => applyOpsDatePreset(value as DatePresetId, setBackorderDatePreset, setBackorderDateFrom, setBackorderDateTo)}>
                 <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {DATE_PRESETS.filter((preset) => preset.id !== "last_30_days").map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>{preset.id === "custom" ? "Date range" : preset.label}</SelectItem>
+                  {DATE_PRESETS.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1825,8 +1611,8 @@ function OperationsUpdatePanel() {
               <Select value={fillDatePreset} onValueChange={(value) => applyOpsDatePreset(value as DatePresetId, setFillDatePreset, setFillDateFrom, setFillDateTo)}>
                 <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {DATE_PRESETS.filter((preset) => preset.id !== "last_30_days").map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>{preset.id === "custom" ? "Date range" : preset.label}</SelectItem>
+                  {DATE_PRESETS.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -2905,14 +2691,36 @@ function PermissionsPanel() {
   );
 }
 
+function yesterdayDateInputValue(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatReportDateLabel(isoDate: string): string {
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-").map(Number);
+  if (!y || !m || !d) return isoDate;
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function DailyNotificationsPanel() {
   const config = useDailyReportConfig();
   const runs = useDailyReportRuns();
   const update = useUpdateDailyReportConfig();
+  const sendReport = useSendDailyReport();
   const testSend = useTestDailyReport();
   const resend = useResendDailyReport();
   const [sendToText, setSendToText] = useState("");
   const [ccText, setCcText] = useState("");
+  const [reportDate, setReportDate] = useState(yesterdayDateInputValue);
 
   useEffect(() => {
     const sendTo = config.data?.send_to ?? config.data?.reply_to ?? [];
@@ -2929,6 +2737,11 @@ function DailyNotificationsPanel() {
   const data = config.data;
   const sendTo = data.send_to ?? data.reply_to ?? [];
   const cc = data.cc ?? (data.recipients ?? []).filter((email) => !sendTo.includes(email));
+  const routing = () => ({
+    send_to: sendToText.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean),
+    cc: ccText.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean),
+  });
+  const sending = sendReport.isPending || testSend.isPending || resend.isPending;
 
   return (
     <div className="space-y-4">
@@ -2941,7 +2754,7 @@ function DailyNotificationsPanel() {
               <Badge variant="outline">{data.timezone}</Badge>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Sends a management briefing covering yesterday&apos;s order performance, MTD position, day-over-day comparison, and AI-generated insights.
+              Sends a management briefing covering the selected day&apos;s order performance, MTD position, day-over-day comparison, and AI-generated insights.
             </p>
             <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
               <div>Last sent: {formatDate(data.last_sent_at) || "Never"}</div>
@@ -2952,6 +2765,45 @@ function DailyNotificationsPanel() {
           <label className="flex items-center gap-2 rounded border px-3 py-2 text-sm">
             <Switch checked={data.is_enabled} onCheckedChange={(value) => update.mutate({ is_enabled: value })} />Enabled
           </label>
+        </div>
+
+        <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="grid min-w-[200px] flex-1 gap-1.5">
+              <Label htmlFor="daily-report-date" className="flex items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Report date
+              </Label>
+              <Input
+                id="daily-report-date"
+                type="date"
+                value={reportDate}
+                max={yesterdayDateInputValue()}
+                onChange={(event) => setReportDate(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Select the day the report covers (e.g. <b>16 Jul</b> for the 16 July report).
+                {reportDate ? (
+                  <> Currently: <b>{formatReportDateLabel(reportDate)}</b>.</>
+                ) : null}
+              </p>
+            </div>
+            <Button
+              disabled={sending || !reportDate}
+              onClick={() =>
+                sendReport.mutate({
+                  report_date: reportDate,
+                  force: true,
+                  ...routing(),
+                })
+              }
+            >
+              <Mail className={`mr-1.5 h-3.5 w-3.5 ${sendReport.isPending ? "animate-pulse" : ""}`} />
+              {sendReport.isPending
+                ? `Sending ${formatReportDateLabel(reportDate)}…`
+                : `Send ${formatReportDateLabel(reportDate) || "report"}`}
+            </Button>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -3015,15 +2867,18 @@ function DailyNotificationsPanel() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             variant="outline"
-            disabled={testSend.isPending}
-            onClick={() => testSend.mutate({
-              send_to: sendToText.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean),
-              cc: ccText.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean),
-            })}
+            disabled={sending || !reportDate}
+            onClick={() =>
+              testSend.mutate({
+                report_date: reportDate,
+                ...routing(),
+              })
+            }
           >
-            <FlaskConical className="mr-1.5 h-3.5 w-3.5" />{testSend.isPending ? "Sending…" : "Test Send"}
+            <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
+            {testSend.isPending ? "Sending…" : "Test Send"}
           </Button>
-          <Button variant="outline" disabled={resend.isPending} onClick={() => resend.mutate()}>
+          <Button variant="outline" disabled={sending} onClick={() => resend.mutate()}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />{resend.isPending ? "Resending…" : "Resend Last Report"}
           </Button>
         </div>
@@ -3042,15 +2897,22 @@ function DailyNotificationsPanel() {
         {runs.isLoading && <PanelSkeleton />}
         {runs.data?.data.length === 0 && <p className="text-sm text-muted-foreground">No report runs yet.</p>}
         <MiniTable
-          headers={["Report Date", "Status", "AI", "Delivery", "Recipients", "Duration", "Sent At"]}
+          headers={["Report Date", "Status", "AI", "Delivery", "Recipients", "Duration", "Sent At", "Error / notes"]}
           rows={(runs.data?.data ?? []).map((run) => [
             run.report_date ?? "—",
             run.status,
             run.ai_status ?? "—",
             run.delivery_status ?? "—",
-            String(run.recipient_count),
-            run.duration_ms !== null ? `${(run.duration_ms / 1000).toFixed(1)}s` : "—",
+            String(run.recipient_count ?? 0),
+            run.duration_ms !== null && run.duration_ms !== undefined
+              ? `${(run.duration_ms / 1000).toFixed(1)}s`
+              : "—",
             formatDate(run.sent_at) || "—",
+            run.error_summary?.trim()
+              ? run.error_summary.length > 120
+                ? `${run.error_summary.slice(0, 120)}…`
+                : run.error_summary
+              : "—",
           ])}
         />
       </Panel>
@@ -3191,25 +3053,116 @@ function NotificationRuleRecipientEditor({
 }
 
 function AuditLogsPanel() {
-  const { data, isLoading, isError, refetch } = useAuditLogs();
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedQ(q);
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  const { data, isLoading, isError, refetch, isFetching } = useAuditLogs({
+    page,
+    q: debouncedQ,
+    start_date: startDate || undefined,
+    end_date: endDate || undefined,
+  });
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportAuditActivityExcel({
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      });
+      toast.success("Export ready — Login + Activity sheets");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (isLoading) return <PanelSkeleton />;
   if (isError || !data) return <ErrorBlock message="Audit logs could not be loaded." onRetry={() => refetch()} />;
 
   return (
-    <Panel title="Audit Logs" icon={History}>
-      <MiniTable
-        headers={["Time", "Actor", "Action", "Resource"]}
-        rows={data.data.map((entry) => [
-          formatDate(entry.timestamp) || entry.timestamp,
-          entry.actor_user_id ? `User #${entry.actor_user_id}` : "system",
-          entry.action_type,
-          `${entry.resource_type}${entry.resource_id ? ` #${entry.resource_id}` : ""}`,
-        ])}
-        empty="No audit entries yet."
-      />
-      <div className="mt-3 text-xs text-muted-foreground">Showing page {data.current_page} of {data.last_page || 1}, {data.total} total entries.</div>
-    </Panel>
+    <div className="space-y-4">
+      <Panel title="Audit Logs" icon={History}>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Admin actions with exact user names. Export includes{" "}
+          <strong>Login</strong> (sign-ins &amp; sessions) and{" "}
+          <strong>Activity</strong> (pages navigated, downloads, audit actions).
+        </p>
+        <div className="mb-3 flex flex-wrap items-end gap-2">
+          <div className="min-w-[12rem] flex-1 space-y-1">
+            <Label className="text-xs">Search user / action</Label>
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Name, email, action…"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">From</Label>
+            <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">To</Label>
+            <Input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} />
+          </div>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button size="sm" onClick={() => void handleExport()} disabled={exporting}>
+            {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
+            Export Excel
+          </Button>
+        </div>
+        <MiniTable
+          headers={["Time", "User", "Email", "Action", "Resource", "IP"]}
+          rows={data.data.map((entry) => [
+            formatDate(entry.timestamp) || entry.timestamp,
+            entry.actor_name || (entry.actor_user_id ? `User #${entry.actor_user_id}` : "system"),
+            entry.actor_email || "—",
+            entry.action_type,
+            `${entry.resource_type}${entry.resource_id ? ` #${entry.resource_id}` : ""}`,
+            entry.actor_ip || "—",
+          ])}
+          empty="No audit entries yet."
+        />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            Showing page {data.current_page} of {data.last_page || 1}, {data.total} total entries.
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= (data.last_page || 1)}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      </Panel>
+    </div>
   );
 }
 
@@ -3381,17 +3334,46 @@ function Field({ label, value, onChange, placeholder, type = "text" }: { label: 
   );
 }
 
-function MiniTable({ headers, rows, empty = "No records found.", className = "" }: { headers: string[]; rows: string[][]; empty?: string; className?: string }) {
+function MiniTable({
+  headers,
+  rows,
+  empty = "No records found.",
+  className = "",
+  firstColClassName = "",
+}: {
+  headers: string[];
+  rows: string[][];
+  empty?: string;
+  className?: string;
+  /** Optional extra classes for the first column (e.g. wider name labels). */
+  firstColClassName?: string;
+}) {
   return (
     <div className={`overflow-x-auto rounded-md border ${className}`}>
       <table className="w-full text-sm">
         <thead className="bg-muted/30 text-[11px] uppercase text-muted-foreground">
-          <tr>{headers.map((header) => <th key={header} className="px-3 py-2 text-left">{header}</th>)}</tr>
+          <tr>
+            {headers.map((header, headerIndex) => (
+              <th
+                key={header}
+                className={`px-3 py-2 text-left ${headerIndex === 0 ? firstColClassName : ""}`}
+              >
+                {header}
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
           {rows.length ? rows.map((row, index) => (
             <tr key={index} className="border-t">
-              {row.map((cell, cellIndex) => <td key={`${index}-${cellIndex}`} className="px-3 py-2 align-top">{cell}</td>)}
+              {row.map((cell, cellIndex) => (
+                <td
+                  key={`${index}-${cellIndex}`}
+                  className={`px-3 py-2 align-top ${cellIndex === 0 ? firstColClassName : ""}`}
+                >
+                  {cell}
+                </td>
+              ))}
             </tr>
           )) : (
             <tr><td className="px-3 py-4 text-muted-foreground" colSpan={headers.length}>{empty}</td></tr>

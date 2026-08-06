@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\Admin\AcumaticaController;
 use App\Http\Controllers\Api\Admin\AiConnectorController;
+use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\Admin\AuditLogController;
 use App\Http\Controllers\Api\Admin\HealthController;
 use App\Http\Controllers\Api\Admin\NotificationRuleController;
@@ -21,16 +22,27 @@ use App\Http\Controllers\Api\Admin\DeliverySlaConfigController;
 use App\Http\Controllers\Api\Admin\FolSettingsController;
 use App\Http\Controllers\Api\Admin\ImpersonationController;
 use App\Http\Controllers\Api\Admin\PriceChangeSettingsController;
+use App\Http\Controllers\Api\Admin\AdoptionReportController;
 use App\Http\Controllers\Api\Admin\SalesManagementSettingsController;
+use App\Http\Controllers\Api\Admin\BrandsController;
+use App\Http\Controllers\Api\Admin\CategoriesController;
+use App\Http\Controllers\Api\Admin\TradingGroupsController;
+use App\Http\Controllers\Api\Admin\ProductsController;
+use App\Http\Controllers\Api\Admin\SalesConsultantDigestController;
 use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\AiIntelligenceController;
+use App\Http\Controllers\Api\KimfayGeniusController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CapabilitiesController;
+use App\Http\Controllers\Api\CommissionController;
+use App\Http\Controllers\Api\KpItemsNotOrderedController;
 use App\Http\Controllers\Api\Admin\CustomerDepartmentController;
 use App\Http\Controllers\Api\Admin\DepartmentController;
 use App\Http\Controllers\Api\Admin\TeamImportController;
+use App\Http\Controllers\Api\Admin\PortfolioAdministrationController;
 use App\Http\Controllers\Api\Admin\UserAssignmentController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\CustomerBrandController;
 use App\Http\Controllers\Api\CustomerFeedController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EmailController;
@@ -45,8 +57,11 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\PriceChangeRequestController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ProductionIntelligenceController;
+use App\Http\Controllers\Api\ItemsNotDeliveredController;
 use App\Http\Controllers\Api\SalesConsultantController;
 use App\Http\Controllers\Api\SalesManagementPromptController;
+use App\Http\Controllers\Api\SalesIntelligenceController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -71,32 +86,89 @@ Route::prefix('auth')->group(function () {
 Route::get('admin/mailboxes/oauth/callback', [MailboxController::class, 'handleCallback'])
     ->name('mailbox.oauth.callback');
 
+// --- Public signed FOL attachment links (for outbound email: view + download) ---
+Route::get('kp/fol/attachments/{attachment}/public', [FolController::class, 'publicAttachment'])
+    ->middleware('signed')
+    ->name('fol.attachments.public')
+    ->whereNumber('attachment');
+
+// Opaque, expiring report links generated for email recipients.
+Route::get('public/downloads/{token}', [\App\Http\Controllers\Api\ExportDownloadController::class, 'publicFile'])
+    ->where('token', '[A-Za-z0-9]{64}');
+
 // --- Protected ---
 Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('view.only')->group(function () {
+    Route::get('operations/items-not-delivered', [ItemsNotDeliveredController::class, 'index'])->middleware('response.cache:not-delivered,120');
+    Route::get('operations/items-not-delivered/export', [ItemsNotDeliveredController::class, 'export']);
+
+    Route::prefix('kp/commissions')->middleware('kp.crm')->group(function () {
+        Route::get('/', [CommissionController::class, 'summary']);
+        Route::get('rules', [CommissionController::class, 'rules']);
+        Route::post('rules', [CommissionController::class, 'saveRule']);
+        Route::put('rules/{rule}', [CommissionController::class, 'saveRule']);
+        Route::put('targets', [CommissionController::class, 'saveTarget']);
+        Route::post('periods', [CommissionController::class, 'createPeriod']);
+        Route::post('periods/{period}/calculate', [CommissionController::class, 'recalculate']);
+        Route::post('periods/{period}/transition', [CommissionController::class, 'transition']);
+        Route::get('statements/{statement}', [CommissionController::class, 'show']);
+        Route::post('statements/{statement}/adjustments', [CommissionController::class, 'adjust']);
+    });
+    Route::get('kp/items-not-ordered', [KpItemsNotOrderedController::class, 'index'])->middleware(['kp.crm', 'response.cache:kp-crm,300']);
+    Route::get('admin/adoption-report', [AdoptionReportController::class, 'index'])->middleware('super.admin');
+    Route::post('admin/adoption-report/users/{user}/trained', [AdoptionReportController::class, 'markTrained'])->middleware('super.admin');
 
     // Auth
     Route::prefix('auth')->group(function () {
         Route::get('me',     [AuthController::class, 'me']);
         Route::get('capabilities', CapabilitiesController::class);
         Route::post('logout',[AuthController::class, 'logout']);
+        Route::post('onboarding/complete', [ProfileController::class, 'completeOnboarding']);
         // Stop must work while impersonating (token is the target user, not admin)
         Route::post('impersonate/stop', [ImpersonationController::class, 'stop']);
     });
 
     // Dashboard KPIs + trend
     Route::get('dashboard/kpis',              [DashboardController::class, 'kpis']);
+    Route::get('dashboard/filter-options',     [DashboardController::class, 'filterOptions']);
     Route::get('dashboard/trend',             [DashboardController::class, 'trend']);
     Route::get('dashboard/orders-by-status',  [DashboardController::class, 'ordersByStatus']);
     Route::get('dashboard/goods-lost-in-transit', [DashboardController::class, 'goodsLostInTransit']);
     Route::get('dashboard/zone-routes',          [DashboardController::class, 'zoneRoutes']);
+    Route::get('dashboard/customer-brands',      [CustomerBrandController::class, 'index']);
+    Route::get('dashboard/customer-brands/{customerId}', [CustomerBrandController::class, 'show']);
 
     // Customer Feed — grouped customer performance
-    Route::get('customer-feed',                    [CustomerFeedController::class, 'index']);
-    Route::get('customer-feed/{groupKey}/insights', [CustomerFeedController::class, 'insights']);
+    Route::get('customer-feed',                    [CustomerFeedController::class, 'index'])->middleware('response.cache:customer-analytics,120');
+    Route::get('customer-feed/{groupKey}/insights', [CustomerFeedController::class, 'insights'])->middleware('response.cache:customer-analytics,300');
+
+    // Background Excel downloads (large exports)
+    Route::prefix('downloads')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\ExportDownloadController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\ExportDownloadController::class, 'store']);
+        Route::get('{download}', [\App\Http\Controllers\Api\ExportDownloadController::class, 'show'])->whereNumber('download');
+        Route::get('{download}/file', [\App\Http\Controllers\Api\ExportDownloadController::class, 'file'])->whereNumber('download');
+        Route::delete('{download}', [\App\Http\Controllers\Api\ExportDownloadController::class, 'destroy'])->whereNumber('download');
+    });
 
     // Operations — inventory, backorders, fill rate
     Route::prefix('operations')->group(function () {
+        Route::prefix('production')->group(function () {
+            Route::get('version', [ProductionIntelligenceController::class, 'version']);
+            Route::get('reference', [ProductionIntelligenceController::class, 'reference']);
+            Route::get('summary', [ProductionIntelligenceController::class, 'summary']);
+            Route::get('inventory', [ProductionIntelligenceController::class, 'inventory']);
+            Route::get('inventory/{inventoryId}/trend', [ProductionIntelligenceController::class, 'trend']);
+            Route::get('inventory/{inventoryId}/warehouses', [ProductionIntelligenceController::class, 'warehouses']);
+            Route::get('inventory/{inventoryId}', [ProductionIntelligenceController::class, 'show']);
+            Route::get('sales', [ProductionIntelligenceController::class, 'sales']);
+            Route::get('plans', [ProductionIntelligenceController::class, 'plans']);
+            Route::post('plans/bulk-msi', [ProductionIntelligenceController::class, 'bulkMsi']);
+            Route::post('plans', [ProductionIntelligenceController::class, 'store']);
+            Route::put('plans/{plan}', [ProductionIntelligenceController::class, 'update']);
+            Route::delete('plans/{plan}', [ProductionIntelligenceController::class, 'destroy']);
+            Route::post('transfer-requests/email', [ProductionIntelligenceController::class, 'emailTransferRequests']);
+        });
         Route::prefix('sales-management')->group(function () {
             Route::get('prompts/dashboard', [SalesManagementPromptController::class, 'dashboard']);
             Route::get('prompts', [SalesManagementPromptController::class, 'index']);
@@ -113,35 +185,38 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/', [PriceChangeRequestController::class, 'store']);
             Route::get('{priceChangeRequest}', [PriceChangeRequestController::class, 'show'])->whereNumber('priceChangeRequest');
             Route::post('{priceChangeRequest}/decisions', [PriceChangeRequestController::class, 'decision'])->whereNumber('priceChangeRequest');
+            Route::post('{priceChangeRequest}/counter-response', [PriceChangeRequestController::class, 'respondCounter'])->whereNumber('priceChangeRequest');
             Route::post('{priceChangeRequest}/acknowledge-duplicate', [PriceChangeRequestController::class, 'acknowledgeDuplicate'])->whereNumber('priceChangeRequest');
             Route::post('{priceChangeRequest}/mark-applied-erp', [PriceChangeRequestController::class, 'markAppliedErp'])->whereNumber('priceChangeRequest');
         });
-        Route::get('inventory/summary',              [OperationsController::class, 'inventorySummary']);
+        Route::get('inventory/summary',              [OperationsController::class, 'inventorySummary'])->middleware('response.cache:inventory,60');
         Route::get('inventory/export',               [OperationsController::class, 'exportInventory']);
-        Route::get('inventory',                       [OperationsController::class, 'inventory']);
+        Route::get('inventory',                       [OperationsController::class, 'inventory'])->middleware('response.cache:inventory,60');
         Route::get('inventory/{id}/prediction',       [OperationsController::class, 'inventoryPrediction']);
         Route::get('inventory/{inventoryId}/sku-detail', [InventorySkuDetailController::class, 'show']);
         Route::get('inventory/{inventoryId}/insights',   [InventoryInsightController::class, 'show']);
-        Route::get('backorders/summary',              [OperationsController::class, 'backordersSummary']);
-        Route::get('backorders/analytics',            [OperationsController::class, 'backordersAnalytics']);
-        Route::get('backorders/sku-breakdown',         [OperationsController::class, 'backordersSkuBreakdown']);
+        Route::get('backorders/summary',              [OperationsController::class, 'backordersSummary'])->middleware('response.cache:backorders,120');
+        Route::get('backorders/reconciliation',       [OperationsController::class, 'backordersReconciliation']);
+        Route::get('backorders/analytics',            [OperationsController::class, 'backordersAnalytics'])->middleware('response.cache:backorders,120');
+        Route::get('backorders/sku-breakdown',         [OperationsController::class, 'backordersSkuBreakdown'])->middleware('response.cache:backorders,120');
         Route::get('backorders/sku-breakdown/export',  [OperationsController::class, 'exportBackordersSkuBreakdown'])->middleware('admin.or.manager');
         Route::get('backorders/export',               [OperationsController::class, 'exportBackorders']);
-        Route::get('backorders',                      [OperationsController::class, 'backorders']);
+        Route::get('backorders',                      [OperationsController::class, 'backorders'])->middleware('response.cache:backorders,120');
+        Route::get('backorders/resolved',              [OperationsController::class, 'backordersResolved'])->middleware('response.cache:backorders,120');
         Route::patch('backorders/{backorderLine}',    [OperationsController::class, 'updateBackorderReason']);
-        Route::get('backorders/by-account',           [OperationsController::class, 'backordersByAccount']);
-        Route::get('brand-filter-options',           [OperationsController::class, 'brandFilterOptions']);
-        Route::get('reason-taxonomy',                [OperationsController::class, 'reasonTaxonomy']);
-        Route::get('so-reason-audit',                 [OperationsController::class, 'soReasonAudit']);
-        Route::get('fill-rate/summary',               [OperationsController::class, 'fillRateSummary']);
-        Route::get('fill-rate/sku-breakdown',         [OperationsController::class, 'fillRateSkuBreakdown']);
+        Route::get('backorders/by-account',           [OperationsController::class, 'backordersByAccount'])->middleware(['admin.or.manager', 'response.cache:backorders,120']);
+        Route::get('brand-filter-options',           [OperationsController::class, 'brandFilterOptions'])->middleware('response.cache:references,3600');
+        Route::get('reason-taxonomy',                [OperationsController::class, 'reasonTaxonomy'])->middleware('response.cache:references,3600');
+        Route::get('so-reason-audit',                 [OperationsController::class, 'soReasonAudit'])->middleware('response.cache:orders,300');
+        Route::get('fill-rate/summary',               [OperationsController::class, 'fillRateSummary'])->middleware('response.cache:fill-rate,120');
+        Route::get('fill-rate/sku-breakdown',         [OperationsController::class, 'fillRateSkuBreakdown'])->middleware('response.cache:fill-rate,120');
         Route::get('fill-rate/sku-breakdown/export',  [OperationsController::class, 'exportFillRateSkuBreakdown'])->middleware('admin.or.manager');
-        Route::get('fill-rate/out-of-stock',          [OperationsController::class, 'fillRateOutOfStockReport']);
+        Route::get('fill-rate/out-of-stock',          [OperationsController::class, 'fillRateOutOfStockReport'])->middleware('response.cache:fill-rate,120');
         Route::get('fill-rate/out-of-stock/export',   [OperationsController::class, 'exportFillRateOutOfStockReport'])->middleware('admin.or.manager');
         Route::get('fill-rate/export',                [OperationsController::class, 'exportFillRate'])->middleware('admin.or.manager');
-        Route::get('fill-rate',                       [OperationsController::class, 'fillRate']);
-        Route::get('status',                          [OperationsController::class, 'opsStatus']);
-        Route::get('business-optimization',           [OperationsController::class, 'businessOptimization']);
+        Route::get('fill-rate',                       [OperationsController::class, 'fillRate'])->middleware('response.cache:fill-rate,120');
+        Route::get('status',                          [OperationsController::class, 'opsStatus'])->middleware('response.cache:business-optimization,60');
+        Route::get('business-optimization',           [OperationsController::class, 'businessOptimization'])->middleware('response.cache:business-optimization,120');
         Route::get('sales-consultants',               [SalesConsultantController::class, 'index']);
         Route::post('sales-consultants/import',       [SalesConsultantController::class, 'import'])->middleware('admin.or.manager');
         Route::get('sales-consultants/{id}',          [SalesConsultantController::class, 'show'])->whereNumber('id');
@@ -151,14 +226,72 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Orders
-    Route::get('orders/stats', [OrderController::class, 'stats']);
+    Route::get('orders/stats', [OrderController::class, 'stats'])->middleware('response.cache:orders,60');
+    Route::get('orders/filter-options', [OrderController::class, 'filterOptions'])->middleware('response.cache:orders,300');
     Route::post('orders-status-refresh', [AcumaticaController::class, 'refreshOrderStatuses']);
     Route::post('orders/status-refresh', [AcumaticaController::class, 'refreshOrderStatuses']);
     Route::patch('orders/{id}/consultant', [OrderController::class, 'assignConsultant'])->whereNumber('id');
-    Route::apiResource('orders', OrderController::class);
+    Route::apiResource('orders', OrderController::class)
+        ->middlewareFor(['index'], 'response.cache:orders,60');
+
+    // KP CRM Accounts (portfolio of KP customers)
+    Route::get('kp/accounts', [\App\Http\Controllers\Api\KpAccountsController::class, 'index'])->middleware(['kp.crm', 'response.cache:customer-analytics,300']);
+    Route::get('kp/accounts/by-rep', [\App\Http\Controllers\Api\KpAccountsController::class, 'byRep'])->middleware(['kp.crm', 'response.cache:customer-analytics,300']);
+
+    // Sales consultant / HOD portfolio dashboard (PRD My Portfolio)
+    Route::get('sales/portfolio/summary', [\App\Http\Controllers\Api\SalesPortfolioController::class, 'summary'])->middleware('response.cache:sales-portfolio,120');
+    Route::get('sales/portfolio/orders', [\App\Http\Controllers\Api\SalesPortfolioController::class, 'orders'])->middleware('response.cache:sales-portfolio,120');
+    Route::get('sales/portfolio/backorders', [\App\Http\Controllers\Api\SalesPortfolioController::class, 'backorders'])->middleware('response.cache:sales-portfolio,120');
+    Route::get('sales/portfolio/items-not-ordered', [\App\Http\Controllers\Api\SalesPortfolioController::class, 'itemsNotOrdered'])->middleware('response.cache:sales-portfolio,300');
+    Route::get('sales/intelligence/metrics', [SalesIntelligenceController::class, 'metrics'])
+        ->middleware('response.cache:sales-intelligence,120');
+    Route::get('kp/dormant-customers', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'index'])->middleware(['kp.crm', 'response.cache:kp-crm,180']);
+    Route::get('kp/dormant-customers/{customerId}/attempts', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'attempts'])->middleware(['kp.crm', 'response.cache:kp-crm,120']);
+    Route::post('kp/dormant-customers/{customerId}/feedback', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'feedback'])->middleware('kp.crm');
+    Route::post('kp/dormant-customers/{customerId}/handoff', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'handoff'])->middleware('kp.crm');
+    Route::middleware(['kp.crm', 'response.cache:kp-crm,120'])->group(function () {
+        Route::get('kp/meetings', [\App\Http\Controllers\Api\KpMeetingsController::class, 'index']);
+        Route::get('kp/meetings-dashboard', [\App\Http\Controllers\Api\KpMeetingsController::class, 'dashboard']);
+        Route::get('kp/meetings-meta', [\App\Http\Controllers\Api\KpMeetingsController::class, 'meta']);
+        Route::get('kp/meetings-customer-search', [\App\Http\Controllers\Api\KpMeetingsController::class, 'searchCustomers']);
+        Route::post('kp/meetings', [\App\Http\Controllers\Api\KpMeetingsController::class, 'store']);
+        Route::put('kp/meetings/{meeting}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'update'])->whereNumber('meeting');
+        Route::delete('kp/meetings/{meeting}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'destroy'])->whereNumber('meeting');
+        Route::patch('kp/meeting-actions/{action}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'updateAction'])->whereNumber('action');
+        Route::post('kp/meeting-participants/{participant}/respond', [\App\Http\Controllers\Api\KpMeetingsController::class, 'respond'])->whereNumber('participant');
+        Route::put('kp/meeting-target', [\App\Http\Controllers\Api\KpMeetingsController::class, 'saveTarget']);
+        Route::post('kp/meeting-purposes', [\App\Http\Controllers\Api\KpMeetingsController::class, 'savePurpose']);
+        Route::put('kp/meeting-purposes/{purpose}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'savePurpose'])->whereNumber('purpose');
+        Route::post('kp/meeting-action-categories', [\App\Http\Controllers\Api\KpMeetingsController::class, 'saveActionCategory']);
+        Route::put('kp/meeting-action-categories/{category}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'saveActionCategory'])->whereNumber('category');
+    });
+    Route::get('kp/calendar', [\App\Http\Controllers\Api\KpCalendarController::class, 'index'])->middleware(['kp.crm', 'response.cache:kp-crm,120']);
+
+    Route::prefix('kp/dtc-calltronix')->group(function () {
+        Route::get('meta', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'meta']);
+        Route::get('stats', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'stats']);
+        Route::get('customers', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'customers']);
+        Route::get('prices', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'priceList']);
+        Route::post('prices/sync-products', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'syncProducts']);
+        Route::post('prices/refresh', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'refreshPrices']);
+        Route::post('prices/import-excel', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'importPricesExcel'])->middleware('throttle:5,60');
+        Route::get('prices/import-jobs', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'priceImportJobs']);
+        Route::get('prices/import-jobs/{syncLog}', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'priceImportJob'])->whereNumber('syncLog');
+        Route::get('prices/export.pdf', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'exportPriceListPdf']);
+        Route::get('quotes', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'quotes']);
+        Route::post('quotes', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'store']);
+        Route::post('quotes/import', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'importQuotes']);
+        Route::post('sales-orders/import', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'importPosOrders']);
+        Route::get('quotes/{quote}', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'show'])->whereNumber('quote');
+        Route::put('quotes/{quote}', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'update'])->whereNumber('quote');
+        Route::post('quotes/{quote}/submit', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'submit'])->whereNumber('quote');
+        Route::post('quotes/{quote}/convert', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'convert'])->whereNumber('quote');
+        Route::put('quotes/{quote}/converted-customer', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'updateConvertedCustomer'])->whereNumber('quote');
+        Route::get('sales-orders', [\App\Http\Controllers\Api\DtcCalltronixController::class, 'salesOrders']);
+    });
 
     // KP Free On Loan (FOL)
-    Route::prefix('kp/fol')->group(function () {
+    Route::prefix('kp/fol')->middleware(['kp.crm', 'response.cache:kp-operations,60'])->group(function () {
         Route::get('customers/search', [FolController::class, 'searchCustomers']);
         Route::get('inventory/search', [FolController::class, 'searchInventory']);
         Route::get('metrics', [FolController::class, 'metrics']);
@@ -167,9 +300,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [FolController::class, 'index']);
         Route::post('/', [FolController::class, 'store']);
         Route::get('{folRequest}', [FolController::class, 'show'])->whereNumber('folRequest');
+        Route::put('{folRequest}', [FolController::class, 'update'])->whereNumber('folRequest');
         Route::post('{folRequest}/submit', [FolController::class, 'submit'])->whereNumber('folRequest');
         Route::post('{folRequest}/decision', [FolController::class, 'decision'])->whereNumber('folRequest');
         Route::post('{folRequest}/attachments', [FolController::class, 'attach'])->whereNumber('folRequest');
+        Route::delete('attachments/{attachment}', [FolController::class, 'destroyAttachment'])->whereNumber('attachment');
+        Route::get('attachments/{attachment}/download', [FolController::class, 'downloadAttachment'])->whereNumber('attachment');
+        Route::get('attachments/{attachment}/view', [FolController::class, 'viewAttachment'])->whereNumber('attachment');
+        Route::get('attachments/{attachment}/preview', [FolController::class, 'previewAttachment'])->whereNumber('attachment');
         Route::post('{folRequest}/so-links', [FolController::class, 'linkSalesOrder'])->whereNumber('folRequest');
         Route::post('{folRequest}/po-links', [FolController::class, 'matchPurchaseOrder'])->whereNumber('folRequest');
         Route::post('{folRequest}/technician', [FolController::class, 'assignTechnician'])->whereNumber('folRequest');
@@ -204,6 +342,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('customers/{id}/set-parent',        [CustomerController::class, 'setParent']);
     Route::get('customers/{id}/suggested-orders',    [CustomerController::class, 'suggestedOrders']);
     Route::get('customers/{id}/common-products',     [CustomerController::class, 'commonProducts']);
+    // CRM contacts on account
+    Route::get('customer-contact-designations', [\App\Http\Controllers\Api\CustomerContactController::class, 'designations']);
+    Route::get('customers/{customerId}/contacts', [\App\Http\Controllers\Api\CustomerContactController::class, 'index']);
+    Route::post('customers/{customerId}/contacts', [\App\Http\Controllers\Api\CustomerContactController::class, 'store']);
+    Route::put('contacts/{id}', [\App\Http\Controllers\Api\CustomerContactController::class, 'update'])->whereNumber('id');
+    Route::delete('contacts/{id}', [\App\Http\Controllers\Api\CustomerContactController::class, 'destroy'])->whereNumber('id');
     Route::apiResource('customers', CustomerController::class);
 
     // Profile
@@ -214,6 +358,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('profile/password/otp', [ProfileController::class, 'requestPasswordUpdateOtp']);
     Route::post('profile/password/otp/verify', [ProfileController::class, 'verifyPasswordUpdateOtp']);
     Route::patch('profile/password', [ProfileController::class, 'updatePassword']);
+
+    // Lightweight page / activity tracking (for admin Login + Activity export)
+    Route::post('activity/page-view', [ActivityController::class, 'store'])->middleware('throttle:120,1');
 
     // Admin
     Route::prefix('admin')->middleware('admin.or.cs')->group(function () {
@@ -239,6 +386,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('order-matching/{email}/review',      [OrderMatchingController::class, 'review']);
 
         Route::get('audit-logs', [AuditLogController::class, 'index']);
+        Route::get('audit-logs/export', [AuditLogController::class, 'export']);
         Route::get('cron-jobs', [CronJobController::class, 'index']);
         Route::get('cron-jobs/{cronJob}', [CronJobController::class, 'show']);
         Route::post('cron-jobs/{cronJob}/run', [CronJobController::class, 'run']);
@@ -247,6 +395,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Daily management report
         Route::get('daily-reports/config', [DailyReportController::class, 'show']);
         Route::put('daily-reports/config', [DailyReportController::class, 'update']);
+        Route::post('daily-reports/send', [DailyReportController::class, 'send']);
         Route::post('daily-reports/test-send', [DailyReportController::class, 'testSend']);
         Route::post('daily-reports/resend-last', [DailyReportController::class, 'resendLast']);
         Route::get('daily-reports/runs', [DailyReportController::class, 'runs']);
@@ -280,6 +429,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('admin')->middleware('admin.or.manager')->group(function () {
+        Route::get('brands', [BrandsController::class, 'index']);
+        Route::middleware('super.admin')->group(function () {
         Route::get('users', [UserController::class, 'index']);
         Route::post('users', [UserController::class, 'store']);
         // Dynamic reports-to options (create form — any active user)
@@ -303,6 +454,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('team/import-gaps/{gap}', [TeamImportController::class, 'resolveGap']);
         Route::post('team/import-gaps/{gap}/create-user', [TeamImportController::class, 'createUserFromGap']);
         Route::post('team/seed-org-tree', [TeamImportController::class, 'seedOrgTree']);
+        Route::get('portfolio/users/{user}', [PortfolioAdministrationController::class, 'userPortfolio'])->middleware('response.cache:sales-portfolio,120');
+        Route::get('portfolio/kp-crm-access', [PortfolioAdministrationController::class, 'kpAccess'])->middleware('response.cache:kp-crm,120');
+        Route::post('team-migrations/preview', [PortfolioAdministrationController::class, 'previewMigration']);
+        Route::post('team-migrations/{batch}/apply', [PortfolioAdministrationController::class, 'applyMigration']);
+        });
+        Route::get('portfolio/channel-classification', [PortfolioAdministrationController::class, 'channelClassification'])->middleware('response.cache:references,300');
+        Route::post('portfolio/channel-category-rules', [PortfolioAdministrationController::class, 'storeCategoryRule'])->middleware('response.cache:references,300');
+        Route::post('portfolio/customer-channel-overrides', [PortfolioAdministrationController::class, 'storeCustomerChannelOverride'])->middleware('response.cache:references,300');
+        Route::middleware('super.admin')->group(function () {
         Route::get('customers/search', [UserAssignmentController::class, 'searchCustomers']);
         Route::get('customer-assignments/sources', [UserAssignmentController::class, 'assignmentSources']);
         Route::post('customer-assignments/upload', [UserAssignmentController::class, 'uploadCustomerAssignments']);
@@ -319,17 +479,35 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('customers/{customerId}/department', [CustomerDepartmentController::class, 'show']);
         Route::patch('customers/{customerId}/department', [CustomerDepartmentController::class, 'update']);
         Route::get('roles', [RoleController::class, 'index']);
+        });
     });
 
     Route::prefix('admin')->middleware('admin.only')->group(function () {
-        Route::get('users/{user}/sign-in-logs', [AdminController::class, 'userSignInLogs']);
-        Route::get('users/{user}/sessions', [AdminController::class, 'userSessions']);
+        Route::get('sales-consultant-digests', [SalesConsultantDigestController::class, 'index']);
+        Route::put('sales-consultant-digests/bulk', [SalesConsultantDigestController::class, 'bulk']);
+        Route::put('sales-consultant-digests/{user}', [SalesConsultantDigestController::class, 'update']);
+        Route::post('brands', [BrandsController::class, 'store']);
+        Route::put('brands/{brand}', [BrandsController::class, 'update']);
+        Route::delete('brands/{brand}', [BrandsController::class, 'destroy']);
+        Route::apiResource('categories', CategoriesController::class)->except(['show']);
+        Route::apiResource('trading-groups', TradingGroupsController::class)->except(['show'])
+            ->parameters(['trading-groups' => 'tradingGroup']);
+        Route::get('products', [ProductsController::class, 'index']);
+        Route::put('products/{product}', [ProductsController::class, 'update']);
+        Route::post('products/{product}/unlock', [ProductsController::class, 'unlock']);
+        Route::post('products/imports', [ProductsController::class, 'upload']);
+        Route::get('product-imports', [ProductsController::class, 'imports']);
+        Route::get('product-imports/{productImportLog}', [ProductsController::class, 'import']);
+        Route::get('product-imports/{productImportLog}/errors', [ProductsController::class, 'errors']);
+        Route::get('users/{user}/sign-in-logs', [AdminController::class, 'userSignInLogs'])->middleware('super.admin');
+        Route::get('users/{user}/sessions', [AdminController::class, 'userSessions'])->middleware('super.admin');
 
         Route::get('data-management/export', [DataManagementController::class, 'export']);
         Route::post('data-management/sales-orders/import', [DataManagementController::class, 'importSalesOrders']);
 
         Route::get('ai-keys', [AiConnectorController::class, 'index']);
         Route::post('ai-keys', [AiConnectorController::class, 'store']);
+        Route::post('ai-keys/health', [AiConnectorController::class, 'health']);
         Route::delete('ai-keys/{id}', [AiConnectorController::class, 'destroy']);
 
         // Acumatica config
@@ -368,8 +546,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('so-imports/truncate/orders',    [AcumaticaImportController::class, 'truncateOrders']);
         Route::post('so-imports/truncate/customers', [AcumaticaImportController::class, 'truncateCustomers']);
         Route::post('so-imports/truncate/emails',    [AcumaticaImportController::class, 'truncateEmails']);
+        Route::post('so-imports/truncate/backorders', [AcumaticaImportController::class, 'truncateBackorders']);
+        Route::post('so-imports/truncate/fill-rate', [AcumaticaImportController::class, 'truncateFillRate']);
 
-        Route::get('permissions', [PermissionController::class, 'index']);
+        Route::get('permissions', [PermissionController::class, 'index'])->middleware('super.admin');
 
         Route::get('notification-rules', [NotificationRuleController::class, 'index']);
         Route::post('notification-rules/send-config', [NotificationRuleController::class, 'sendConfig']);
@@ -385,6 +565,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('fol/settings', [FolSettingsController::class, 'show']);
         Route::put('fol/settings', [FolSettingsController::class, 'update']);
         Route::put('fol/stages', [FolSettingsController::class, 'updateStages']);
+        Route::get('fol/products', [\App\Http\Controllers\Api\Admin\FolProductsController::class, 'index']);
+        Route::put('fol/products/{inventoryId}', [\App\Http\Controllers\Api\Admin\FolProductsController::class, 'update']);
+        Route::post('fol/products/bulk-upload', [\App\Http\Controllers\Api\Admin\FolProductsController::class, 'bulkUpload']);
 
         Route::get('pricing/pcr-settings', [PriceChangeSettingsController::class, 'show']);
         Route::put('pricing/pcr-settings', [PriceChangeSettingsController::class, 'update']);
@@ -394,14 +577,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('sales-management/prompts/generate', [SalesManagementSettingsController::class, 'generate']);
 
         // Impersonation — start only (stop lives under auth/* for non-admin tokens)
-        Route::get('impersonate/candidates', [ImpersonationController::class, 'candidates']);
-        Route::post('impersonate', [ImpersonationController::class, 'start']);
+        Route::get('impersonate/candidates', [ImpersonationController::class, 'candidates'])->middleware('super.admin');
+        Route::post('impersonate', [ImpersonationController::class, 'start'])->middleware('super.admin');
     });
 
     // AI chat — available to all authenticated users
     Route::post('ai/chat', [AiChatController::class, 'chat']);
     Route::get('ai/intelligence', [AiIntelligenceController::class, 'briefing']);
     Route::post('ai/intelligence/generate', [AiIntelligenceController::class, 'generate']);
+    Route::get('ai/intelligence/jobs/{uuid}', [AiIntelligenceController::class, 'jobStatus']);
+
+    // Kimfay Genius — per-consultant weekly AI coaching
+    Route::get('ai/genius/consultants', [KimfayGeniusController::class, 'consultants']);
+    Route::get('ai/genius/consultants/{user}', [KimfayGeniusController::class, 'show'])->whereNumber('user');
+    Route::post('ai/genius/consultants/{user}/generate', [KimfayGeniusController::class, 'generate'])->whereNumber('user');
+    Route::get('ai/genius/jobs/{uuid}', [KimfayGeniusController::class, 'jobStatus']);
 
     Route::middleware('admin.or.cs')->group(function () {
         // Emails

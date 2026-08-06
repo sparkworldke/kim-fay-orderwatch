@@ -5,31 +5,41 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AcumaticaBackorderLine;
 use App\Models\AcumaticaCustomer;
+use App\Models\BackorderResolution;
 use App\Models\AcumaticaFillRateSnapshot;
 use App\Models\AcumaticaInventoryItem;
+use App\Models\InventoryWarehouseBalance;
 use App\Models\AcumaticaInventoryRunRateLog;
+use App\Models\AcumaticaSalesOrder;
 use App\Models\AcumaticaSalesOrderLine;
 use App\Models\AcumaticaShippingZone;
 use App\Services\Admin\FillRateCalculator;
 use App\Services\Admin\InventoryRunRatePredictor;
+use App\Services\Admin\SalesOrderLineFulfillmentDeriver;
 use App\Services\Operations\BusinessOptimizationService;
 use App\Services\Operations\DeliverySlaEvaluator;
 use App\Services\Operations\FillRateBusinessCategory;
+use App\Services\Operations\BackorderExcelExporter;
+use App\Services\Operations\BackorderLineTransformer;
+use App\Services\Operations\BackorderMetricsService;
 use App\Services\Operations\FillRateExcelExporter;
 use App\Services\Operations\FillRateReasonCaptureReport;
 use App\Services\Operations\OperationsCatalogResolver;
 use App\Services\Operations\SalesOrderReasonCatalog;
 use App\Services\Operations\SalesOrderReasonTaxonomyService;
 use App\Services\Operations\SoReasonAuditService;
+use App\Services\Sales\SalesPortfolioService;
 use App\Support\DataScope;
 use App\Support\DepartmentScope;
 use App\Support\SalesConsultantScope;
 use App\Services\Team\BrandAssignmentScope;
 use App\Services\Team\BrandFilterService;
+use App\Services\Cache\DomainCache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -48,8 +58,12 @@ class OperationsController extends Controller
         private readonly BusinessOptimizationService $optimization,
         private readonly DeliverySlaEvaluator $deliverySla,
         private readonly FillRateExcelExporter $fillRateExporter,
+        private readonly BackorderExcelExporter $backorderExporter,
+        private readonly BackorderLineTransformer $backorderLineTransformer,
+        private readonly BackorderMetricsService $backorderMetrics,
         private readonly FillRateReasonCaptureReport $reasonCaptureReport,
         private readonly FillRateBusinessCategory $businessCategory,
+        private readonly SalesPortfolioService $salesPortfolio,
         private readonly SoReasonAuditService $soReasonAudit,
         private readonly SalesOrderReasonCatalog $reasonCatalog,
         private readonly SalesOrderReasonTaxonomyService $reasonTaxonomy,
@@ -102,32 +116,54 @@ class OperationsController extends Controller
     public function inventorySummary(): JsonResponse
     {
         $totalItems = AcumaticaInventoryItem::count();
-        $lowStock   = AcumaticaInventoryItem::where('qty_on_hand', '<=', 10)->count();
+        $fgs = InventoryWarehouseBalance::query()->where('warehouse_id', 'FGS');
+        $hasBalances = InventoryWarehouseBalance::query()->exists();
+        $lowStock = $hasBalances
+            ? (clone $fgs)->where('qty_on_hand', '<=', 10)->count()
+            : AcumaticaInventoryItem::where('default_warehouse_id', 'FGS')->where('qty_on_hand', '<=', 10)->count();
         $critical   = AcumaticaInventoryRunRateLog::whereIn('prediction_status', ['critical', 'at_risk'])
             ->where('logged_at', '>=', now()->subDay())
             ->distinct('inventory_item_id')
             ->count('inventory_item_id');
 
-        $outOfStockCount = AcumaticaInventoryItem::where('qty_on_hand', '<=', 0)->count();
+        $outOfStockCount = $hasBalances
+            ? (clone $fgs)->where('qty_on_hand', '<=', 0)->count()
+            : AcumaticaInventoryItem::where('default_warehouse_id', 'FGS')->where('qty_on_hand', '<=', 0)->count();
         $criticalPredictionIds = $this->recentPredictionItemIds(['critical']);
-        $criticalStockoutCount = AcumaticaInventoryItem::query()
+        $criticalStockoutCount = InventoryWarehouseBalance::query()
+            ->where('warehouse_id', 'FGS')
             ->where(function ($q) use ($criticalPredictionIds) {
                 $q->where('qty_on_hand', '<=', 0);
                 if ($criticalPredictionIds->isNotEmpty()) {
-                    $q->orWhereIn('id', $criticalPredictionIds);
+                    $q->orWhereIn('inventory_item_id', $criticalPredictionIds);
                 }
             })
             ->count();
 
-        $dbWarehouseCounts = AcumaticaInventoryItem::query()
-            ->whereNotNull('default_warehouse_id')
-            ->selectRaw('default_warehouse_id, COUNT(*) as sku_count')
-            ->groupBy('default_warehouse_id')
-            ->orderBy('default_warehouse_id')
+        $warehouseRows = InventoryWarehouseBalance::query()
+            ->selectRaw('warehouse_id, COUNT(DISTINCT inventory_id) as sku_count, MAX(synced_at) as synced_at')
+            ->groupBy('warehouse_id')
+            ->orderBy('warehouse_id')
             ->get()
             ->mapWithKeys(fn ($row) => [
-                (string) $row->default_warehouse_id => (int) $row->sku_count,
+                (string) $row->warehouse_id => [
+                    'sku_count' => (int) $row->sku_count,
+                    'synced_at' => $row->synced_at,
+                ],
             ]);
+        if (! $hasBalances) {
+            $warehouseRows = AcumaticaInventoryItem::query()
+                ->whereNotNull('default_warehouse_id')
+                ->selectRaw('default_warehouse_id as warehouse_id, COUNT(*) as sku_count, MAX(synced_at) as synced_at')
+                ->groupBy('default_warehouse_id')
+                ->get()
+                ->mapWithKeys(fn ($row) => [
+                    (string) $row->warehouse_id => [
+                        'sku_count' => (int) $row->sku_count,
+                        'synced_at' => $row->synced_at,
+                    ],
+                ]);
+        }
 
         // Acumatica warehouse list from config, merged with any extra warehouses seen in synced data.
         $configuredWarehouses = collect(config('inventory.warehouses', []))
@@ -136,14 +172,15 @@ class OperationsController extends Controller
             ->values();
         $labels = config('inventory.warehouse_labels', []);
         $allWarehouseIds = $configuredWarehouses
-            ->merge($dbWarehouseCounts->keys())
+            ->merge($warehouseRows->keys())
             ->unique()
             ->values();
 
         $warehouseCounts = $allWarehouseIds->map(fn (string $id) => [
             'warehouse_id' => $id,
             'label'        => (string) ($labels[$id] ?? $id),
-            'sku_count'    => (int) ($dbWarehouseCounts[$id] ?? 0),
+            'sku_count'    => (int) ($warehouseRows[$id]['sku_count'] ?? 0),
+            'synced_at'    => $warehouseRows[$id]['synced_at'] ?? null,
             'configured'   => $configuredWarehouses->contains($id),
         ])->values();
 
@@ -153,7 +190,7 @@ class OperationsController extends Controller
             'at_risk_count'    => $critical,
             'out_of_stock_count' => $outOfStockCount,
             'critical_stockout_count' => $criticalStockoutCount,
-            'last_synced_at'   => AcumaticaInventoryItem::max('synced_at'),
+            'last_synced_at'   => InventoryWarehouseBalance::max('synced_at'),
             'warehouse_ids'    => $allWarehouseIds,
             'warehouse_counts' => $warehouseCounts,
             'warehouses'       => $warehouseCounts,
@@ -181,9 +218,9 @@ class OperationsController extends Controller
 
         // Stockout risk tab: show empties and near-stockouts first.
         if ($request->filled('stockout_filter')) {
-            $query->orderBy('qty_on_hand')->orderBy('inventory_id');
+            $query->orderBy('iwb.qty_on_hand')->orderBy('acumatica_inventory_items.inventory_id');
         } else {
-            $query->orderByDesc('synced_at');
+            $query->orderByDesc('iwb.synced_at');
         }
 
         $paginated = $query->paginate($request->integer('per_page', 50));
@@ -295,15 +332,199 @@ class OperationsController extends Controller
 
     public function backordersSummary(Request $request): JsonResponse
     {
-        $lines = $this->backordersScopedLinesQuery($request);
+        $lines = $this->backordersFilteredQuery($request);
+        $activeLines = (clone $lines)->where('acumatica_backorder_lines.shortfall_kind', 'active_backorder');
+        $completedLines = (clone $lines)->where('acumatica_backorder_lines.shortfall_kind', 'completed_shortfall');
+        $completedOrderNbrs = (clone $completedLines)->distinct()->pluck('acumatica_backorder_lines.order_nbr');
+        $completedSnapshots = \App\Models\AcumaticaFillRateSnapshot::query()->whereIn('order_nbr', $completedOrderNbrs);
+        $completedOrdered = (float) (clone $completedSnapshots)->sum('total_ordered_qty');
+        $completedDelivered = (float) (clone $completedSnapshots)->sum('total_shipped_qty');
+        $history = \App\Models\FulfillmentHistorySnapshot::query();
+        $scopedIds = \App\Support\DataScope::scopedCustomerAcumaticaIds($request->user());
+        if ($scopedIds !== null) $history->whereIn('customer_acumatica_id', $scopedIds);
+        if ($request->filled('date_from')) $history->whereDate('order_date', '>=', $request->input('date_from'));
+        if ($request->filled('date_to')) $history->whereDate('order_date', '<=', $request->input('date_to'));
+        $completedOrders = \App\Models\AcumaticaSalesOrder::query()->whereRaw('LOWER(TRIM(status)) = ?', ['completed']);
+        \App\Support\DataScope::applyOrderScope($completedOrders, $request->user());
+        if ($request->filled('date_from')) $completedOrders->whereDate('order_date', '>=', $request->input('date_from'));
+        if ($request->filled('date_to')) $completedOrders->whereDate('order_date', '<=', $request->input('date_to'));
+        $unrecoverable = (clone $completedOrders)->whereNotIn('acumatica_order_nbr', (clone $history)->select('order_nbr'))->count();
+        $metricRows = (clone $lines)
+            ->select([
+                'acumatica_backorder_lines.*',
+                DB::raw('aso.status as sales_order_status'),
+                DB::raw($this->backorderSoLineReasonSubquery().' as so_line_reason_code'),
+            ])
+            ->get();
+        $canonical = $this->backorderMetrics->summarize(
+            $this->backorderLineTransformer->transform($metricRows)
+        );
+
+        // SQL distinct counts are authoritative for KPI cards (not limited by list page size).
+        $openSkus = (int) (clone $activeLines)
+            ->whereNotNull('acumatica_backorder_lines.inventory_id')
+            ->where('acumatica_backorder_lines.inventory_id', '!=', '')
+            ->distinct()
+            ->count('acumatica_backorder_lines.inventory_id');
+        $openOrders = (int) (clone $activeLines)
+            ->whereNotNull('acumatica_backorder_lines.order_nbr')
+            ->distinct()
+            ->count('acumatica_backorder_lines.order_nbr');
+        $openLines = (int) (clone $activeLines)->count();
 
         return response()->json([
-            'open_lines'        => (clone $lines)->count(),
-            'open_orders'       => (clone $lines)->distinct('order_nbr')->count('order_nbr'),
-            'revenue_at_risk'   => round((float) (clone $lines)->sum('revenue_at_risk'), 2),
-            'total_open_qty'    => round((float) (clone $lines)->sum('open_qty'), 4),
+            'open_lines'        => $openLines,
+            'open_orders'       => $openOrders,
+            'open_skus'         => $openSkus,
+            'revenue_at_risk'   => round((float) (clone $activeLines)->sum('acumatica_backorder_lines.revenue_at_risk'), 2),
+            'total_open_qty'    => round((float) (clone $activeLines)->sum('acumatica_backorder_lines.open_qty'), 4),
             'last_synced_at'    => AcumaticaBackorderLine::max('synced_at'),
+            'historical_shortfall_amount' => round((float) (clone $history)->sum('historical_shortfall_amount'), 2),
+            'current_outstanding_amount' => round((float) (clone $activeLines)->sum('acumatica_backorder_lines.revenue_at_risk'), 2),
+            'completed' => [
+                'shortfall_lines' => (clone $completedLines)->count(),
+                'affected_orders' => $completedOrderNbrs->count(),
+                'missed_qty' => round((float) (clone $completedLines)->sum('acumatica_backorder_lines.open_qty'), 4),
+                'missed_value' => round((float) (clone $completedLines)->sum('acumatica_backorder_lines.revenue_at_risk'), 2),
+                'fill_rate_pct' => $completedOrdered > 0 ? round($completedDelivered / $completedOrdered * 100, 2) : null,
+            ],
+            'historical_snapshot_count' => (clone $history)->count(),
+            'historical_last_observed_at' => (clone $history)->max('observed_at'),
+            'unrecoverable_order_count' => $unrecoverable,
+            'value_summary' => $this->backordersValueSummary($request),
+            ...$canonical,
+            // Keep SQL counts after $canonical so list-page-sized metrics cannot overwrite them.
+            'open_lines' => $openLines,
+            'open_orders' => $openOrders,
+            'open_skus' => $openSkus,
+            'open_episodes' => $openLines,
         ]);
+    }
+
+    /**
+     * Order / Invoiced / Backorder value cards + Manufactured/Trading and KP/CS splits.
+     *
+     * Uses the **same filtered active backorder lines** as the table and Excel export
+     * (date, reason, warehouse, segments, etc.) so dashboard ≈ download totals.
+     *
+     * Per line (canonical, matches Acumatica OpenQty / sync revenue_at_risk):
+     *   order_value     = order_qty × unit_price
+     *   invoiced_value  = min(delivered_qty, net_order_qty) × unit_price
+     *   backorder_value = residual_open_qty × unit_price
+     *
+     * residual_open_qty prefers stored open_qty (already net of shipments). Do not
+     * subtract qty_on_shipments again from that residual.
+     *
+     * @return array<string, mixed>
+     */
+    private function backordersValueSummary(Request $request): array
+    {
+        // Intentionally ignore product_segment / segment when building the
+        // *breakdown* cards so Manufactured/Trading (and KP/CS) always show
+        // full split amounts; only the selected filter applies to $totals.
+        $baseRequest = clone $request;
+        $baseRequest->query->remove('product_segment');
+        $baseRequest->request->remove('product_segment');
+        $baseRequest->query->remove('segment');
+        $baseRequest->request->remove('segment');
+
+        // backordersFilteredQuery already left-joins inventory as `ai`.
+        $query = $this->backordersFilteredQuery($baseRequest);
+        // Default cards to live open shortfalls (not completed historical shortfalls).
+        if (! $request->filled('shortfall_kind') && ! $baseRequest->filled('shortfall_kind')) {
+            $query->where(function ($q) {
+                $q->where('acumatica_backorder_lines.shortfall_kind', 'active_backorder')
+                    ->orWhereNull('acumatica_backorder_lines.shortfall_kind');
+            });
+        }
+
+        $rows = $query->get([
+            'acumatica_backorder_lines.inventory_id',
+            'acumatica_backorder_lines.customer_acumatica_id',
+            'acumatica_backorder_lines.order_qty',
+            'acumatica_backorder_lines.shipped_qty',
+            'acumatica_backorder_lines.cancelled_qty',
+            'acumatica_backorder_lines.qty_on_shipments',
+            'acumatica_backorder_lines.open_qty',
+            'acumatica_backorder_lines.unit_price',
+            'acumatica_backorder_lines.revenue_at_risk',
+            DB::raw('ai.product_type as product_type'),
+        ]);
+
+        $customerClasses = AcumaticaCustomer::query()
+            ->whereIn('acumatica_id', $rows->pluck('customer_acumatica_id')->filter()->unique())
+            ->pluck('customer_class', 'acumatica_id');
+
+        $selectedProductSegment = $request->input('product_segment');
+        $selectedCustomerSegment = $request->input('segment');
+
+        $zero = fn (): array => ['order_value' => 0.0, 'invoiced_value' => 0.0, 'backorder_value' => 0.0];
+        $totals = $zero();
+        $byProduct = [
+            FillRateBusinessCategory::MANUFACTURED => $zero(),
+            FillRateBusinessCategory::TRADING => $zero(),
+        ];
+        $byCustomer = [
+            FillRateCalculator::SEGMENT_KP => $zero(),
+            FillRateCalculator::SEGMENT_CS => $zero(),
+        ];
+
+        foreach ($rows as $row) {
+            $orderQty = (float) ($row->order_qty ?? 0);
+            $shippedQty = (float) ($row->shipped_qty ?? 0);
+            $cancelledQty = max(0, (float) ($row->cancelled_qty ?? 0));
+            $qtyOnShipments = max(0, (float) ($row->qty_on_shipments ?? 0));
+            $storedOpenQty = max(0, (float) ($row->open_qty ?? 0));
+            $unitPrice = max(0, (float) ($row->unit_price ?? 0));
+            $netOrderQty = max(0, $orderQty - $cancelledQty);
+            $deliveredQty = SalesOrderLineFulfillmentDeriver::deliveredQty($shippedQty, $qtyOnShipments);
+            $cappedDelivered = min($deliveredQty, $netOrderQty);
+            $openQty = SalesOrderLineFulfillmentDeriver::residualOpenQty(
+                $orderQty,
+                $shippedQty,
+                $qtyOnShipments,
+                $cancelledQty,
+                $storedOpenQty > 0 ? $storedOpenQty : null,
+            );
+
+            $orderValue = $orderQty * $unitPrice;
+            $invoicedValue = $cappedDelivered * $unitPrice;
+            $backorderValue = SalesOrderLineFulfillmentDeriver::openLineValue($openQty, $unitPrice);
+
+            $productSegment = $this->businessCategory->classify(
+                $row->inventory_id ?? null,
+                $row->product_type ?? null,
+            );
+            $customerSegment = $this->fillRateCalculator->segmentForCustomerClass(
+                $customerClasses->get($row->customer_acumatica_id),
+            );
+
+            $matchesProduct = ! $selectedProductSegment || $productSegment === $selectedProductSegment;
+            $matchesCustomer = ! $selectedCustomerSegment || $customerSegment === $selectedCustomerSegment;
+
+            $bucket = [
+                'order_value' => $orderValue,
+                'invoiced_value' => $invoicedValue,
+                'backorder_value' => $backorderValue,
+            ];
+
+            foreach ($bucket as $key => $value) {
+                if ($matchesProduct && $matchesCustomer) {
+                    $totals[$key] += $value;
+                }
+                // Breakdown cards always show full split (ignore selected segment).
+                $byProduct[$productSegment][$key] += $value;
+                $byCustomer[$customerSegment][$key] += $value;
+            }
+        }
+
+        $round = fn (array $values): array => array_map(fn ($v) => round($v, 2), $values);
+
+        return [
+            ...$round($totals),
+            'by_product_segment' => array_map($round, $byProduct),
+            'by_customer_segment' => array_map($round, $byCustomer),
+        ];
     }
 
     public function backorders(Request $request): JsonResponse
@@ -314,6 +535,9 @@ class OperationsController extends Controller
                 'acumatica_backorder_lines.*',
                 DB::raw('ai.item_class as product_line'),
                 DB::raw($this->backorderLeadTimeDaysExpression().' as lead_time_days'),
+                DB::raw('aso.order_date as order_date'),
+                DB::raw('aso.status as sales_order_status'),
+                DB::raw($this->backorderSoLineReasonSubquery().' as so_line_reason_code'),
             ]);
         $paginated = $query->paginate($request->integer('per_page', 50));
         $items = $paginated->getCollection();
@@ -345,6 +569,20 @@ class OperationsController extends Controller
                 $line->inventory_id,
                 $inventoryStock,
             );
+            $line->order_date = $this->dateString($line->order_date ?? null);
+
+            // Prefer stored line status; fall back to joined sales order status (shipping, completed, …).
+            $storedStatus = is_string($line->order_status ?? null) ? trim((string) $line->order_status) : '';
+            $soStatus = is_string($line->sales_order_status ?? null) ? trim((string) $line->sales_order_status) : '';
+            $line->order_status = $storedStatus !== '' ? $storedStatus : ($soStatus !== '' ? $soStatus : null);
+            unset($line->sales_order_status);
+
+            // Reasons come from Acumatica SO line (unfilled_reason_code), not manual UI edits.
+            $line->reason_code = $this->effectiveBackorderReasonCode(
+                $line->reason_code ?? null,
+                $line->so_line_reason_code ?? null,
+            );
+            unset($line->so_line_reason_code);
 
             $stock = $inventoryStock->get($line->inventory_id);
             $line->qty_on_hand = $stock['qty_on_hand'] ?? null;
@@ -355,17 +593,44 @@ class OperationsController extends Controller
             return $line;
         });
 
+        // Shared final normalization adds aging/exception fields and keeps line consumers aligned.
+        $this->backorderLineTransformer->transform($paginated->getCollection());
+
         return response()->json($paginated);
+    }
+
+    public function backordersReconciliation(Request $request): JsonResponse|StreamedResponse
+    {
+        $query = \App\Models\FulfillmentHistoryLine::query()
+            ->join('fulfillment_history_snapshots as s', 's.id', '=', 'fulfillment_history_lines.snapshot_id')
+            ->select(['s.order_nbr','s.order_date','s.customer_acumatica_id','s.observed_at','s.source','fulfillment_history_lines.inventory_id','fulfillment_history_lines.order_qty','fulfillment_history_lines.delivered_qty','fulfillment_history_lines.cancelled_qty','fulfillment_history_lines.open_qty','fulfillment_history_lines.unit_price','fulfillment_history_lines.shortfall_amount']);
+        $ids = \App\Support\DataScope::scopedCustomerAcumaticaIds($request->user());
+        if ($ids !== null) $query->whereIn('s.customer_acumatica_id', $ids);
+        if ($request->filled('date_from')) $query->whereDate('s.order_date', '>=', $request->input('date_from'));
+        if ($request->filled('date_to')) $query->whereDate('s.order_date', '<=', $request->input('date_to'));
+        $rows = $query->orderBy('s.order_date')->orderBy('s.order_nbr')->get();
+        if ($request->input('format') !== 'csv') return response()->json(['data'=>$rows,'total_shortfall'=>round((float)$rows->sum('shortfall_amount'),2),'row_count'=>$rows->count()]);
+        return response()->streamDownload(function()use($rows){$out=fopen('php://output','w');fputcsv($out,['SO','Order Date','Customer','Observed At','Source','SKU','Ordered','Delivered','Cancelled','Missing','Unit Price','Shortfall']);foreach($rows as $r)fputcsv($out,[$r->order_nbr,$r->order_date,$r->customer_acumatica_id,$r->observed_at,$r->source,$r->inventory_id,$r->order_qty,$r->delivered_qty,$r->cancelled_qty,$r->open_qty,$r->unit_price,$r->shortfall_amount]);fclose($out);},'backorder-reconciliation.csv',['Content-Type'=>'text/csv']);
     }
 
     public function exportBackorders(Request $request): JsonResponse|StreamedResponse
     {
+        // Export builds a multi-sheet XLSX in-process. Without raising limits,
+        // large date ranges hit nginx/Cloudflare 504 before the stream starts.
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(300);
+        }
+        @ini_set('max_execution_time', '300');
+        @ini_set('memory_limit', '1024M');
+
         $query = $this->backordersFilteredQuery($request)
             ->orderByDesc('acumatica_backorder_lines.revenue_at_risk')
             ->select([
                 'acumatica_backorder_lines.*',
                 DB::raw('ai.item_class as product_line'),
                 DB::raw($this->backorderLeadTimeDaysExpression().' as lead_time_days'),
+                DB::raw('aso.status as sales_order_status'),
+                DB::raw($this->backorderSoLineReasonSubquery().' as so_line_reason_code'),
             ]);
 
         $count = (clone $query)->count();
@@ -374,22 +639,29 @@ class OperationsController extends Controller
         }
 
         $lines = $query->get();
+        $this->backorderLineTransformer->transform($lines);
         $inventoryDescriptions = $this->catalogResolver->descriptionsForInventoryIds($lines->pluck('inventory_id')->all());
         $inventoryStock = $this->catalogResolver->stockForInventoryIds($lines->pluck('inventory_id')->all());
         $customerNames = $this->catalogResolver->namesForCustomerIds($lines->pluck('customer_acumatica_id')->all());
-        $spreadsheet = $this->newSpreadsheet('Backorders Export');
 
-        $this->writeSheet($spreadsheet, 'Backorders', [
-            'Order', 'Customer ID', 'Customer Name', 'Inventory ID', 'Product Name', 'Product Line', 'Warehouse',
-            'UOM', 'Order Qty', 'Shipped Qty', 'Open Qty', 'Backorder Qty', 'Cancelled Qty', 'Qty At Approval',
-            'Qty On Hand', 'Qty Available', 'Stock Shortfall', 'Unit Price', 'Revenue At Risk', 'Lead Time Days',
-            'Fulfillment Status', 'Reason Code', 'Reason', 'Reason Notes', 'Reason Updated At', 'Currency', 'Synced At',
-        ], $lines->map(function ($line) use ($inventoryDescriptions, $inventoryStock, $customerNames) {
-            $stock = $inventoryStock->get($line->inventory_id);
+        // Line layout for BackorderExcelExporter (see exporter class docblock).
+        $lineRows = $lines->map(function ($line) use ($inventoryDescriptions, $inventoryStock, $customerNames) {
             $productName = $this->catalogResolver->resolveProductName($line->inventory_id, null, $inventoryDescriptions);
             $customerName = $this->catalogResolver->resolveCustomerName($line->customer_name, $line->customer_acumatica_id, $customerNames);
             $uom = $this->catalogResolver->resolveUom($line->uom, $line->inventory_id, $inventoryStock);
-            $stockShortfall = $stock !== null && (float) ($stock['qty_on_hand'] ?? 0) < (float) $line->open_qty;
+            $storedStatus = is_string($line->order_status ?? null) ? trim((string) $line->order_status) : '';
+            $soStatus = is_string($line->sales_order_status ?? null) ? trim((string) $line->sales_order_status) : '';
+            $orderStatus = $storedStatus !== '' ? $storedStatus : ($soStatus !== '' ? $soStatus : null);
+            $openQty = (float) $line->open_qty;
+            $unitPrice = (float) ($line->unit_price ?? 0);
+            $revenueAtRisk = (float) ($line->revenue_at_risk ?? 0);
+            if ($revenueAtRisk <= 0 && $openQty > 0 && $unitPrice > 0) {
+                $revenueAtRisk = SalesOrderLineFulfillmentDeriver::openLineValue($openQty, $unitPrice);
+            }
+            $reasonCode = $this->effectiveBackorderReasonCode(
+                $line->reason_code ?? null,
+                $line->so_line_reason_code ?? null,
+            );
 
             return [
                 $line->order_nbr,
@@ -399,54 +671,97 @@ class OperationsController extends Controller
                 $productName,
                 $line->product_line,
                 $line->warehouse_id,
-                $uom,
+                $line->shortfall_kind,
+                $orderStatus,
                 (float) $line->order_qty,
                 (float) $line->shipped_qty,
-                (float) $line->open_qty,
-                (float) $line->backorder_qty,
-                (float) $line->cancelled_qty,
-                $line->qty_at_approval !== null ? (float) $line->qty_at_approval : null,
-                $stock['qty_on_hand'] ?? null,
-                $stock['qty_available'] ?? null,
-                $stockShortfall ? 'Yes' : 'No',
-                (float) $line->unit_price,
-                (float) $line->revenue_at_risk,
-                $line->lead_time_days !== null ? (float) $line->lead_time_days : null,
-                $line->fulfillment_status,
-                $line->reason_code ?: 'unassigned',
-                $this->reasonDisplay($line->reason_code),
+                $openQty,
+                $unitPrice,
+                $revenueAtRisk,
+                $reasonCode ?: 'unassigned',
+                $this->reasonDisplay($reasonCode),
                 $line->reason_notes,
-                $this->dateString($line->reason_updated_at),
+                $uom,
                 $line->currency_id,
                 $this->dateString($line->synced_at),
+                // 20+ — populated by BackorderLineTransformer::transform() above, not re-derived here.
+                $line->brand,
+                $line->fulfillment_status,
+                $line->qty_on_hand,
+                $line->qty_available,
+                $this->dateString($line->first_backordered_at),
+                $line->backorder_age_days,
+                $line->aging_bucket,
+                $line->missing_reason_exception ? 'Yes' : 'No',
             ];
-        })->all());
+        })->all();
 
-        $this->writeContributionSheet($spreadsheet, 'Reason Summary', $this->backordersReasonSummary($request), [
-            'reason' => 'Reason',
-            'line_count' => 'Line Count',
-            'back_order_qty' => 'Backorder Qty',
-            'back_order_value' => 'Backorder Value',
-            'contribution_pct' => 'Contribution %',
-        ]);
-        $this->writeContributionSheet($spreadsheet, 'Customer Summary', $this->backordersCustomerDistribution($request), [
-            'customer_id' => 'Customer ID',
-            'customer_name' => 'Customer Name',
-            'order_count' => 'Order Count',
-            'line_count' => 'Line Count',
-            'back_order_value' => 'Backorder Value',
-            'contribution_pct' => 'Contribution %',
-        ]);
-        $this->writeContributionSheet($spreadsheet, 'Product Summary', $this->backordersProductDistribution($request), [
-            'inventory_id' => 'Inventory ID',
-            'product_name' => 'Product Name',
-            'line_count' => 'Line Count',
-            'back_order_qty' => 'Backorder Qty',
-            'back_order_value' => 'Backorder Value',
-            'contribution_pct' => 'Contribution %',
-        ]);
+        $reasonRows = collect($this->backordersReasonSummary($request))
+            ->map(function (array $row) {
+                $code = (string) ($row['reason'] ?? 'Unassigned');
+                $row['reason'] = $code === 'Unassigned' || $code === 'unassigned'
+                    ? 'Unassigned'
+                    : $this->reasonDisplay($code);
 
-        return $this->downloadSpreadsheet($spreadsheet, 'backorders-export-'.now()->format('Ymd-Hi').'.xlsx');
+                return $row;
+            })
+            ->all();
+
+        $dateFrom = (string) ($request->input('date_from') ?: now()->startOfMonth()->toDateString());
+        $dateTo = (string) ($request->input('date_to') ?: now()->toDateString());
+
+        return $this->backorderExporter->build(
+            lineRows: $lineRows,
+            reasonRows: $reasonRows,
+            customerRows: $this->backordersCustomerDistribution($request),
+            productSummaryRows: $this->backordersProductDistribution($request),
+            dateFrom: $dateFrom,
+            dateTo: $dateTo,
+            businessCategoryRows: $this->backordersBusinessCategorySummary($request),
+            valueSummary: $this->backordersValueSummary($request),
+            resolvedRows: $this->resolvedBackordersExportRows($request),
+        );
+    }
+
+    /**
+     * Resolved-backorder rows for the export — filtered on resolved_at by the request's
+     * date_from/date_to, same as the live "Resolved" view. Independent of the active-line
+     * date filter above (which reads the order/sync timeline), by design.
+     *
+     * @return array<int, array<int, mixed>>
+     */
+    private function resolvedBackordersExportRows(Request $request): array
+    {
+        $rows = $this->backorderResolutionsFilteredQuery($request)
+            ->orderByDesc('resolved_at')
+            ->limit(self::EXPORT_LIMIT)
+            ->get();
+
+        $inventoryIds = $rows->pluck('inventory_id')->all();
+        $descriptions = $this->catalogResolver->descriptionsForInventoryIds($inventoryIds);
+        $classifications = $this->catalogResolver->classificationsForInventoryIds($inventoryIds);
+        $customerNames = $this->catalogResolver->namesForCustomerIds($rows->pluck('customer_acumatica_id')->all());
+
+        return $rows->map(function (BackorderResolution $row) use ($descriptions, $classifications, $customerNames) {
+            $productName = $this->catalogResolver->resolveProductName($row->inventory_id, null, $descriptions);
+            $brand = $this->catalogResolver->classificationFieldsFor($row->inventory_id, $classifications)['brand'] ?? null;
+            $customerName = $this->catalogResolver->resolveCustomerName($row->customer_name, $row->customer_acumatica_id, $customerNames);
+
+            return [
+                $row->order_nbr,
+                $row->customer_acumatica_id,
+                $customerName,
+                $row->inventory_id,
+                $productName,
+                $brand,
+                $this->reasonDisplay($row->reason_code),
+                (float) $row->unit_price,
+                (float) $row->revenue_at_risk,
+                $this->dateString($row->first_backordered_at),
+                $this->dateString($row->resolved_at),
+                $row->days_to_resolve,
+            ];
+        })->all();
     }
 
     public function backordersAnalytics(Request $request): JsonResponse
@@ -502,24 +817,59 @@ class OperationsController extends Controller
             ->limit(8)
             ->get();
 
-        $reasonDistribution = $this->backordersFilteredQuery($request)
+        // ONLY_FULL_GROUP_BY (MariaDB/MySQL): grouping by a correlated subquery expression
+        // fails with "reason_code isn't in GROUP BY". Wrap as a derived table first, then
+        // aggregate on the plain alias.
+        $effectiveReasonExpr = 'COALESCE(NULLIF(TRIM(acumatica_backorder_lines.reason_code), \'\'), ('.$this->backorderSoLineReasonSubquery().'), \'unassigned\')';
+        $reasonRows = $this->backordersFilteredQuery($request)
             ->select([
-                DB::raw("COALESCE(acumatica_backorder_lines.reason_code, 'unassigned') as reason_code"),
-                DB::raw('COUNT(*) as line_count'),
-                DB::raw('SUM(acumatica_backorder_lines.revenue_at_risk) as revenue_at_risk'),
-            ])
+                DB::raw("{$effectiveReasonExpr} as reason_code"),
+                'acumatica_backorder_lines.revenue_at_risk',
+            ]);
+        $reasonDistribution = DB::query()
+            ->fromSub($reasonRows->toBase(), 'bo_reason_rows')
+            ->selectRaw('reason_code, COUNT(*) as line_count, COALESCE(SUM(revenue_at_risk), 0) as revenue_at_risk')
             ->groupBy('reason_code')
             ->orderByDesc('line_count')
             ->get();
 
         $filtered = $this->backordersFilteredQuery($request);
+        // Open KPIs default to active shortfalls so "Open lines / Current outstanding"
+        // match the Backorder value card (not completed historical shortfalls).
+        $openFiltered = clone $filtered;
+        if (! $request->filled('shortfall_kind')) {
+            $openFiltered->where(function ($q) {
+                $q->where('acumatica_backorder_lines.shortfall_kind', 'active_backorder')
+                    ->orWhereNull('acumatica_backorder_lines.shortfall_kind');
+            });
+        }
+        $historical = \App\Models\FulfillmentHistorySnapshot::query();
+        $scopedHistoryIds = \App\Support\DataScope::scopedCustomerAcumaticaIds($request->user());
+        if ($scopedHistoryIds !== null) $historical->whereIn('customer_acumatica_id', $scopedHistoryIds);
+        if ($request->filled('date_from')) $historical->whereDate('order_date', '>=', $request->input('date_from'));
+        if ($request->filled('date_to')) $historical->whereDate('order_date', '<=', $request->input('date_to'));
+
+        $openLines = (int) (clone $openFiltered)->count();
+        $openOrders = (int) (clone $openFiltered)
+            ->whereNotNull('acumatica_backorder_lines.order_nbr')
+            ->distinct()
+            ->count('acumatica_backorder_lines.order_nbr');
+        $openSkus = (int) (clone $openFiltered)
+            ->whereNotNull('acumatica_backorder_lines.inventory_id')
+            ->where('acumatica_backorder_lines.inventory_id', '!=', '')
+            ->distinct()
+            ->count('acumatica_backorder_lines.inventory_id');
 
         return response()->json([
             'summary' => [
-                'open_lines' => (clone $filtered)->count(),
-                'open_orders' => (clone $filtered)->distinct('acumatica_backorder_lines.order_nbr')->count('acumatica_backorder_lines.order_nbr'),
-                'revenue_at_risk' => round((float) (clone $filtered)->sum('acumatica_backorder_lines.revenue_at_risk'), 2),
-                'total_open_qty' => round((float) (clone $filtered)->sum('acumatica_backorder_lines.open_qty'), 4),
+                'open_lines' => $openLines,
+                'open_orders' => $openOrders,
+                'open_skus' => $openSkus,
+                'revenue_at_risk' => round((float) (clone $openFiltered)->sum('acumatica_backorder_lines.revenue_at_risk'), 2),
+                'total_open_qty' => round((float) (clone $openFiltered)->sum('acumatica_backorder_lines.open_qty'), 4),
+                'historical_shortfall_amount' => round((float) (clone $historical)->sum('historical_shortfall_amount'), 2),
+                'current_outstanding_amount' => round((float) (clone $openFiltered)->sum('acumatica_backorder_lines.revenue_at_risk'), 2),
+                'historical_snapshot_count' => (clone $historical)->count(),
             ],
             'excel_summary' => $this->backordersExcelSummary($request),
             'filters' => [
@@ -543,6 +893,7 @@ class OperationsController extends Controller
                     ->pluck('warehouse_id')
                     ->values(),
                 'reason_codes' => collect(AcumaticaBackorderLine::REASON_CODES)->values(),
+                'fulfillment_statuses' => collect($this->backorderFulfillmentStatuses())->values(),
             ],
             'charts' => [
                 'trend' => $trend,
@@ -587,6 +938,10 @@ class OperationsController extends Controller
             'reason_updated_by' => $user->id,
             'reason_updated_at' => now(),
         ]);
+        app(DomainCache::class)->bump(
+            DomainCache::BACKORDERS,
+            DomainCache::BUSINESS_OPTIMIZATION,
+        );
 
         return response()->json($backorderLine->fresh());
     }
@@ -595,16 +950,16 @@ class OperationsController extends Controller
     {
         $topN = min(20, $request->integer('top', 10));
 
-        $rows = AcumaticaBackorderLine::query()
+        $rows = $this->backordersFilteredQuery($request)
             ->select([
-                'customer_acumatica_id',
-                'customer_name',
-                DB::raw('COUNT(DISTINCT order_nbr) as order_count'),
+                'acumatica_backorder_lines.customer_acumatica_id',
+                'acumatica_backorder_lines.customer_name',
+                DB::raw('COUNT(DISTINCT acumatica_backorder_lines.order_nbr) as order_count'),
                 DB::raw('COUNT(*) as open_lines'),
-                DB::raw('SUM(revenue_at_risk) as revenue_at_risk'),
-                DB::raw('SUM(open_qty) as total_open_qty'),
+                DB::raw('SUM(acumatica_backorder_lines.revenue_at_risk) as revenue_at_risk'),
+                DB::raw('SUM(acumatica_backorder_lines.open_qty) as total_open_qty'),
             ])
-            ->groupBy('customer_acumatica_id', 'customer_name')
+            ->groupBy('acumatica_backorder_lines.customer_acumatica_id', 'acumatica_backorder_lines.customer_name')
             ->orderByDesc('revenue_at_risk')
             ->limit($topN)
             ->get();
@@ -826,7 +1181,7 @@ class OperationsController extends Controller
                     $isOos = $this->lineIsOutOfStock($line);
                     // Fill rate demand = Order Qty; shipped = Shipped Qty (fallback qty on shipments).
                     $demandQty = (float) $line->order_qty;
-                    $shippedQty = (float) (($line->shipped_qty ?? 0) > 0 ? $line->shipped_qty : $line->qty_on_shipments);
+                    $shippedQty = $this->effectiveFillRateShippedQty($line);
                     $qtyOnShipments = $shippedQty;
                     $unfilledQty = max($demandQty - $shippedQty, 0);
                     $openQty = (float) $line->open_qty;
@@ -888,7 +1243,8 @@ class OperationsController extends Controller
         @ini_set('max_execution_time', '300');
         @ini_set('memory_limit', '1024M');
 
-        $query = $this->fillRateFilteredQuery($request)
+        $includeOos = $this->includeOutOfStock($request);
+        $query = $this->fillRateFilteredQuery($request, applyStatusFilter: $includeOos)
             ->with([
                 'order:id,acumatica_order_nbr,customer_acumatica_id,customer_name,order_date,approved_at,shipped_at,ship_date,status',
                 'order.customer:acumatica_id,shipping_zone_id',
@@ -898,11 +1254,20 @@ class OperationsController extends Controller
 
         $this->applyFillRateSearch($query, $request);
 
-        $sort = $request->input('sort', 'high_to_low');
-        if ($sort === 'low_to_high') {
-            $query->orderByRaw('fill_rate_pct IS NULL')->orderBy('fill_rate_pct');
-        } else {
-            $query->orderByRaw('fill_rate_pct IS NULL')->orderByDesc('fill_rate_pct');
+        if (($baseCount = (clone $query)->count()) > 0) {
+            if ($limitResponse = $this->exportLimitResponse($baseCount)) {
+                return $limitResponse;
+            }
+            if ($limitResponse = $this->fillRateInteractiveExportLimitResponse($baseCount)) {
+                return $limitResponse;
+            }
+        }
+
+        $snapshots = $query->get();
+        $this->applyFillRateOutOfStockMode($snapshots, $includeOos);
+
+        if (! $includeOos && ($status = $request->input('status'))) {
+            $snapshots = $snapshots->where('fill_rate_status', $status)->values();
         }
 
         if ($request->filled('delivery_sla')) {
@@ -911,27 +1276,15 @@ class OperationsController extends Controller
                 return response()->json(['message' => 'Invalid delivery_sla filter.'], 422);
             }
 
-            $baseCount = (clone $query)->count();
-            if ($limitResponse = $this->fillRateInteractiveExportLimitResponse($baseCount)) {
-                return $limitResponse;
-            }
-
-            $snapshots = $query->get()
+            $snapshots = $snapshots
                 ->filter(fn (AcumaticaFillRateSnapshot $snapshot) => $this->deliverySlaForSnapshot($snapshot)['delivery_sla_status'] === $deliverySla)
                 ->values();
-            if ($limitResponse = $this->exportLimitResponse($snapshots->count())) {
-                return $limitResponse;
-            }
-        } else {
-            $count = (clone $query)->count();
-            if ($limitResponse = $this->exportLimitResponse($count)) {
-                return $limitResponse;
-            }
-            if ($limitResponse = $this->fillRateInteractiveExportLimitResponse($count)) {
-                return $limitResponse;
-            }
-            $snapshots = $query->get();
         }
+
+        $sort = $request->input('sort', 'high_to_low');
+        $snapshots = $sort === 'low_to_high'
+            ? $snapshots->sortBy(fn ($snapshot) => $snapshot->fill_rate_pct ?? PHP_FLOAT_MAX)->values()
+            : $snapshots->sortByDesc(fn ($snapshot) => $snapshot->fill_rate_pct ?? -1)->values();
 
         $inventoryIds = $snapshots
             ->flatMap(fn ($snapshot) => $snapshot->order?->lines?->pluck('inventory_id') ?? collect())
@@ -948,10 +1301,12 @@ class OperationsController extends Controller
         foreach ($snapshots as $snapshot) {
             $order = $snapshot->order;
             foreach ($order?->lines ?? [] as $line) {
+                if (! $includeOos && $this->lineIsOutOfStock($line)) {
+                    continue;
+                }
+
                 $demandQty = (float) $line->order_qty;
-                $qtyOnShipments = (float) (($line->shipped_qty ?? 0) > 0
-                    ? $line->shipped_qty
-                    : $line->qty_on_shipments);
+                $qtyOnShipments = $this->effectiveFillRateShippedQty($line);
                 $openQty = (float) $line->open_qty;
                 $unfilledQty = max($demandQty - $qtyOnShipments, 0);
                 if ($openQty <= 0) {
@@ -971,7 +1326,7 @@ class OperationsController extends Controller
                     $openQty,
                     $this->catalogResolver->resolveUom($line->uom, $line->inventory_id, $inventoryStock),
                     $unitPrice,
-                    $line->fill_rate_pct !== null ? (float) $line->fill_rate_pct : null,
+                    $demandQty > 0 ? round(min($qtyOnShipments, $demandQty) / $demandQty * 100, 2) : null,
                     $line->unfilled_reason_code ?: 'unassigned',
                     $this->reasonDisplay($line->unfilled_reason_code),
                     round($unfilledQty * $unitPrice, 2),
@@ -1044,30 +1399,44 @@ class OperationsController extends Controller
 
     private function inventoryFilteredQuery(Request $request): Builder
     {
-        $query = AcumaticaInventoryItem::query();
+        $warehouseIds = array_values(array_filter((array) $request->input('warehouse_id', ['FGS'])));
+        if ($warehouseIds === []) {
+            $warehouseIds = ['FGS'];
+        }
+        $query = AcumaticaInventoryItem::query()
+            ->leftJoin('inventory_warehouse_balances as iwb', function ($join) use ($warehouseIds) {
+                $join->on('iwb.inventory_item_id', '=', 'acumatica_inventory_items.id')
+                    ->whereIn('iwb.warehouse_id', $warehouseIds);
+            })
+            ->select([
+                'acumatica_inventory_items.*',
+                DB::raw("COALESCE(iwb.warehouse_id, 'FGS') as selected_warehouse_id"),
+                DB::raw('COALESCE(iwb.qty_on_hand, acumatica_inventory_items.qty_on_hand) as qty_on_hand'),
+                DB::raw('COALESCE(iwb.qty_available, acumatica_inventory_items.qty_available) as qty_available'),
+                DB::raw('COALESCE(iwb.synced_at, acumatica_inventory_items.synced_at) as synced_at'),
+            ]);
+        if (! in_array('FGS', $warehouseIds, true)) {
+            $query->whereNotNull('iwb.id');
+        }
 
         if ($search = $request->input('q')) {
             $query->where(function ($q) use ($search) {
-                $q->where('inventory_id', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%");
+                $q->where('acumatica_inventory_items.inventory_id', 'like', "%{$search}%")
+                    ->orWhere('acumatica_inventory_items.description', 'like', "%{$search}%");
             });
         }
 
         if ($request->boolean('low_stock')) {
-            $query->where('qty_on_hand', '<=', 10);
-        }
-
-        if ($warehouseIds = $request->input('warehouse_id')) {
-            $query->whereIn('default_warehouse_id', (array) $warehouseIds);
+            $query->whereRaw('COALESCE(iwb.qty_on_hand, acumatica_inventory_items.qty_on_hand) <= 10');
         }
 
         if ($productType = $request->input('product_type')) {
-            $query->where('product_type', $productType);
+            $query->where('acumatica_inventory_items.product_type', $productType);
         }
 
         if ($status = $request->input('prediction_status')) {
             $ids = $this->recentPredictionItemIds([(string) $status]);
-            $query->whereIn('id', $ids);
+            $query->whereIn('acumatica_inventory_items.id', $ids);
         }
 
         // Stockout prediction tab filters:
@@ -1107,15 +1476,15 @@ class OperationsController extends Controller
     private function applyStockoutFilter(Builder $query, string $stockout): void
     {
         match ($stockout) {
-            'out_of_stock' => $query->where('qty_on_hand', '<=', 0),
-            'critical' => $query->whereIn('id', $this->recentPredictionItemIds(['critical'])),
-            'at_risk' => $query->whereIn('id', $this->recentPredictionItemIds(['at_risk'])),
+            'out_of_stock' => $query->whereRaw('COALESCE(iwb.qty_on_hand, acumatica_inventory_items.qty_on_hand) <= 0'),
+            'critical' => $query->whereIn('acumatica_inventory_items.id', $this->recentPredictionItemIds(['critical'])),
+            'at_risk' => $query->whereIn('acumatica_inventory_items.id', $this->recentPredictionItemIds(['at_risk'])),
             // Default / primary tab view: critical stockout prediction OR zero stock.
             default => $query->where(function ($q) {
                 $criticalIds = $this->recentPredictionItemIds(['critical']);
-                $q->where('qty_on_hand', '<=', 0);
+                $q->whereRaw('COALESCE(iwb.qty_on_hand, acumatica_inventory_items.qty_on_hand) <= 0');
                 if ($criticalIds->isNotEmpty()) {
-                    $q->orWhereIn('id', $criticalIds);
+                    $q->orWhereIn('acumatica_inventory_items.id', $criticalIds);
                 }
             }),
         };
@@ -1189,7 +1558,15 @@ class OperationsController extends Controller
         $dateTo ??= $request->input('date_to');
 
         if ($dateFrom && $dateTo) {
-            $query->whereBetween('computed_at', [$dateFrom, $dateTo.' 23:59:59']);
+            $query->where(function (Builder $q) use ($dateFrom, $dateTo) {
+                $q->whereHas('order', function (Builder $orderQuery) use ($dateFrom, $dateTo) {
+                    $orderQuery->whereBetween('order_date', [$dateFrom, $dateTo.' 23:59:59']);
+                })->orWhere(function (Builder $fallback) use ($dateFrom, $dateTo) {
+                    $fallback
+                        ->whereDoesntHave('order')
+                        ->whereBetween('computed_at', [$dateFrom, $dateTo.' 23:59:59']);
+                });
+            });
         }
 
         // When excluding OOS, status is recomputed in memory — skip DB status filter.
@@ -1262,20 +1639,54 @@ class OperationsController extends Controller
                 $join->on('acumatica_backorder_lines.order_nbr', '=', 'aso.acumatica_order_nbr');
             });
 
-        if ($search = $request->input('q')) {
+        $search = trim((string) $request->input('q', ''));
+        if ($search !== '') {
+            // Escape LIKE wildcards in user input.
+            $like = '%'.addcslashes($search, '%_\\').'%';
+            $digitsOnly = preg_replace('/\D+/', '', $search) ?: '';
+
             $inventoryIds = AcumaticaInventoryItem::query()
-                ->where('description', 'like', "%{$search}%")
+                ->where(function ($iq) use ($like) {
+                    $iq->where('description', 'like', $like)
+                        ->orWhere('inventory_id', 'like', $like);
+                })
+                ->limit(500)
                 ->pluck('inventory_id');
+
             $customerIds = AcumaticaCustomer::query()
-                ->where('name', 'like', "%{$search}%")
+                ->where(function ($cq) use ($like) {
+                    $cq->where('name', 'like', $like)
+                        ->orWhere('acumatica_id', 'like', $like);
+                })
+                ->limit(500)
                 ->pluck('acumatica_id');
 
-            $query->where(function ($q) use ($search, $inventoryIds, $customerIds) {
-                $q->where('acumatica_backorder_lines.order_nbr', 'like', "%{$search}%")
-                    ->orWhere('acumatica_backorder_lines.inventory_id', 'like', "%{$search}%")
-                    ->orWhere('acumatica_backorder_lines.customer_name', 'like', "%{$search}%")
-                    ->orWhere('acumatica_backorder_lines.customer_acumatica_id', 'like', "%{$search}%")
-                    ->orWhere('ai.item_class', 'like', "%{$search}%");
+            $query->where(function ($q) use ($like, $search, $digitsOnly, $inventoryIds, $customerIds) {
+                // SO number (full or partial, e.g. SO359099 or 359099)
+                $q->where('acumatica_backorder_lines.order_nbr', 'like', $like)
+                    ->orWhere('aso.acumatica_order_nbr', 'like', $like)
+                    // Inventory ID / product class
+                    ->orWhere('acumatica_backorder_lines.inventory_id', 'like', $like)
+                    ->orWhere('ai.description', 'like', $like)
+                    ->orWhere('ai.item_class', 'like', $like)
+                    // Customer id / name on the backorder line
+                    ->orWhere('acumatica_backorder_lines.customer_name', 'like', $like)
+                    ->orWhere('acumatica_backorder_lines.customer_acumatica_id', 'like', $like)
+                    ->orWhere('aso.customer_name', 'like', $like)
+                    ->orWhere('aso.customer_acumatica_id', 'like', $like);
+
+                // Match SO359099 when user types only 359099
+                if ($digitsOnly !== '' && strcasecmp($digitsOnly, $search) !== 0) {
+                    $q->orWhere('acumatica_backorder_lines.order_nbr', 'like', '%'.$digitsOnly.'%')
+                        ->orWhere('aso.acumatica_order_nbr', 'like', '%'.$digitsOnly.'%');
+                }
+
+                // Case-insensitive exact SO match (common paste with spaces)
+                $normalizedSo = strtoupper(preg_replace('/\s+/', '', $search) ?? $search);
+                if ($normalizedSo !== '') {
+                    $q->orWhereRaw("UPPER(REPLACE(acumatica_backorder_lines.order_nbr, ' ', '')) = ?", [$normalizedSo])
+                        ->orWhereRaw("UPPER(REPLACE(COALESCE(aso.acumatica_order_nbr, ''), ' ', '')) = ?", [$normalizedSo]);
+                }
 
                 if ($inventoryIds->isNotEmpty()) {
                     $q->orWhereIn('acumatica_backorder_lines.inventory_id', $inventoryIds);
@@ -1287,7 +1698,16 @@ class OperationsController extends Controller
         }
 
         if ($customerId = $request->input('customer_id')) {
-            $query->where('acumatica_backorder_lines.customer_acumatica_id', $customerId);
+            if ($request->boolean('include_branches')) {
+                $branchIds = AcumaticaCustomer::query()
+                    ->where('parent_acumatica_id', $customerId)
+                    ->pluck('acumatica_id')
+                    ->all();
+                $ids = array_values(array_unique(array_filter([$customerId, ...$branchIds])));
+                $query->whereIn('acumatica_backorder_lines.customer_acumatica_id', $ids);
+            } else {
+                $query->where('acumatica_backorder_lines.customer_acumatica_id', $customerId);
+            }
         }
 
         if ($customerGroup = $request->input('customer_group')) {
@@ -1306,11 +1726,66 @@ class OperationsController extends Controller
         }
 
         if ($reasonCode = $request->input('reason_code')) {
+            // Match stored backorder reason OR Acumatica SO-line unfilled_reason_code
+            // so root-cause filters work after sales-order import (not only manual edits).
             if ($reasonCode === 'unassigned') {
-                $query->whereNull('acumatica_backorder_lines.reason_code');
+                $query->where(function ($q) {
+                    $q->where(function ($inner) {
+                        $inner->whereNull('acumatica_backorder_lines.reason_code')
+                            ->orWhere('acumatica_backorder_lines.reason_code', '');
+                    })->whereNotExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('acumatica_sales_order_lines as sol_r')
+                            ->join('acumatica_sales_orders as so_r', 'so_r.id', '=', 'sol_r.sales_order_id')
+                            ->whereColumn('so_r.acumatica_order_nbr', 'acumatica_backorder_lines.order_nbr')
+                            ->whereColumn('sol_r.inventory_id', 'acumatica_backorder_lines.inventory_id')
+                            ->whereNotNull('sol_r.unfilled_reason_code')
+                            ->where('sol_r.unfilled_reason_code', '!=', '');
+                    });
+                });
             } else {
-                $query->where('acumatica_backorder_lines.reason_code', $reasonCode);
+                $query->where(function ($q) use ($reasonCode) {
+                    $q->where('acumatica_backorder_lines.reason_code', $reasonCode)
+                        ->orWhereExists(function ($sub) use ($reasonCode) {
+                            $sub->select(DB::raw(1))
+                                ->from('acumatica_sales_order_lines as sol_r')
+                                ->join('acumatica_sales_orders as so_r', 'so_r.id', '=', 'sol_r.sales_order_id')
+                                ->whereColumn('so_r.acumatica_order_nbr', 'acumatica_backorder_lines.order_nbr')
+                                ->whereColumn('sol_r.inventory_id', 'acumatica_backorder_lines.inventory_id')
+                                ->where('sol_r.unfilled_reason_code', $reasonCode);
+                        });
+                });
             }
+        }
+
+        if ($segment = $request->input('segment')) {
+            $segmentCustomers = AcumaticaCustomer::query()
+                ->whereNotNull('customer_class')
+                ->get(['acumatica_id', 'customer_class'])
+                ->filter(fn ($c) => $this->fillRateCalculator->segmentForCustomerClass($c->customer_class) === $segment)
+                ->pluck('acumatica_id');
+
+            $query->whereIn('acumatica_backorder_lines.customer_acumatica_id', $segmentCustomers);
+        }
+
+        if ($productSegment = $request->input('product_segment')) {
+            $this->applyProductSegmentFilter($query, $productSegment, 'acumatica_backorder_lines.inventory_id');
+        }
+
+        if ($shortfallKind = $request->input('shortfall_kind')) {
+            if (in_array($shortfallKind, ['active_backorder', 'completed_shortfall'], true)) {
+                $query->where('acumatica_backorder_lines.shortfall_kind', $shortfallKind);
+            }
+        }
+
+        if ($request->filled('fulfillment_status')) {
+            $fulfillmentStatus = trim((string) $request->input('fulfillment_status'));
+            if (! in_array($fulfillmentStatus, $this->backorderFulfillmentStatuses(), true)) {
+                throw ValidationException::withMessages([
+                    'fulfillment_status' => ['The selected fulfillment status is invalid.'],
+                ]);
+            }
+            $query->where('acumatica_backorder_lines.fulfillment_status', $fulfillmentStatus);
         }
 
         $dateExpr = $this->backorderTimelineDateExpression();
@@ -1323,11 +1798,68 @@ class OperationsController extends Controller
             $query->whereRaw($dateExpr.' <= ?', [$dateTo]);
         }
 
+        // Explicit rep filter (consultant detail "My backorders"): assignment ∪ SO rep-code portfolio.
+        if ($repCode = $request->input('rep_code')) {
+            $this->applyRepPortfolioCustomerFilter($query, (string) $repCode, 'acumatica_backorder_lines.customer_acumatica_id');
+        }
+
         $this->applySalesConsultantBackorderScope($query, $request);
         $this->applyDepartmentPortfolioScope($query, $request, 'acumatica_backorder_lines.customer_acumatica_id');
         $this->applyBrandFilterToBackorderQuery($query, $request);
 
         return $query;
+    }
+
+    /** @return list<string> */
+    private function backorderFulfillmentStatuses(): array
+    {
+        return [
+            SalesOrderLineFulfillmentDeriver::STATUS_FULLY_FULFILLED,
+            SalesOrderLineFulfillmentDeriver::STATUS_BACKORDERS_IMPORTED,
+            SalesOrderLineFulfillmentDeriver::STATUS_CANCELLED,
+            SalesOrderLineFulfillmentDeriver::STATUS_PARTIALLY_SHIPPED,
+            SalesOrderLineFulfillmentDeriver::STATUS_PENDING_SHIPMENT,
+        ];
+    }
+
+    /**
+     * Restrict a query to Manufactured or Trading inventory. Items absent
+     * from acumatica_inventory_items fall to Trading, mirroring
+     * FillRateBusinessCategory's default.
+     */
+    private function applyProductSegmentFilter(Builder $query, string $productSegment, string $inventoryColumn): void
+    {
+        if (! in_array($productSegment, [FillRateBusinessCategory::MANUFACTURED, FillRateBusinessCategory::TRADING], true)) {
+            return;
+        }
+
+        $manufacturedIds = AcumaticaInventoryItem::query()
+            ->get(['inventory_id', 'product_type'])
+            ->filter(fn ($item) => $this->businessCategory->classify($item->inventory_id, $item->product_type) === FillRateBusinessCategory::MANUFACTURED)
+            ->pluck('inventory_id')
+            ->values()
+            ->all();
+
+        if ($productSegment === FillRateBusinessCategory::MANUFACTURED) {
+            // Laravel whereIn([]) becomes 0=1 (no rows) — correct when nothing is manufactured.
+            if ($manufacturedIds === []) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn($inventoryColumn, $manufacturedIds);
+            }
+
+            return;
+        }
+
+        // Trading = not manufactured. Empty manufactured list ⇒ every SKU is trading.
+        // Laravel whereNotIn([]) also becomes 0=1 — must skip the clause when empty.
+        if ($manufacturedIds !== []) {
+            $query->where(function ($q) use ($inventoryColumn, $manufacturedIds) {
+                $q->whereNotIn($inventoryColumn, $manufacturedIds)
+                    // Include SKUs missing from inventory catalog (prefix-classified as trading).
+                    ->orWhereNull($inventoryColumn);
+            });
+        }
     }
 
     private function backordersScopedLinesQuery(Request $request): Builder
@@ -1344,34 +1876,46 @@ class OperationsController extends Controller
 
     private function applySalesConsultantBackorderScope(Builder $query, Request $request): void
     {
-        if (! SalesConsultantScope::appliesTo($request->user())) {
+        $customerIds = DataScope::scopedCustomerAcumaticaIds($request->user());
+        if ($customerIds === null) {
             return;
         }
-
-        $repCode = SalesConsultantScope::repCode($request->user());
-        if ($repCode === null) {
+        if ($customerIds === []) {
             $query->whereRaw('1 = 0');
-
             return;
         }
-
-        $query->where('aso.sales_consultant_rep_code', $repCode);
+        $query->whereIn('acumatica_backorder_lines.customer_acumatica_id', $customerIds);
     }
 
     private function applySalesConsultantFillRateScope(Builder $query, Request $request): void
     {
-        if (! SalesConsultantScope::appliesTo($request->user())) {
+        $customerIds = DataScope::scopedCustomerAcumaticaIds($request->user());
+        if ($customerIds === null) {
             return;
         }
+        if ($customerIds === []) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+        $query->where(function (Builder $visible) use ($customerIds) {
+            $visible->whereIn('customer_acumatica_id', $customerIds)
+                ->orWhereHas('order', fn ($orderQuery) => $orderQuery->whereIn('customer_acumatica_id', $customerIds));
+        });
+    }
 
-        $repCode = SalesConsultantScope::repCode($request->user());
-        if ($repCode === null) {
+    /**
+     * Narrow to one consultant's fair portfolio: assignment rows ∪ Acumatica SO rep-code.
+     * Used when ?rep_code= is set from the sales-consultant detail page.
+     */
+    private function applyRepPortfolioCustomerFilter(Builder $query, string $repCode, string $customerColumn): void
+    {
+        $ids = $this->salesPortfolio->portfolioCustomerIdsForRepCode($repCode);
+        if ($ids === []) {
             $query->whereRaw('1 = 0');
 
             return;
         }
-
-        $query->whereHas('order', fn ($orderQuery) => $orderQuery->where('sales_consultant_rep_code', $repCode));
+        $query->whereIn($customerColumn, $ids);
     }
 
     /** @return array<string, mixed> */
@@ -1455,7 +1999,7 @@ class OperationsController extends Controller
             'by_department' => $this->unassignedDepartmentDistribution($undershippedValue, $snapshots->count(), 'Undershipped Value'),
             'by_customer_group' => $this->fillRateCustomerGroupSummary($request, $snapshots),
             'top_customers' => $this->fillRateTopCustomers($request, $snapshots),
-            'top_products' => $this->fillRateTopProducts($request, $salesOrderIds),
+            'top_products' => $this->fillRateProductSummaryFromLines($shortfallLines),
             'by_segment' => $segmentRows,
             'by_segment_reason' => $segmentReasonRows,
             'by_business_category' => $this->fillRateBusinessCategorySummaryFromLines($shortfallLines, $productTypes),
@@ -1516,9 +2060,7 @@ class OperationsController extends Controller
                 $productTypes[$inventoryId] ?? null,
             );
             $demand = (float) ($line->order_qty ?? 0);
-            $onShipments = (float) (($line->shipped_qty ?? 0) > 0
-                ? $line->shipped_qty
-                : ($line->qty_on_shipments ?? 0));
+            $onShipments = $this->effectiveFillRateShippedQty($line);
             $value = max($demand - $onShipments, 0) * (float) ($line->unit_price ?? 0);
 
             $buckets[$category]['line_count']++;
@@ -1606,18 +2148,18 @@ class OperationsController extends Controller
     private function fillRateReasonSummaryFromLines($lines): array
     {
         $total = $lines->sum(function ($line) {
-            $demand = max((float) ($line->qty_at_approval ?? 0), (float) ($line->order_qty ?? 0));
+            $demand = (float) ($line->order_qty ?? 0);
 
-            return max($demand - (float) ($line->qty_on_shipments ?? 0), 0) * (float) ($line->unit_price ?? 0);
+            return max($demand - $this->effectiveFillRateShippedQty($line), 0) * (float) ($line->unit_price ?? 0);
         });
 
         return $lines
             ->groupBy(fn ($line) => $line->unfilled_reason_code ?: 'Unassigned')
             ->map(function ($group, $reason) use ($total) {
                 $value = $group->sum(function ($line) {
-                    $demand = max((float) ($line->qty_at_approval ?? 0), (float) ($line->order_qty ?? 0));
+                    $demand = (float) ($line->order_qty ?? 0);
 
-                    return max($demand - (float) ($line->qty_on_shipments ?? 0), 0) * (float) ($line->unit_price ?? 0);
+                    return max($demand - $this->effectiveFillRateShippedQty($line), 0) * (float) ($line->unit_price ?? 0);
                 });
 
                 return [
@@ -1656,15 +2198,19 @@ class OperationsController extends Controller
         );
     }
 
-    /**
-     * Recompute snapshot fill-rate fields from order lines when OOS is excluded.
-     *
-     * @param  \Illuminate\Support\Collection<int, AcumaticaFillRateSnapshot>|\Illuminate\Database\Eloquent\Collection  $snapshots
-     */
+    private function effectiveFillRateShippedQty(object $line): float
+    {
+        $shipped = (float) ($line->shipped_qty ?? 0);
+
+        return $shipped > 0 ? $shipped : (float) ($line->qty_on_shipments ?? 0);
+    }
+
     /**
      * Recompute fill rate from order lines using current formula:
      * Completed only · Shipped Qty ÷ Order Qty × 100.
      * When $includeOutOfStock is false, OOS shortfall lines are excluded from the math.
+     *
+     * @param  \Illuminate\Support\Collection<int, AcumaticaFillRateSnapshot>|\Illuminate\Database\Eloquent\Collection  $snapshots
      */
     private function applyFillRateOutOfStockMode($snapshots, bool $includeOutOfStock): void
     {
@@ -1683,8 +2229,9 @@ class OperationsController extends Controller
             })->all();
 
             if ($lines === []) {
-                // No line payload: still enforce Completed-only on stored status.
-                if (! \App\Services\Admin\FillRateCalculator::isEligibleStatus($status)) {
+                // No line payload: keep stored snapshot values unless a known
+                // non-completed status makes the metric explicitly ineligible.
+                if ($status !== '' && ! \App\Services\Admin\FillRateCalculator::isEligibleStatus($status)) {
                     $snapshot->fill_rate_pct = null;
                     $snapshot->fill_rate_status = 'na';
                     $snapshot->total_ordered_qty = 0;
@@ -1780,8 +2327,8 @@ class OperationsController extends Controller
 
         $lines = $this->fillRateShortfallLines($request, $salesOrderIds)
             ->filter(function ($line) {
-                $demand = max((float) ($line->qty_at_approval ?? 0), (float) ($line->order_qty ?? 0));
-                $shipped = (float) ($line->qty_on_shipments ?? 0);
+                $demand = (float) ($line->order_qty ?? 0);
+                $shipped = $this->effectiveFillRateShippedQty($line);
 
                 return $this->lineIsOutOfStock($line) && max($demand - $shipped, 0) > 0;
             })
@@ -1851,8 +2398,8 @@ class OperationsController extends Controller
                 continue;
             }
 
-            $demand = max((float) ($line->qty_at_approval ?? 0), (float) ($line->order_qty ?? 0));
-            $shipped = (float) ($line->qty_on_shipments ?? 0);
+            $demand = (float) ($line->order_qty ?? 0);
+            $shipped = $this->effectiveFillRateShippedQty($line);
             $undershipped = max($demand - $shipped, 0);
             $value = $undershipped * (float) ($line->unit_price ?? 0);
             $reason = (string) ($line->unfilled_reason_code ?? 'out_of_stock_procurement');
@@ -2001,6 +2548,7 @@ class OperationsController extends Controller
             'acumatica_sales_order_lines.unfilled_reason_code',
             'acumatica_sales_order_lines.qty_at_approval',
             'acumatica_sales_order_lines.order_qty',
+            'acumatica_sales_order_lines.shipped_qty',
             'acumatica_sales_order_lines.qty_on_shipments',
             'acumatica_sales_order_lines.unit_price',
             'o.customer_acumatica_id',
@@ -2012,8 +2560,8 @@ class OperationsController extends Controller
         foreach ($rows as $line) {
             $segment = $segmentByCustomerId[$line->customer_acumatica_id] ?? FillRateCalculator::SEGMENT_CS;
             $reason = $line->unfilled_reason_code ?: 'Unassigned';
-            $demand = max((float) $line->qty_at_approval, (float) $line->order_qty);
-            $value = max($demand - (float) $line->qty_on_shipments, 0) * (float) $line->unit_price;
+            $demand = (float) $line->order_qty;
+            $value = max($demand - $this->effectiveFillRateShippedQty($line), 0) * (float) $line->unit_price;
 
             if (! isset($acc[$segment][$reason])) {
                 $acc[$segment][$reason] = 0.0;
@@ -2222,8 +2770,8 @@ class OperationsController extends Controller
                 continue;
             }
 
-            $demand = max((float) ($line->qty_at_approval ?? 0), (float) ($line->order_qty ?? 0));
-            $shipped = (float) ($line->qty_on_shipments ?? 0);
+            $demand = (float) ($line->order_qty ?? 0);
+            $shipped = $this->effectiveFillRateShippedQty($line);
             $undershipped = max($demand - $shipped, 0);
             // SKU breakdown focuses on shortfall contribution (same as undershipped value tiles).
             if ($undershipped <= 0) {
@@ -2500,24 +3048,25 @@ class OperationsController extends Controller
         }
 
         $rows = $rowsQuery->get([
-                'acumatica_sales_order_lines.unfilled_reason_code',
-                'acumatica_sales_order_lines.qty_at_approval',
-                'acumatica_sales_order_lines.order_qty',
-                'acumatica_sales_order_lines.qty_on_shipments',
-                'acumatica_sales_order_lines.unit_price',
-            ]);
+            'acumatica_sales_order_lines.unfilled_reason_code',
+            'acumatica_sales_order_lines.qty_at_approval',
+            'acumatica_sales_order_lines.order_qty',
+            'acumatica_sales_order_lines.shipped_qty',
+            'acumatica_sales_order_lines.qty_on_shipments',
+            'acumatica_sales_order_lines.unit_price',
+        ]);
 
         $total = $rows->sum(function ($line) {
-            $demand = max((float) $line->qty_at_approval, (float) $line->order_qty);
-            return max($demand - (float) $line->qty_on_shipments, 0) * (float) $line->unit_price;
+            $demand = (float) $line->order_qty;
+            return max($demand - $this->effectiveFillRateShippedQty($line), 0) * (float) $line->unit_price;
         });
 
         return $rows
             ->groupBy(fn ($line) => $line->unfilled_reason_code ?: 'Unassigned')
             ->map(function ($group, $reason) use ($total) {
                 $value = $group->sum(function ($line) {
-                    $demand = max((float) $line->qty_at_approval, (float) $line->order_qty);
-                    return max($demand - (float) $line->qty_on_shipments, 0) * (float) $line->unit_price;
+                    $demand = (float) $line->order_qty;
+                    return max($demand - $this->effectiveFillRateShippedQty($line), 0) * (float) $line->unit_price;
                 });
 
                 return [
@@ -2574,40 +3123,29 @@ class OperationsController extends Controller
             ->all();
     }
 
-    private function fillRateTopProducts(Request $request, array $salesOrderIds = []): array
+    /**
+     * Full product roll-up by InventoryID (not top-N). Used by Excel Product Summary so
+     * the sheet total reconciles to period undershipped value (100M+ for June-scale data).
+     *
+     * @param  \Illuminate\Support\Collection<int, object>  $lines
+     * @return list<array<string, mixed>>
+     */
+    private function fillRateProductSummaryFromLines($lines): array
     {
-        $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
-        $dateTo = $request->input('date_to', now()->toDateString());
+        $descriptions = $this->catalogResolver->descriptionsForInventoryIds($lines->pluck('inventory_id')->all());
+        $total = $lines->sum(function ($line) {
+            $demand = (float) $line->order_qty;
 
-        $rowsQuery = AcumaticaSalesOrderLine::query()
-            ->join('acumatica_sales_orders as o', 'o.id', '=', 'acumatica_sales_order_lines.sales_order_id');
-
-        if ($salesOrderIds !== []) {
-            $rowsQuery->whereIn('o.id', $salesOrderIds);
-        } else {
-            $rowsQuery->whereBetween('o.order_date', [$dateFrom, $dateTo.' 23:59:59']);
-        }
-
-        $rows = $rowsQuery->get([
-                'acumatica_sales_order_lines.inventory_id',
-                'acumatica_sales_order_lines.description',
-                'acumatica_sales_order_lines.qty_at_approval',
-                'acumatica_sales_order_lines.order_qty',
-                'acumatica_sales_order_lines.qty_on_shipments',
-                'acumatica_sales_order_lines.unit_price',
-            ]);
-        $descriptions = $this->catalogResolver->descriptionsForInventoryIds($rows->pluck('inventory_id')->all());
-        $total = $rows->sum(function ($line) {
-            $demand = max((float) $line->qty_at_approval, (float) $line->order_qty);
-            return max($demand - (float) $line->qty_on_shipments, 0) * (float) $line->unit_price;
+            return max($demand - $this->effectiveFillRateShippedQty($line), 0) * (float) $line->unit_price;
         });
 
-        return $rows
+        return $lines
             ->groupBy('inventory_id')
             ->map(function ($group, $inventoryId) use ($descriptions, $total) {
                 $value = $group->sum(function ($line) {
-                    $demand = max((float) $line->qty_at_approval, (float) $line->order_qty);
-                    return max($demand - (float) $line->qty_on_shipments, 0) * (float) $line->unit_price;
+                    $demand = (float) $line->order_qty;
+
+                    return max($demand - $this->effectiveFillRateShippedQty($line), 0) * (float) $line->unit_price;
                 });
 
                 return [
@@ -2618,19 +3156,32 @@ class OperationsController extends Controller
                     'contribution_pct' => $total > 0 ? round(((float) $value / (float) $total) * 100, 1) : 0.0,
                 ];
             })
+            // Keep every InventoryID with shortfall so Product Summary sums to full period value.
+            ->filter(fn (array $row) => $row['undershipped_value'] > 0)
             ->sortByDesc('undershipped_value')
-            ->take(10)
             ->values()
             ->all();
     }
 
     private function backordersReasonSummary(Request $request): array
     {
-        $rows = $this->backordersFilteredQuery($request)->get(['acumatica_backorder_lines.reason_code', 'acumatica_backorder_lines.open_qty', 'acumatica_backorder_lines.revenue_at_risk']);
+        $rows = $this->backordersFilteredQuery($request)
+            ->select([
+                'acumatica_backorder_lines.reason_code',
+                'acumatica_backorder_lines.open_qty',
+                'acumatica_backorder_lines.revenue_at_risk',
+                DB::raw($this->backorderSoLineReasonSubquery().' as so_line_reason_code'),
+            ])
+            ->get();
         $total = (float) $rows->sum('revenue_at_risk');
 
         return $rows
-            ->groupBy(fn ($row) => $row->reason_code ?: 'Unassigned')
+            ->groupBy(function ($row) {
+                return $this->effectiveBackorderReasonCode(
+                    $row->reason_code ?? null,
+                    $row->so_line_reason_code ?? null,
+                ) ?: 'Unassigned';
+            })
             ->map(fn ($group, $label) => [
                 'reason' => (string) $label,
                 'line_count' => $group->count(),
@@ -2641,6 +3192,36 @@ class OperationsController extends Controller
             ->sortByDesc('back_order_value')
             ->values()
             ->all();
+    }
+
+    /**
+     * Latest non-empty unfilled_reason_code from the matching SO line (order + inventory).
+     */
+    private function backorderSoLineReasonSubquery(): string
+    {
+        return '(SELECT sol.unfilled_reason_code
+            FROM acumatica_sales_order_lines sol
+            INNER JOIN acumatica_sales_orders so_r ON so_r.id = sol.sales_order_id
+            WHERE so_r.acumatica_order_nbr = acumatica_backorder_lines.order_nbr
+              AND sol.inventory_id = acumatica_backorder_lines.inventory_id
+              AND sol.unfilled_reason_code IS NOT NULL
+              AND TRIM(sol.unfilled_reason_code) != \'\'
+            ORDER BY sol.id DESC
+            LIMIT 1)';
+    }
+
+    private function effectiveBackorderReasonCode(mixed $stored, mixed $soLine): ?string
+    {
+        $stored = is_string($stored) ? trim($stored) : '';
+        $soLine = is_string($soLine) ? trim($soLine) : '';
+        if ($stored !== '' && strcasecmp($stored, 'unassigned') !== 0) {
+            return $stored;
+        }
+        if ($soLine !== '' && strcasecmp($soLine, 'unassigned') !== 0) {
+            return $soLine;
+        }
+
+        return null;
     }
 
     private function backordersCustomerGroupDistribution(Request $request): array
@@ -2692,11 +3273,14 @@ class OperationsController extends Controller
                 'contribution_pct' => $total > 0 ? round(((float) $group->sum('revenue_at_risk') / $total) * 100, 1) : 0.0,
             ])
             ->sortByDesc('back_order_value')
-            ->take(10)
             ->values()
             ->all();
     }
 
+    /**
+     * Full product roll-up by InventoryID (not top-N). Export Product Summary must include
+     * every SKU so back-order value reconciles to the period total (100M+ at current scale).
+     */
     private function backordersProductDistribution(Request $request): array
     {
         $rows = $this->backordersFilteredQuery($request)->get([
@@ -2717,8 +3301,8 @@ class OperationsController extends Controller
                 'back_order_value' => round((float) $group->sum('revenue_at_risk'), 2),
                 'contribution_pct' => $total > 0 ? round(((float) $group->sum('revenue_at_risk') / $total) * 100, 1) : 0.0,
             ])
+            ->filter(fn (array $row) => $row['back_order_value'] > 0 || $row['back_order_qty'] > 0)
             ->sortByDesc('back_order_value')
-            ->take(10)
             ->values()
             ->all();
     }
@@ -2873,9 +3457,17 @@ class OperationsController extends Controller
             : $this->reasonCatalog->formatLabel($code);
     }
 
+    /**
+     * Date used for range filters on the Backorders page.
+     *
+     * Prefer sales-order order_date so cumulative KPIs and the line table match
+     * Order / Invoice / Backorder value cards (also filtered by aso.order_date)
+     * and the business formula: Back order = OrderTotal − InvoiceTotal for SOs
+     * in the selected period.
+     */
     private function backorderTimelineDateExpression(): string
     {
-        return "COALESCE(acumatica_backorder_lines.requested_on, acumatica_backorder_lines.scheduled_shipment_date, DATE(aso.order_date), DATE(acumatica_backorder_lines.synced_at))";
+        return "COALESCE(DATE(aso.order_date), acumatica_backorder_lines.requested_on, acumatica_backorder_lines.scheduled_shipment_date, DATE(acumatica_backorder_lines.synced_at))";
     }
 
     private function backorderLeadTimeDaysExpression(): string
@@ -2961,26 +3553,144 @@ class OperationsController extends Controller
         $query->whereHas('order.lines', fn ($lineQuery) => $lineQuery->whereIn('inventory_id', $ids));
     }
 
-    private function applyBrandFilterToBackorderQuery(Builder $query, Request $request): void
-    {
-        $ids = app(BrandFilterService::class)->inventoryIdsMatching(
-            $request->input('partner_brand'),
-            $request->input('brand'),
-            $request->input('category'),
+    private function applyBrandFilterToBackorderQuery(
+        Builder $query,
+        Request $request,
+        string $inventoryColumn = 'acumatica_backorder_lines.inventory_id',
+    ): void {
+        $partnerBrand = $request->input('partner_brand');
+        $brand = $request->input('brand');
+        $category = $request->input('category');
+
+        // Prefix-aware filter: Aptamil (APT*) / Cow & Gate (COW*) still match when
+        // the inventory master is empty or missing brand labels.
+        app(BrandFilterService::class)->applyToInventoryIdColumn(
+            $query,
+            $inventoryColumn,
+            is_string($partnerBrand) ? $partnerBrand : null,
+            is_string($brand) ? $brand : null,
+            is_string($category) ? $category : null,
         );
 
-        $ids = app(BrandAssignmentScope::class)->intersectInventoryIds($request->user(), $ids);
-
-        if ($ids === null) {
+        // Optional user brand-assignment ceiling (Partner Brand teams, etc.).
+        $userIds = app(BrandAssignmentScope::class)->inventoryIdsForUser($request->user());
+        if ($userIds === null) {
             return;
         }
-
-        if ($ids === []) {
+        if ($userIds === []) {
             $query->whereRaw('1 = 0');
 
             return;
         }
+        $query->whereIn($inventoryColumn, $userIds);
+    }
 
-        $query->whereIn('acumatica_backorder_lines.inventory_id', $ids);
+    /**
+     * Filtered, paginated query over resolved backorder lines (archived at prune time).
+     * Deliberately a separate query builder from backordersFilteredQuery(): resolved lines
+     * live in a different table with a different shape (no open_qty/current status — a
+     * resolution is a closed, historical fact).
+     *
+     * date_from/date_to filter on resolved_at (when it cleared) by default. opened_from/
+     * opened_to filter on first_backordered_at (when it started) independently — a line
+     * that opened in June and resolved in July is visible under either filter on its own
+     * terms; there is no single "owning" month.
+     */
+    private function backorderResolutionsFilteredQuery(Request $request): Builder
+    {
+        $query = BackorderResolution::query();
+
+        if ($q = trim((string) $request->input('q', ''))) {
+            $like = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $q).'%';
+            $query->where(function (Builder $sub) use ($like) {
+                $sub->where('order_nbr', 'like', $like)
+                    ->orWhere('inventory_id', 'like', $like)
+                    ->orWhere('customer_name', 'like', $like)
+                    ->orWhere('customer_acumatica_id', 'like', $like);
+            });
+        }
+
+        if ($customerId = $request->input('customer_id')) {
+            $query->where('customer_acumatica_id', $customerId);
+        }
+
+        if ($warehouseId = $request->input('warehouse_id')) {
+            $query->where('warehouse_id', $warehouseId);
+        }
+
+        if ($reasonCode = $request->input('reason_code')) {
+            if ($reasonCode === 'unassigned') {
+                $query->where(function (Builder $sub) {
+                    $sub->whereNull('reason_code')->orWhere('reason_code', '');
+                });
+            } else {
+                $query->where('reason_code', $reasonCode);
+            }
+        }
+
+        // Explicit rep filter: assignment ∪ SO rep-code (not SO rep alone — FR8 fairness).
+        if ($repCode = $request->input('rep_code')) {
+            $this->applyRepPortfolioCustomerFilter($query, (string) $repCode, 'backorder_resolutions.customer_acumatica_id');
+        }
+
+        $this->applyBrandFilterToBackorderQuery($query, $request, 'backorder_resolutions.inventory_id');
+        $this->applyDepartmentPortfolioScope($query, $request, 'backorder_resolutions.customer_acumatica_id');
+
+        $visibleCustomerIds = DataScope::scopedCustomerAcumaticaIds($request->user());
+        if ($visibleCustomerIds !== null) {
+            if ($visibleCustomerIds === []) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn('backorder_resolutions.customer_acumatica_id', $visibleCustomerIds);
+            }
+        }
+
+        if ($dateFrom = $request->input('date_from')) {
+            $query->whereDate('resolved_at', '>=', $dateFrom);
+        }
+        if ($dateTo = $request->input('date_to')) {
+            $query->whereDate('resolved_at', '<=', $dateTo);
+        }
+
+        if ($openedFrom = $request->input('opened_from')) {
+            $query->whereDate('first_backordered_at', '>=', $openedFrom);
+        }
+        if ($openedTo = $request->input('opened_to')) {
+            $query->whereDate('first_backordered_at', '<=', $openedTo);
+        }
+
+        return $query;
+    }
+
+    public function backordersResolved(Request $request): JsonResponse
+    {
+        $query = $this->backorderResolutionsFilteredQuery($request)
+            ->orderByDesc('resolved_at');
+
+        $paginated = $query->paginate($request->integer('per_page', 50));
+        $items = $paginated->getCollection();
+
+        $inventoryIds = $items->pluck('inventory_id')->all();
+        $descriptions = $this->catalogResolver->descriptionsForInventoryIds($inventoryIds);
+        $classifications = $this->catalogResolver->classificationsForInventoryIds($inventoryIds);
+        $customerNames = $this->catalogResolver->namesForCustomerIds(
+            $items->pluck('customer_acumatica_id')->all(),
+        );
+
+        $items->transform(function (BackorderResolution $row) use ($descriptions, $classifications, $customerNames) {
+            $row->product_name = $this->catalogResolver->resolveProductName($row->inventory_id, null, $descriptions);
+            foreach ($this->catalogResolver->classificationFieldsFor($row->inventory_id, $classifications) as $field => $value) {
+                $row->{$field} = $value;
+            }
+            $row->customer_name = $this->catalogResolver->resolveCustomerName(
+                $row->customer_name,
+                $row->customer_acumatica_id,
+                $customerNames,
+            );
+
+            return $row;
+        });
+
+        return response()->json($paginated);
     }
 }

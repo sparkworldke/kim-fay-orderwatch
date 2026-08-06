@@ -8,7 +8,7 @@ import { NOTIFICATIONS } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/notifications")({
-  head: () => ({ meta: [{ title: "Notifications — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Notifications — Kim-Fay Sight" }] }),
   component: NotificationsPage,
 });
 

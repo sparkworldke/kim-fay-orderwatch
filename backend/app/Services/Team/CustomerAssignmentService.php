@@ -59,8 +59,9 @@ class CustomerAssignmentService
     }
 
     /** @param  list<string>  $customerIds */
-    public function syncAssignments(User $user, array $customerIds, ?int $assignedBy = null): void
+    public function syncAssignments(User $user, array $customerIds, ?int $assignedBy = null, string $assignmentType = UserCustomerAssignment::TYPE_SERVICING): void
     {
+        $assignmentType = $this->validatedAssignmentType($assignmentType);
         $customerIds = array_values(array_unique(array_filter(array_map(
             fn ($id) => trim((string) $id),
             $customerIds,
@@ -68,21 +69,14 @@ class CustomerAssignmentService
 
         UserCustomerAssignment::query()
             ->where('user_id', $user->id)
+            ->whereIn('assignment_type', $assignmentType === UserCustomerAssignment::TYPE_SERVICING
+                ? [UserCustomerAssignment::TYPE_SERVICING, UserCustomerAssignment::TYPE_LEGACY_PRIMARY]
+                : [UserCustomerAssignment::TYPE_OWNER])
             ->whereNotIn('customer_acumatica_id', $customerIds)
             ->delete();
 
         foreach ($customerIds as $customerId) {
-            UserCustomerAssignment::query()->updateOrCreate(
-                [
-                    'user_id' => $user->id,
-                    'customer_acumatica_id' => $customerId,
-                ],
-                [
-                    'assignment_type' => 'primary',
-                    'assigned_by' => $assignedBy,
-                    'source' => 'manual',
-                ],
-            );
+            $this->assignCustomer($user->id, $customerId, $assignmentType, $assignedBy, ['source' => 'manual']);
         }
     }
 
@@ -205,16 +199,55 @@ class CustomerAssignmentService
         return $this->createBatch('upload', null, $actorId, $file->getClientOriginalName(), $rows);
     }
 
-    public function applyBatch(CustomerAssignmentBatch $batch, ?int $actorId = null): CustomerAssignmentBatch
+    /**
+     * Preview rows that have already passed the portfolio precedence/name
+     * resolution step. This deliberately reuses the normal batch/apply path.
+     *
+     * @param list<array{customer_id:string,user_id:int,rep_code:string,customer_name?:string,source:string,details?:array<string,mixed>}> $resolvedRows
+     */
+    public function previewResolvedRows(array $resolvedRows, ?int $actorId = null, ?string $filename = null): CustomerAssignmentBatch
+    {
+        $owners = [];
+        foreach ($resolvedRows as $row) {
+            $customerId = $this->normalizeCustomerId($row['customer_id'] ?? null);
+            $userId = (int) ($row['user_id'] ?? 0);
+            if ($customerId !== null && isset($owners[$customerId]) && $owners[$customerId] !== $userId) {
+                throw ValidationException::withMessages([
+                    'rows' => ["Customer {$customerId} resolves to more than one servicing user."],
+                ]);
+            }
+            $owners[$customerId] = $userId;
+        }
+
+        $rows = [];
+        foreach (array_values($resolvedRows) as $index => $row) {
+            $user = User::query()->find((int) ($row['user_id'] ?? 0));
+            $source = (string) ($row['source'] ?? 'portfolio_import');
+            $rows[] = $this->buildRow(
+                rowNo: $index + 1,
+                repCode: $this->normalizeCode($row['rep_code'] ?? null),
+                customerId: $this->normalizeCustomerId($row['customer_id'] ?? null),
+                user: $user,
+                source: $source,
+                fallbackName: $row['customer_name'] ?? null,
+                details: array_merge($row['details'] ?? [], ['rule_source' => $source]),
+            );
+        }
+
+        return $this->createBatch('staff_portfolio_2026_07', null, $actorId, $filename, $rows);
+    }
+
+    public function applyBatch(CustomerAssignmentBatch $batch, ?int $actorId = null, ?string $assignmentType = null): CustomerAssignmentBatch
     {
         if ($batch->status === 'applied') {
             return $batch->fresh(['rows']);
         }
 
+        $assignmentType = $this->validatedAssignmentType($assignmentType ?? (string) (($batch->stats_json ?? [])['assignment_type'] ?? UserCustomerAssignment::TYPE_SERVICING));
         $created = 0;
         $updated = 0;
 
-        DB::transaction(function () use ($batch, $actorId, &$created, &$updated): void {
+        DB::transaction(function () use ($batch, $actorId, $assignmentType, &$created, &$updated): void {
             $rows = $batch->rows()->where('status', 'valid')->get();
 
             foreach ($rows as $row) {
@@ -241,16 +274,14 @@ class CustomerAssignmentService
 
                 $this->updateExistingCustomer($row->customer_acumatica_id, $customerAttributes);
 
-                $assignment = UserCustomerAssignment::query()->updateOrCreate(
+                $assignment = $this->assignCustomer(
+                    $row->resolved_user_id,
+                    $row->customer_acumatica_id,
+                    $assignmentType,
+                    $actorId,
                     [
-                        'user_id' => $row->resolved_user_id,
-                        'customer_acumatica_id' => $row->customer_acumatica_id,
-                    ],
-                    [
-                        'assignment_type' => 'primary',
-                        'assigned_by' => $actorId,
-                        'notes' => $this->notesForSource($batch->source),
-                        'source' => $batch->source,
+                        'notes' => $this->notesForSource($details['rule_source'] ?? $batch->source),
+                        'source' => $details['rule_source'] ?? $batch->source,
                         'source_batch_id' => $batch->uuid,
                         'last_so_date' => $details['last_so_date'] ?? null,
                         'so_order_count' => $details['so_order_count'] ?? null,
@@ -799,5 +830,36 @@ class CustomerAssignmentService
             'statementcycle' => 'statement_cycle',
             default => null,
         };
+    }
+
+    private function validatedAssignmentType(string $assignmentType): string
+    {
+        if (! in_array($assignmentType, UserCustomerAssignment::ASSIGNABLE_TYPES, true)) {
+            throw new \InvalidArgumentException('Assignment type must be owner or servicing.');
+        }
+
+        return $assignmentType;
+    }
+
+    /** @param array<string, mixed> $attributes */
+    private function assignCustomer(int $userId, string $customerId, string $assignmentType, ?int $assignedBy, array $attributes = []): UserCustomerAssignment
+    {
+        return DB::transaction(function () use ($userId, $customerId, $assignmentType, $assignedBy, $attributes) {
+            $competingTypes = $assignmentType === UserCustomerAssignment::TYPE_SERVICING
+                ? [UserCustomerAssignment::TYPE_SERVICING, UserCustomerAssignment::TYPE_LEGACY_PRIMARY]
+                : [UserCustomerAssignment::TYPE_OWNER];
+
+            UserCustomerAssignment::query()
+                ->where('customer_acumatica_id', $customerId)
+                ->whereIn('assignment_type', $competingTypes)
+                ->delete();
+
+            return UserCustomerAssignment::query()->create(array_merge($attributes, [
+                'user_id' => $userId,
+                'customer_acumatica_id' => $customerId,
+                'assignment_type' => $assignmentType,
+                'assigned_by' => $assignedBy,
+            ]));
+        });
     }
 }

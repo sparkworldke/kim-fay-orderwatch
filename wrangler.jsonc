@@ -1,4 +1,6 @@
 {
+  // Production Worker — Kim-Fay Sight
+  // Deploy: npm run deploy:production
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "orderwatchkimfay",
   "compatibility_date": "2026-06-01",
@@ -6,6 +8,11 @@
   "main": "dist/server/server.js",
   "routes": [
     {
+      "pattern": "sight.fayshop.co.ke",
+      "custom_domain": true
+    },
+    {
+      // Legacy hostname — Worker 301s to sight.fayshop.co.ke (src/server.ts)
       "pattern": "orderwatch.fayshop.co.ke",
       "custom_domain": true
     }

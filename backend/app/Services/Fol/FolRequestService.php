@@ -9,16 +9,22 @@ use App\Models\AcumaticaSalesOrder;
 use App\Models\FolApprovalAction;
 use App\Models\FolApprovalStage;
 use App\Models\FolRequest;
+use App\Models\FolRequestAttachment;
 use App\Models\FolRequestEvent;
 use App\Models\FolSoLink;
+use App\Services\Crm\CustomerContactService;
+use App\Models\NotificationRule;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\DataScope;
+use App\Services\Team\AccessTierService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class FolRequestService
@@ -27,10 +33,18 @@ class FolRequestService
 
     public function __construct(
         private readonly FolSettingsService $settings,
+        private readonly CustomerContactService $contacts,
+        private readonly FolAcumaticaSalesOrderService $folSalesOrders,
+        private readonly AccessTierService $accessTier,
     ) {}
 
     public function userCan(User $user, string $permission): bool
     {
+        if (in_array($permission, ['kp.fol.view', 'kp.fol.report'], true)
+            && $this->accessTier->hasUnrestrictedBusinessAccess($user)) {
+            return true;
+        }
+
         return $user->hasPermission($permission);
     }
 
@@ -101,10 +115,33 @@ class FolRequestService
     {
         $request->loadMissing(['lines', 'attachments', 'events', 'approvalActions', 'soLinks', 'assignedTechnician']);
 
+        $attachments = $request->attachments->map(function ($file) {
+            return [
+                ...$file->toArray(),
+                'download_url' => url("/api/kp/fol/attachments/{$file->id}/download"),
+                'view_url' => url("/api/kp/fol/attachments/{$file->id}/view"),
+                'preview_url' => url("/api/kp/fol/attachments/{$file->id}/preview"),
+                'kind' => $this->attachmentKind($file->mime, $file->original_name),
+            ];
+        })->values();
+
+        $soNumbers = collect($request->linked_so_order_nbrs ?? [])
+            ->filter(fn ($n) => is_string($n) && $n !== '')
+            ->values();
+        if ($soNumbers->isEmpty()) {
+            $soNumbers = $request->soLinks->pluck('acumatica_order_nbr')->filter()->values();
+        }
+        $primarySo = $soNumbers->first();
+
         return [
             ...$request->toArray(),
+            // Explicit SO attachment fields for UI / clients.
+            'so_number' => $primarySo,
+            'acumatica_so_number' => $primarySo,
+            'so_numbers' => $soNumbers->all(),
+            'so_status' => $request->linked_so_status_summary,
             'lines' => $request->lines->values(),
-            'attachments' => $request->attachments->values(),
+            'attachments' => $attachments,
             'events' => $request->events()->latest('id')->get(),
             'approval_actions' => $request->approvalActions->values(),
             'so_links' => $request->soLinks->values(),
@@ -115,6 +152,30 @@ class FolRequestService
                 'role' => $request->assignedTechnician->role,
             ] : null,
         ];
+    }
+
+    private function attachmentKind(?string $mime, ?string $name): string
+    {
+        $mime = strtolower((string) $mime);
+        $ext = strtolower(pathinfo((string) $name, PATHINFO_EXTENSION));
+
+        if (str_starts_with($mime, 'image/') || in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true)) {
+            return 'image';
+        }
+        if ($mime === 'application/pdf' || $ext === 'pdf') {
+            return 'pdf';
+        }
+        if (in_array($ext, ['csv', 'xlsx', 'xls', 'xlsm'], true)
+            || str_contains($mime, 'spreadsheet')
+            || str_contains($mime, 'excel')
+            || $mime === 'text/csv') {
+            return 'table';
+        }
+        if (str_starts_with($mime, 'text/')) {
+            return 'text';
+        }
+
+        return 'binary';
     }
 
     /**
@@ -131,10 +192,18 @@ class FolRequestService
         $this->ensureCustomerAllowed($actor, $customer);
         $this->ensureKpCustomer($customer);
         $this->ensureFolLines($data['lines']);
+        $this->ensureConsumables($data['consumable_inventory_ids'] ?? []);
+        $this->ensureDistinctFolPurposes($data['lines'], $data['consumable_inventory_ids'] ?? []);
 
         return DB::transaction(function () use ($actor, $data, $customer): FolRequest {
-            $metrics = $this->metricsForCustomer((string) $customer->acumatica_id);
+            $consumableIds = array_values($data['consumable_inventory_ids'] ?? []);
+            $metrics = $this->metricsForCustomer((string) $customer->acumatica_id, $consumableIds);
             $source = $data['consumables_metrics_source'] ?? 'system_so';
+            $requestor = $this->contacts->resolveRequestorForFol(
+                $actor,
+                (string) $customer->acumatica_id,
+                $data,
+            );
 
             $request = FolRequest::create([
                 'public_ref' => $this->nextPublicRef(),
@@ -145,18 +214,24 @@ class FolRequestService
                 'sales_consultant_rep_code' => $actor->rep_code,
                 'request_origin' => $data['request_origin'],
                 'request_origin_other' => $data['request_origin_other'] ?? null,
-                'requestor_first_name' => $data['requestor_first_name'],
-                'requestor_last_name' => $data['requestor_last_name'],
-                'requestor_phone' => $data['requestor_phone'],
-                'requestor_email' => $data['requestor_email'],
+                'requestor_first_name' => $requestor['first_name'],
+                'requestor_last_name' => $requestor['last_name'],
+                'requestor_phone' => $requestor['phone'],
+                'requestor_email' => $requestor['email'],
+                'requestor_contact_id' => $requestor['contact']?->id,
                 'issue_types' => $data['issue_types'],
                 'reason_text' => $data['reason_text'],
                 'installation_required' => (bool) ($data['installation_required'] ?? false),
                 'installation_location' => $data['installation_location'] ?? null,
                 'customer_has_submitted_po' => (bool) ($data['customer_has_submitted_po'] ?? false),
+                'consumable_inventory_ids' => $consumableIds,
                 'consumables_last_purchase_date' => $data['consumables_last_purchase_date'] ?? $metrics['last_purchase_date'],
+                'consumables_sales_3m_kes' => $data['consumables_sales_3m_kes'] ?? $metrics['sales_3m_kes'],
+                'consumables_volume_3m' => $data['consumables_volume_3m'] ?? $metrics['volume_3m'],
                 'consumables_sales_6m_kes' => $data['consumables_sales_6m_kes'] ?? $metrics['sales_6m_kes'],
                 'consumables_volume_6m' => $data['consumables_volume_6m'] ?? $metrics['volume_6m'],
+                'consumables_evidence_json' => $metrics['line_last_purchases'],
+                'consumables_metrics_as_of' => now('Africa/Nairobi'),
                 'consumables_metrics_source' => $source,
                 'consumables_override_reason' => $data['consumables_override_reason'] ?? null,
                 'debt_explanation' => $data['debt_explanation'],
@@ -172,6 +247,7 @@ class FolRequestService
                     'line_no' => $index + 1,
                     'inventory_id' => $item->inventory_id,
                     'product_description' => $item->description,
+                    'line_type' => 'fol_item',
                     'qty_requested' => $line['qty_requested'],
                     'qty_previously_issued' => $line['qty_previously_issued'] ?? $prior['qty'],
                     'date_last_issue' => $line['date_last_issue'] ?? $prior['date'],
@@ -184,6 +260,135 @@ class FolRequestService
 
             return $request->fresh(['lines', 'attachments']);
         });
+    }
+
+    /**
+     * Update an existing draft FOL (owner or admin). Non-draft requests are immutable.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function updateDraft(User $actor, FolRequest $request, array $data): FolRequest
+    {
+        $this->ensureCan($actor, 'kp.fol.request');
+        $this->ensureDraftOwner($actor, $request);
+
+        if ($request->status !== 'draft') {
+            throw ValidationException::withMessages(['status' => ['Only draft requests can be edited.']]);
+        }
+
+        $customer = AcumaticaCustomer::query()
+            ->where('acumatica_id', $data['customer_acumatica_id'])
+            ->firstOrFail();
+
+        $this->ensureCustomerAllowed($actor, $customer);
+        $this->ensureKpCustomer($customer);
+        $this->ensureFolLines($data['lines']);
+        $this->ensureConsumables($data['consumable_inventory_ids'] ?? []);
+        $this->ensureDistinctFolPurposes($data['lines'], $data['consumable_inventory_ids'] ?? []);
+
+        return DB::transaction(function () use ($actor, $request, $data, $customer): FolRequest {
+            $consumableIds = array_values($data['consumable_inventory_ids'] ?? []);
+            $metrics = $this->metricsForCustomer((string) $customer->acumatica_id, $consumableIds);
+            $source = $data['consumables_metrics_source'] ?? 'system_so';
+            $requestor = $this->contacts->resolveRequestorForFol(
+                $actor,
+                (string) $customer->acumatica_id,
+                $data,
+            );
+
+            $request->forceFill([
+                'customer_acumatica_id' => $customer->acumatica_id,
+                'customer_name' => $customer->name,
+                'request_origin' => $data['request_origin'],
+                'request_origin_other' => $data['request_origin_other'] ?? null,
+                'requestor_first_name' => $requestor['first_name'],
+                'requestor_last_name' => $requestor['last_name'],
+                'requestor_phone' => $requestor['phone'],
+                'requestor_email' => $requestor['email'],
+                'requestor_contact_id' => $requestor['contact']?->id,
+                'issue_types' => $data['issue_types'],
+                'reason_text' => $data['reason_text'],
+                'installation_required' => (bool) ($data['installation_required'] ?? false),
+                'installation_location' => $data['installation_location'] ?? null,
+                'customer_has_submitted_po' => (bool) ($data['customer_has_submitted_po'] ?? false),
+                'consumable_inventory_ids' => $consumableIds,
+                'consumables_last_purchase_date' => $data['consumables_last_purchase_date'] ?? $metrics['last_purchase_date'],
+                'consumables_sales_3m_kes' => $data['consumables_sales_3m_kes'] ?? $metrics['sales_3m_kes'],
+                'consumables_volume_3m' => $data['consumables_volume_3m'] ?? $metrics['volume_3m'],
+                'consumables_sales_6m_kes' => $data['consumables_sales_6m_kes'] ?? $metrics['sales_6m_kes'],
+                'consumables_volume_6m' => $data['consumables_volume_6m'] ?? $metrics['volume_6m'],
+                'consumables_evidence_json' => $metrics['line_last_purchases'],
+                'consumables_metrics_as_of' => now('Africa/Nairobi'),
+                'consumables_metrics_source' => $source,
+                'consumables_override_reason' => $data['consumables_override_reason'] ?? null,
+                'debt_explanation' => $data['debt_explanation'],
+                'updated_by' => $actor->id,
+            ])->save();
+
+            $request->lines()->delete();
+            foreach (array_values($data['lines']) as $index => $line) {
+                $item = AcumaticaInventoryItem::query()->where('inventory_id', $line['inventory_id'])->firstOrFail();
+                $prior = $this->priorIssued((string) $customer->acumatica_id, (string) $line['inventory_id']);
+                $request->lines()->create([
+                    'line_no' => $index + 1,
+                    'inventory_id' => $item->inventory_id,
+                    'product_description' => $item->description,
+                    'line_type' => 'fol_item',
+                    'qty_requested' => $line['qty_requested'],
+                    'qty_previously_issued' => $line['qty_previously_issued'] ?? $prior['qty'],
+                    'date_last_issue' => $line['date_last_issue'] ?? $prior['date'],
+                    'previous_source' => 'prior_fol',
+                    'commitment_sku_ids' => $line['commitment_sku_ids'] ?? null,
+                ]);
+            }
+
+            $this->event($request, 'draft_updated', $actor, null, [
+                'source' => 'api',
+                'line_count' => count($data['lines']),
+            ]);
+
+            return $request->fresh(['lines', 'attachments']);
+        });
+    }
+
+    public function deleteAttachment(User $actor, FolRequestAttachment $attachment): FolRequest
+    {
+        $this->ensureCan($actor, 'kp.fol.request');
+
+        $request = $attachment->request;
+        if (! $request) {
+            abort(404, 'FOL request not found for attachment.');
+        }
+
+        $this->ensureDraftOwner($actor, $request);
+
+        if ($request->status !== 'draft') {
+            throw ValidationException::withMessages(['status' => ['Attachments can only be removed while the request is draft.']]);
+        }
+
+        return DB::transaction(function () use ($actor, $request, $attachment): FolRequest {
+            $meta = [
+                'attachment_id' => $attachment->id,
+                'original_name' => $attachment->original_name,
+                'path' => $attachment->path,
+            ];
+
+            if ($attachment->path && Storage::disk('local')->exists($attachment->path)) {
+                Storage::disk('local')->delete($attachment->path);
+            }
+
+            $attachment->delete();
+            $this->event($request, 'attachment_removed', $actor, null, $meta);
+
+            return $request->fresh(['lines', 'attachments']);
+        });
+    }
+
+    private function ensureDraftOwner(User $actor, FolRequest $request): void
+    {
+        if ($request->sales_consultant_user_id !== $actor->id && ! $this->canReadAll($actor) && ! $this->isAdministrator($actor)) {
+            abort(403, 'Forbidden.');
+        }
     }
 
     public function submit(User $actor, FolRequest $request): FolRequest
@@ -237,7 +442,7 @@ class FolRequestService
             abort(403, 'Forbidden.');
         }
 
-        return DB::transaction(function () use ($actor, $request, $decision, $comment): FolRequest {
+        $outcome = DB::transaction(function () use ($actor, $request, $decision, $comment): array {
             FolApprovalAction::create([
                 'fol_request_id' => $request->id,
                 'stage_key' => (string) $request->current_stage_key,
@@ -253,8 +458,8 @@ class FolRequestService
                     'decided_at' => now(),
                 ])->save();
                 $this->event($request, 'rejected', $actor, $comment);
-                $this->notifyConsultant($request, 'N6', 'FOL request rejected', ['comment' => $comment]);
-                return $request->fresh(['lines', 'attachments', 'events', 'approvalActions']);
+
+                return ['phase' => 'rejected', 'request' => $request->fresh(['lines', 'attachments', 'events', 'approvalActions'])];
             }
 
             $nextStage = $this->nextStage((string) $request->current_stage_key);
@@ -264,22 +469,79 @@ class FolRequestService
                     'current_stage_key' => $nextStage->key,
                 ])->save();
                 $this->event($request, 'stage_approved', $actor, $comment, ['next_stage' => $nextStage->key]);
-                $this->notifyConsultant($request, 'N2', 'FOL request approved by current stage', ['comment' => $comment]);
-                $this->notifyStage($request, $nextStage, 'N3', 'FOL request pending final approval', ['comment' => $comment]);
-                return $request->fresh(['lines', 'attachments', 'events', 'approvalActions']);
+
+                return [
+                    'phase' => 'stage',
+                    'next_stage' => $nextStage,
+                    'request' => $request->fresh(['lines', 'attachments', 'events', 'approvalActions']),
+                ];
             }
 
+            // Final stage (CCO / COO) — mark ready; Acumatica SO is created after commit.
             $request->forceFill([
                 'status' => 'ready_for_invoicing',
                 'current_stage_key' => 'done',
                 'decided_at' => now(),
             ])->save();
             $this->event($request, 'final_approved', $actor, $comment);
-            $this->notifyConsultant($request, 'N4', 'FOL request fully approved', ['comment' => $comment]);
-            $this->notifyInvoicing($request, 'N5', 'FOL request approved for invoicing', ['comment' => $comment]);
 
-            return $request->fresh(['lines', 'attachments', 'events', 'approvalActions']);
+            return [
+                'phase' => 'final',
+                'request' => $request->fresh(['lines', 'attachments', 'events', 'approvalActions', 'soLinks']),
+            ];
         });
+
+        /** @var FolRequest $fresh */
+        $fresh = $outcome['request'];
+
+        if ($outcome['phase'] === 'rejected') {
+            $this->notifyConsultant($fresh, 'N6', 'FOL request rejected', ['comment' => $comment]);
+
+            return $fresh;
+        }
+
+        if ($outcome['phase'] === 'stage') {
+            /** @var FolApprovalStage $nextStage */
+            $nextStage = $outcome['next_stage'];
+            $this->notifyConsultant($fresh, 'N2', 'FOL request approved by current stage', ['comment' => $comment]);
+            $this->notifyStage($fresh, $nextStage, 'N3', 'FOL request pending final approval', ['comment' => $comment]);
+
+            return $fresh;
+        }
+
+        // Final CCO approval: create Acumatica SO for customer + FOL lines, then notify sales.
+        $soResult = $this->folSalesOrders->createAndLink($fresh, $actor, 'cco_approve');
+        $fresh = $fresh->fresh(['lines', 'attachments', 'events', 'approvalActions', 'soLinks']) ?? $fresh;
+
+        $soContext = [
+            'comment' => $comment,
+            'acumatica_order_nbr' => $soResult['order_nbr'],
+            'so_create_ok' => $soResult['ok'],
+            'so_create_error' => $soResult['error'],
+            'so_already_linked' => $soResult['already_linked'],
+            'so_skipped' => $soResult['skipped'],
+            'so_create_log_id' => $soResult['log_id'] ?? null,
+        ];
+
+        $this->event($fresh, $soResult['ok'] ? 'so_auto_created' : 'so_auto_create_failed', $actor, null, [
+            'acumatica_order_nbr' => $soResult['order_nbr'],
+            'error' => $soResult['error'],
+            'skipped' => $soResult['skipped'],
+            'already_linked' => $soResult['already_linked'],
+            'so_create_log_id' => $soResult['log_id'] ?? null,
+            'attempt_source' => 'cco_approve',
+        ]);
+
+        $consultantSubject = $soResult['ok'] && $soResult['order_nbr']
+            ? "FOL request fully approved — SO {$soResult['order_nbr']} created"
+            : 'FOL request fully approved';
+
+        $this->notifyConsultant($fresh, 'N4', $consultantSubject, $soContext);
+        $this->notifyInvoicing($fresh, 'N5', $soResult['ok'] && $soResult['order_nbr']
+            ? "FOL approved for invoicing — SO {$soResult['order_nbr']}"
+            : 'FOL request approved for invoicing', $soContext);
+
+        return $fresh->fresh(['lines', 'attachments', 'events', 'approvalActions', 'soLinks']) ?? $fresh;
     }
 
     public function linkSalesOrder(User $actor, FolRequest $request, string $orderNbr): FolRequest
@@ -650,28 +912,446 @@ class FolRequestService
     }
 
     /**
-     * @return array{last_purchase_date: ?string, sales_6m_kes: float, volume_6m: float}
+     * SO-backed consumables metrics for a KP customer.
+     *
+     * Only FOL-eligible inventory is counted (is_fol_eligible = true).
+     * When $inventoryIds is non-empty, further restricts to those SKUs
+     * (typically the lines already on the FOL draft).
+     *
+     * @param  list<string>  $inventoryIds
+     * @return array{
+     *   last_purchase_date: ?string,
+     *   last_purchase_order_nbr: ?string,
+     *   sales_6m_kes: float,
+     *   volume_6m: float,
+     *   lookback_months: int,
+     *   scope: string,
+     *   line_last_purchases: array<string, array{date: ?string, order_nbr: ?string, qty: float, value: float}>
+     * }
      */
     public function metricsForCustomer(string $customerId, array $inventoryIds = []): array
     {
-        $from = now('Africa/Nairobi')->subMonthsNoOverflow($this->settings->consumablesMonths())->startOfDay();
-        $query = DB::table('acumatica_sales_order_lines as l')
+        $months = 6;
+        $asOf = now('Africa/Nairobi');
+        $from = $asOf->copy()->subMonthsNoOverflow($months)->startOfDay();
+        $fromThreeMonths = $asOf->copy()->subMonthsNoOverflow(3)->startOfDay();
+
+        // Base: SO lines for this customer in lookback window, FOL-eligible inventory only.
+        $base = DB::table('acumatica_sales_order_lines as l')
             ->join('acumatica_sales_orders as o', 'o.id', '=', 'l.sales_order_id')
+            ->join('acumatica_inventory_items as i', 'i.inventory_id', '=', 'l.inventory_id')
             ->where('o.order_type', AcumaticaSalesOrder::TYPE_SALES_ORDER)
             ->where('o.customer_acumatica_id', $customerId)
-            ->where('o.order_date', '>=', $from);
+            ->where('o.order_date', '>=', $from)
+            ->where('i.is_fol_eligible', true);
 
         if ($inventoryIds !== []) {
-            $query->whereIn('l.inventory_id', $inventoryIds);
+            $base->whereIn('l.inventory_id', $inventoryIds);
         }
 
-        $row = $query->selectRaw('MAX(o.order_date) as last_purchase_date, COALESCE(SUM(l.order_qty * l.unit_price), 0) as sales, COALESCE(SUM(l.order_qty), 0) as volume')->first();
+        $row = (clone $base)
+            ->selectRaw(
+                'MAX(o.order_date) as last_purchase_date,
+                 COALESCE(SUM(CASE WHEN o.order_date >= ? THEN l.order_qty * l.unit_price ELSE 0 END), 0) as sales_3m,
+                 COALESCE(SUM(CASE WHEN o.order_date >= ? THEN l.order_qty ELSE 0 END), 0) as volume_3m,
+                 COALESCE(SUM(l.order_qty * l.unit_price), 0) as sales,
+                 COALESCE(SUM(l.order_qty), 0) as volume',
+                [$fromThreeMonths, $fromThreeMonths],
+            )
+            ->first();
+
+        $lastOrderNbr = null;
+        $lastDate = $row?->last_purchase_date
+            ? Carbon::parse($row->last_purchase_date)->toDateString()
+            : null;
+        if ($lastDate !== null) {
+            $lastOrderNbr = (clone $base)
+                ->whereDate('o.order_date', $lastDate)
+                ->orderByDesc('o.order_date')
+                ->orderByDesc('o.acumatica_order_nbr')
+                ->value('o.acumatica_order_nbr');
+        }
+
+        // Per FOL-eligible SKU: last SO purchase (from previous SOs).
+        $perSku = (clone $base)
+            ->selectRaw(
+                'l.inventory_id, MAX(o.order_date) as last_date,
+                 COALESCE(SUM(CASE WHEN o.order_date >= ? THEN l.order_qty END), 0) as qty_3m,
+                 COALESCE(SUM(CASE WHEN o.order_date >= ? THEN l.order_qty * l.unit_price END), 0) as value_3m,
+                 COALESCE(SUM(l.order_qty), 0) as qty,
+                 COALESCE(SUM(l.order_qty * l.unit_price), 0) as value',
+                [$fromThreeMonths, $fromThreeMonths],
+            )
+            ->groupBy('l.inventory_id')
+            ->get();
+
+        $lineLastPurchases = [];
+        foreach ($perSku as $skuRow) {
+            $sku = (string) $skuRow->inventory_id;
+            $skuDate = $skuRow->last_date
+                ? Carbon::parse($skuRow->last_date)->toDateString()
+                : null;
+            $skuOrder = null;
+            if ($skuDate !== null) {
+                $skuOrder = DB::table('acumatica_sales_order_lines as l')
+                    ->join('acumatica_sales_orders as o', 'o.id', '=', 'l.sales_order_id')
+                    ->where('o.order_type', AcumaticaSalesOrder::TYPE_SALES_ORDER)
+                    ->where('o.customer_acumatica_id', $customerId)
+                    ->where('l.inventory_id', $sku)
+                    ->whereDate('o.order_date', $skuDate)
+                    ->orderByDesc('o.order_date')
+                    ->value('o.acumatica_order_nbr');
+            }
+            $lineLastPurchases[$sku] = [
+                'date' => $skuDate,
+                'order_nbr' => $skuOrder ? (string) $skuOrder : null,
+                'qty' => round((float) $skuRow->qty, 4),
+                'value' => round((float) $skuRow->value, 2),
+                'qty_3m' => round((float) $skuRow->qty_3m, 4),
+                'value_3m' => round((float) $skuRow->value_3m, 2),
+            ];
+        }
+
+        // Keep selected consumables visible even when the customer has no history.
+        foreach ($inventoryIds as $inventoryId) {
+            $lineLastPurchases[$inventoryId] ??= [
+                'date' => null,
+                'order_nbr' => null,
+                'qty' => 0.0,
+                'value' => 0.0,
+                'qty_3m' => 0.0,
+                'value_3m' => 0.0,
+            ];
+        }
 
         return [
-            'last_purchase_date' => $row?->last_purchase_date ? Carbon::parse($row->last_purchase_date)->toDateString() : null,
+            'last_purchase_date' => $lastDate,
+            'last_purchase_order_nbr' => $lastOrderNbr ? (string) $lastOrderNbr : null,
+            'sales_3m_kes' => round((float) ($row->sales_3m ?? 0), 2),
+            'volume_3m' => round((float) ($row->volume_3m ?? 0), 4),
             'sales_6m_kes' => round((float) ($row->sales ?? 0), 2),
             'volume_6m' => round((float) ($row->volume ?? 0), 4),
+            'lookback_months' => $months,
+            'scope' => $inventoryIds !== []
+                ? 'fol_eligible_lines_on_request'
+                : 'all_fol_eligible_inventory',
+            'line_last_purchases' => $lineLastPurchases,
+            'metrics_as_of' => $asOf->toIso8601String(),
+            // Full customer SO history context (NOT FOL-eligible filtered).
+            'recent_orders' => $this->recentSalesOrdersForCustomer($customerId, 3),
+            'customer_6m' => $this->customerSixMonthSummary($customerId, 3),
+            // Prior Free-On-Loan issues from OrderWatch FOL requests (not SO lines).
+            'prior_fol' => $this->priorFolSummaryForCustomer($customerId, $inventoryIds),
         ];
+    }
+
+    /**
+     * Previous FOL issues for a customer (approved / post-approval statuses).
+     * Shown at the top of New FOL so consultants see historical FOLs even when
+     * SO-backed FOL-SKU metrics are empty.
+     *
+     * @param  list<string>  $inventoryIds  Optional cart lines — prioritise these in by_sku.
+     * @return array{
+     *   request_count: int,
+     *   total_qty_issued: float,
+     *   last_issue_date: ?string,
+     *   last_public_ref: ?string,
+     *   last_status: ?string,
+     *   recent: list<array{
+     *     id: int,
+     *     public_ref: string,
+     *     status: string,
+     *     decided_at: ?string,
+     *     submitted_at: ?string,
+     *     total_qty: float,
+     *     line_count: int,
+     *     lines: list<array{inventory_id: string, product_description: ?string, qty: float}>
+     *   }>,
+     *   by_sku: array<string, array{
+     *     inventory_id: string,
+     *     product_description: ?string,
+     *     qty: float,
+     *     date: ?string,
+     *     public_ref: ?string
+     *   }>
+     * }
+     */
+    public function priorFolSummaryForCustomer(string $customerId, array $inventoryIds = [], int $recentLimit = 5): array
+    {
+        $recentLimit = max(1, min($recentLimit, 15));
+        $issuedStatuses = ['approved_final', 'ready_for_invoicing', 'so_linked', 'invoiced', 'fulfilled'];
+
+        $summary = DB::table('fol_requests as r')
+            ->leftJoin('fol_request_lines as l', 'l.fol_request_id', '=', 'r.id')
+            ->where('r.customer_acumatica_id', $customerId)
+            ->whereIn('r.status', $issuedStatuses)
+            ->selectRaw('
+                COUNT(DISTINCT r.id) as request_count,
+                COALESCE(SUM(l.qty_requested), 0) as total_qty,
+                MAX(COALESCE(r.decided_at, r.submitted_at, r.updated_at)) as last_issue_at
+            ')
+            ->first();
+
+        $last = FolRequest::query()
+            ->where('customer_acumatica_id', $customerId)
+            ->whereIn('status', $issuedStatuses)
+            ->orderByRaw('COALESCE(decided_at, submitted_at, updated_at) DESC')
+            ->orderByDesc('id')
+            ->first(['id', 'public_ref', 'status', 'decided_at', 'submitted_at']);
+
+        $recentRows = FolRequest::query()
+            ->with(['lines' => fn ($q) => $q->orderBy('line_no')])
+            ->where('customer_acumatica_id', $customerId)
+            ->whereIn('status', $issuedStatuses)
+            ->orderByRaw('COALESCE(decided_at, submitted_at, updated_at) DESC')
+            ->orderByDesc('id')
+            ->limit($recentLimit)
+            ->get();
+
+        $recent = $recentRows->map(static function (FolRequest $r): array {
+            $lines = $r->lines->map(static fn ($line) => [
+                'inventory_id' => (string) $line->inventory_id,
+                'product_description' => $line->product_description ? (string) $line->product_description : null,
+                'qty' => round((float) $line->qty_requested, 4),
+            ])->values()->all();
+
+            return [
+                'id' => (int) $r->id,
+                'public_ref' => (string) $r->public_ref,
+                'status' => (string) $r->status,
+                'decided_at' => $r->decided_at ? Carbon::parse($r->decided_at)->toDateString() : null,
+                'submitted_at' => $r->submitted_at ? Carbon::parse($r->submitted_at)->toDateString() : null,
+                'total_qty' => round((float) $r->lines->sum(fn ($l) => (float) $l->qty_requested), 4),
+                'line_count' => $r->lines->count(),
+                'lines' => $lines,
+            ];
+        })->values()->all();
+
+        // Per-SKU lifetime issued qty + last issue date/ref.
+        $skuQuery = DB::table('fol_request_lines as l')
+            ->join('fol_requests as r', 'r.id', '=', 'l.fol_request_id')
+            ->where('r.customer_acumatica_id', $customerId)
+            ->whereIn('r.status', $issuedStatuses)
+            ->selectRaw('
+                l.inventory_id,
+                MAX(l.product_description) as product_description,
+                COALESCE(SUM(l.qty_requested), 0) as qty,
+                MAX(COALESCE(r.decided_at, r.submitted_at, r.updated_at)) as last_date
+            ')
+            ->groupBy('l.inventory_id')
+            ->orderByDesc('qty');
+
+        if ($inventoryIds !== []) {
+            // Always include cart lines, even if qty 0 — filled below.
+            $skuQuery->whereIn('l.inventory_id', $inventoryIds);
+        } else {
+            $skuQuery->limit(20);
+        }
+
+        $bySku = [];
+        foreach ($skuQuery->get() as $row) {
+            $inv = (string) $row->inventory_id;
+            $lastDate = $row->last_date ? Carbon::parse($row->last_date)->toDateString() : null;
+            $lastRef = DB::table('fol_request_lines as l')
+                ->join('fol_requests as r', 'r.id', '=', 'l.fol_request_id')
+                ->where('r.customer_acumatica_id', $customerId)
+                ->whereIn('r.status', $issuedStatuses)
+                ->where('l.inventory_id', $inv)
+                ->orderByRaw('COALESCE(r.decided_at, r.submitted_at, r.updated_at) DESC')
+                ->orderByDesc('r.id')
+                ->value('r.public_ref');
+            $bySku[$inv] = [
+                'inventory_id' => $inv,
+                'product_description' => $row->product_description ? (string) $row->product_description : null,
+                'qty' => round((float) $row->qty, 4),
+                'date' => $lastDate,
+                'public_ref' => $lastRef ? (string) $lastRef : null,
+            ];
+        }
+
+        // Ensure every cart SKU appears even when never issued.
+        foreach ($inventoryIds as $invId) {
+            $inv = (string) $invId;
+            if (! isset($bySku[$inv])) {
+                $bySku[$inv] = [
+                    'inventory_id' => $inv,
+                    'product_description' => null,
+                    'qty' => 0.0,
+                    'date' => null,
+                    'public_ref' => null,
+                ];
+            }
+        }
+
+        return [
+            'request_count' => (int) ($summary->request_count ?? 0),
+            'total_qty_issued' => round((float) ($summary->total_qty ?? 0), 4),
+            'last_issue_date' => $summary?->last_issue_at
+                ? Carbon::parse($summary->last_issue_at)->toDateString()
+                : null,
+            'last_public_ref' => $last?->public_ref ? (string) $last->public_ref : null,
+            'last_status' => $last?->status ? (string) $last->status : null,
+            'recent' => $recent,
+            'by_sku' => $bySku,
+        ];
+    }
+
+    /**
+     * Last N sales orders for a customer — all SKUs / full document total.
+     * Used on New FOL to show customer purchasing pattern.
+     *
+     * @return list<array{order_nbr: string, order_date: ?string, order_total: float, status: ?string, order_type: ?string}>
+     */
+    public function recentSalesOrdersForCustomer(string $customerId, int $limit = 3): array
+    {
+        $limit = max(1, min($limit, 10));
+
+        $orders = AcumaticaSalesOrder::query()
+            ->where('customer_acumatica_id', $customerId)
+            ->where(function ($q) {
+                $q->where('order_type', AcumaticaSalesOrder::TYPE_SALES_ORDER)
+                    ->orWhereNull('order_type')
+                    ->orWhere('order_type', 'SO');
+            })
+            ->orderByDesc('order_date')
+            ->orderByDesc('acumatica_order_nbr')
+            ->limit($limit)
+            ->get(['acumatica_order_nbr', 'order_date', 'order_total', 'status', 'order_type']);
+
+        return $orders->map(static function (AcumaticaSalesOrder $o): array {
+            return [
+                'order_nbr' => (string) $o->acumatica_order_nbr,
+                'order_date' => $o->order_date
+                    ? Carbon::parse($o->order_date)->toDateString()
+                    : null,
+                'order_total' => round((float) ($o->order_total ?? 0), 2),
+                'status' => $o->status ? (string) $o->status : null,
+                'order_type' => $o->order_type ? (string) $o->order_type : null,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Full-document (not FOL-SKU filtered) 6-month customer purchasing summary.
+     *
+     * @return array{
+     *   months: int,
+     *   revenue_total: float,
+     *   order_count: int,
+     *   aov: float,
+     *   orders_per_month: float,
+     *   avg_days_between_orders: ?float,
+     *   frequency_label: string,
+     *   first_order_date: ?string,
+     *   last_order_date: ?string
+     * }
+     */
+    public function customerSixMonthSummary(string $customerId, int $months = 6): array
+    {
+        $months = max(1, min($months, 24));
+        $from = now('Africa/Nairobi')->subMonthsNoOverflow($months)->startOfDay();
+
+        $orders = AcumaticaSalesOrder::query()
+            ->where('customer_acumatica_id', $customerId)
+            ->where(function ($q) {
+                $q->where('order_type', AcumaticaSalesOrder::TYPE_SALES_ORDER)
+                    ->orWhereNull('order_type')
+                    ->orWhere('order_type', 'SO');
+            })
+            ->where('order_date', '>=', $from)
+            ->orderBy('order_date')
+            ->get(['order_date', 'order_total']);
+
+        $orderCount = $orders->count();
+        $revenue = round((float) $orders->sum(fn ($o) => (float) ($o->order_total ?? 0)), 2);
+        $aov = $orderCount > 0 ? round($revenue / $orderCount, 2) : 0.0;
+        $ordersPerMonth = $orderCount > 0 ? round($orderCount / $months, 2) : 0.0;
+
+        $avgDaysBetween = null;
+        $firstDate = null;
+        $lastDate = null;
+        if ($orderCount >= 1) {
+            $firstDate = Carbon::parse($orders->first()->order_date)->toDateString();
+            $lastDate = Carbon::parse($orders->last()->order_date)->toDateString();
+        }
+        if ($orderCount >= 2) {
+            $gaps = [];
+            $prev = null;
+            foreach ($orders as $o) {
+                $d = Carbon::parse($o->order_date)->startOfDay();
+                if ($prev !== null) {
+                    $gaps[] = $prev->diffInDays($d);
+                }
+                $prev = $d;
+            }
+            if ($gaps !== []) {
+                $avgDaysBetween = round(array_sum($gaps) / count($gaps), 1);
+            }
+        }
+
+        return [
+            'months' => $months,
+            'revenue_total' => $revenue,
+            'order_count' => $orderCount,
+            'aov' => $aov,
+            'orders_per_month' => $ordersPerMonth,
+            'avg_days_between_orders' => $avgDaysBetween,
+            'frequency_label' => $this->formatOrderFrequencyLabel($orderCount, $months, $ordersPerMonth, $avgDaysBetween),
+            'first_order_date' => $firstDate,
+            'last_order_date' => $lastDate,
+        ];
+    }
+
+    private function formatOrderFrequencyLabel(
+        int $orderCount,
+        int $months,
+        float $ordersPerMonth,
+        ?float $avgDaysBetween,
+    ): string {
+        if ($orderCount <= 0) {
+            return 'No orders in window';
+        }
+        if ($orderCount === 1) {
+            return '1 order in '.$months.' months';
+        }
+
+        // Prefer cadence from average gap when we have multiple orders.
+        if ($avgDaysBetween !== null && $avgDaysBetween > 0) {
+            if ($avgDaysBetween <= 2.5) {
+                return 'Daily / every ~'.max(1, (int) round($avgDaysBetween)).' day'.((int) round($avgDaysBetween) === 1 ? '' : 's');
+            }
+            if ($avgDaysBetween <= 4.5) {
+                return 'Every ~'.(int) round($avgDaysBetween).' days';
+            }
+            if ($avgDaysBetween <= 9) {
+                return 'About weekly (~'.(int) round($avgDaysBetween).' days)';
+            }
+            if ($avgDaysBetween <= 18) {
+                return 'About every 2 weeks (~'.(int) round($avgDaysBetween).' days)';
+            }
+            if ($avgDaysBetween <= 40) {
+                $opm = max(0.1, round(30 / $avgDaysBetween, 1));
+
+                return $opm.' order'.($opm == 1.0 ? '' : 's').'/month';
+            }
+            if ($avgDaysBetween <= 75) {
+                return 'About every 2 months';
+            }
+
+            return 'Every ~'.(int) round($avgDaysBetween / 30).' months';
+        }
+
+        // Fallback: MoM rate from count / window.
+        if ($ordersPerMonth >= 0.95) {
+            $rounded = round($ordersPerMonth, 1);
+            if (abs($rounded - round($rounded)) < 0.05) {
+                $rounded = (int) round($rounded);
+            }
+
+            return $rounded.' order'.($rounded == 1 ? '' : 's').'/month';
+        }
+
+        return $orderCount.' order'.($orderCount === 1 ? '' : 's').' in '.$months.' months';
     }
 
     public function priorIssued(string $customerId, string $inventoryId): array
@@ -725,6 +1405,42 @@ class FolRequestService
             if (! $item || ! (bool) $item->is_fol_eligible) {
                 throw ValidationException::withMessages(["lines.{$index}.inventory_id" => ['Inventory item is not FOL eligible.']]);
             }
+            if ($item->fol_category === 'consumable') {
+                throw ValidationException::withMessages(["lines.{$index}.inventory_id" => ['A consumable cannot be requested as free-on-loan equipment.']]);
+            }
+        }
+    }
+
+    /** @param list<string> $inventoryIds */
+    private function ensureConsumables(array $inventoryIds): void
+    {
+        if ($inventoryIds === []) {
+            return;
+        }
+
+        $items = AcumaticaInventoryItem::query()
+            ->whereIn('inventory_id', $inventoryIds)
+            ->get()
+            ->keyBy('inventory_id');
+
+        foreach ($inventoryIds as $index => $inventoryId) {
+            $item = $items->get($inventoryId);
+            if (! $item || ! $item->is_fol_eligible || ! in_array($item->fol_category, ['consumable', 'both'], true)) {
+                throw ValidationException::withMessages([
+                    "consumable_inventory_ids.{$index}" => ['Inventory item is not classified as an FOL consumable.'],
+                ]);
+            }
+        }
+    }
+
+    /** @param array<int, array<string, mixed>> $lines @param list<string> $inventoryIds */
+    private function ensureDistinctFolPurposes(array $lines, array $inventoryIds): void
+    {
+        $lineIds = array_map(fn (array $line) => (string) ($line['inventory_id'] ?? ''), $lines);
+        if (array_intersect($lineIds, $inventoryIds) !== []) {
+            throw ValidationException::withMessages([
+                'consumable_inventory_ids' => ['The same SKU cannot be both free equipment and supporting consumable on one request.'],
+            ]);
         }
     }
 
@@ -754,7 +1470,8 @@ class FolRequestService
 
     private function canReadAll(User $user): bool
     {
-        return $this->isAdministrator($user)
+        return $this->accessTier->hasUnrestrictedBusinessAccess($user)
+            || $this->isAdministrator($user)
             || in_array($user->org_level, ['executive', 'c_suite'], true)
             || $this->userCan($user, 'kp.fol.report');
     }
@@ -823,59 +1540,108 @@ class FolRequestService
 
     private function notifyConsultant(FolRequest $request, string $template, string $subject, array $context = []): void
     {
-        $this->sendMail($request, array_filter([$request->sales_consultant_email]), $template, "{$request->public_ref}: {$subject}", $context);
+        // Consultant + admin CC watchers (admin always gets workflow steps).
+        $recipients = array_filter([
+            $request->sales_consultant_email,
+            ...$this->settings->ccWatcherEmails(),
+        ]);
+        $this->sendMail($request, $recipients, $template, "{$request->public_ref}: {$subject}", $context);
     }
 
     private function notifyInvoicing(FolRequest $request, string $template, string $subject, array $context = []): void
     {
-        // Roles are admin-configurable (Fol settings → invoicing_roles).
-        $roles = $this->settings->invoicingRoles();
-        $includeSuperAdmin = in_array('Administrator', $roles, true);
-        $recipients = User::query()
-            ->where('is_active', true)
-            ->where(function ($query) use ($roles, $includeSuperAdmin) {
-                $query->whereIn('role', $roles)
-                    ->orWhereHas('roles', fn ($roleQuery) => $roleQuery->whereIn('name', $roles));
-                if ($includeSuperAdmin) {
-                    $query->orWhere('is_super_admin', true);
-                }
-            })
-            ->pluck('email')
-            ->all();
-
-        $recipients = [...$recipients, ...$this->settings->ccWatcherEmails()];
+        // Do not blast every user in invoicing roles. Notify only admin-added CC
+        // watcher emails (and, when configured, named users can be added there).
+        // Full role fan-out is disabled during testing and until explicitly needed.
+        $recipients = $this->settings->ccWatcherEmails();
 
         $this->sendMail($request, $recipients, $template, "{$request->public_ref}: {$subject}", $context);
     }
 
-    /** @return list<string> */
+    /**
+     * Stage approval emails go to:
+     *  - people attached to the stage (user_ids), and
+     *  - admin-added CC watcher emails (always receive every step).
+     * Role membership is for who may approve in-app — not for mass email.
+     *
+     * @return list<string>
+     */
     private function stageRecipients(FolApprovalStage $stage): array
     {
         $emails = [];
-        if (($stage->user_ids ?? []) !== []) {
-            $emails = User::query()->whereIn('id', $stage->user_ids)->where('is_active', true)->pluck('email')->all();
-        }
 
-        if (($stage->role_names ?? []) !== []) {
-            $roleEmails = User::query()
+        // Attached people only (named users on the stage).
+        if (($stage->user_ids ?? []) !== []) {
+            $emails = User::query()
+                ->whereIn('id', $stage->user_ids)
                 ->where('is_active', true)
-                ->where(function ($query) use ($stage) {
-                    $query->whereIn('role', $stage->role_names)
-                        ->orWhereHas('roles', fn ($roleQuery) => $roleQuery->whereIn('name', $stage->role_names));
-                })
                 ->pluck('email')
                 ->all();
-            $emails = [...$emails, ...$roleEmails];
         }
 
+        // Admin-configured CC list (e.g. commercialtechlead@kimfay.com).
         $emails = [...$emails, ...$this->settings->ccWatcherEmails()];
 
-        return array_values(array_unique(array_filter($emails)));
+        return array_values(array_unique(array_filter(array_map(
+            static fn ($e) => strtolower(trim((string) $e)),
+            $emails,
+        ))));
     }
 
     /** @param list<string> $recipients */
     private function sendMail(FolRequest $request, array $recipients, string $template, string $subject, array $context = []): void
     {
+        // FOL-N1..FOL-N6 map from template N1..N6. Missing rule = send (workflow default on).
+        $ruleKey = 'FOL-'.$template;
+        $rule = NotificationRule::query()->where('rule_key', $ruleKey)->first();
+        if ($rule && ! $rule->is_enabled) {
+            Log::info('fol_email_skipped_rule_disabled', [
+                'rule_key' => $ruleKey,
+                'public_ref' => $request->public_ref,
+                'template' => $template,
+            ]);
+
+            return;
+        }
+
+        $intended = array_values(array_unique(array_filter(array_map(
+            static fn ($e) => strtolower(trim((string) $e)),
+            $recipients,
+        ))));
+
+        // Testing: only the admin testing mailbox receives FOL mail.
+        if ((bool) config('fol.mail_testing_mode', true)) {
+            $testingTo = strtolower(trim((string) config('fol.mail_testing_recipient', 'commercialtechlead@kimfay.com')));
+            if ($testingTo === '') {
+                Log::warning('fol_email_skipped_testing_recipient_empty', [
+                    'public_ref' => $request->public_ref,
+                    'template' => $template,
+                    'intended' => $intended,
+                ]);
+
+                return;
+            }
+
+            Log::info('fol_email_testing_mode_redirect', [
+                'public_ref' => $request->public_ref,
+                'template' => $template,
+                'intended' => $intended,
+                'actual' => [$testingTo],
+            ]);
+            $recipients = [$testingTo];
+        } else {
+            $recipients = $intended;
+        }
+
+        if ($recipients === []) {
+            Log::info('fol_email_skipped_no_recipients', [
+                'public_ref' => $request->public_ref,
+                'template' => $template,
+            ]);
+
+            return;
+        }
+
         foreach ($recipients as $recipient) {
             Mail::to($recipient)->send(new FolRequestMail($request, $template, $subject, $context));
         }
@@ -883,6 +1649,8 @@ class FolRequestService
         $this->event($request, 'email_sent', null, null, [
             'template' => $template,
             'to' => $recipients,
+            'intended' => $intended,
+            'testing_mode' => (bool) config('fol.mail_testing_mode', true),
             'subject' => $subject,
         ]);
     }

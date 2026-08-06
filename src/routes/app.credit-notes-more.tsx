@@ -21,7 +21,7 @@ import { useSyncCreditNotesAndMore } from "@/hooks/useOperations";
 import { DATE_PRESETS, type DatePresetId, resolveDatePreset } from "@/lib/date-presets";
 
 export const Route = createFileRoute("/app/credit-notes-more")({
-  head: () => ({ meta: [{ title: "Credit Notes & More — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Credit Notes & More — Kim-Fay Sight" }] }),
   component: CreditNotesMorePage,
 });
 
@@ -234,8 +234,8 @@ function CreditNotesMorePage() {
           <Select value={datePreset} onValueChange={(v) => applyDatePreset(v as DatePresetId)}>
             <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="Dates" /></SelectTrigger>
             <SelectContent>
-              {DATE_PRESETS.filter((preset) => preset.id !== "last_30_days").map((preset) => (
-                <SelectItem key={preset.id} value={preset.id}>{preset.id === "custom" ? "Date range" : preset.label}</SelectItem>
+              {DATE_PRESETS.map((preset) => (
+                <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>

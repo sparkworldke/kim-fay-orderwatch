@@ -8,7 +8,12 @@ export interface OrderFilters {
   date_from?: string;
   date_to?: string;
   customer_id?: string;
+  customer_ids?: string[];
+  parent_customer_ids?: string[];
+  brands?: string[];
+  segments?: Array<"KP" | "CS">;
   rep_code?: string;
+  rep_codes?: string[];
   status?: string;
   match_status?: string;
   has_email?: boolean;
@@ -27,7 +32,12 @@ export function useOrders(filters: OrderFilters = {}) {
   if (filters.date_from)   params.set("date_from", filters.date_from);
   if (filters.date_to)     params.set("date_to", filters.date_to);
   if (filters.customer_id) params.set("customer_id", filters.customer_id);
+  filters.customer_ids?.forEach((value) => params.append("customer_ids[]", value));
+  filters.parent_customer_ids?.forEach((value) => params.append("parent_customer_ids[]", value));
+  filters.brands?.forEach((value) => params.append("brands[]", value));
+  filters.segments?.forEach((value) => params.append("segments[]", value));
   if (filters.rep_code)    params.set("rep_code", filters.rep_code);
+  filters.rep_codes?.forEach((value) => params.append("rep_codes[]", value));
   if (filters.status)       params.set("status", filters.status);
   if (filters.match_status) params.set("match_status", filters.match_status);
   if (filters.has_email === true) params.set("has_email", "1");
@@ -74,12 +84,44 @@ export interface OrderStats {
   by_type?: Record<string, number>;
 }
 
+export type OrderFilterOptions = {
+  segments: Array<{ id: "KP" | "CS"; name: string }>;
+  brands: string[];
+  parents: Array<{
+    id: string;
+    name: string;
+    segment: "KP" | "CS";
+    outlets: Array<{ id: string; name: string }>;
+  }>;
+  consultant_groups: ConsultantGroup[];
+};
+
+export type ConsultantGroup = {
+  id: string;
+  name: string;
+  is_hod: boolean;
+  members: Array<{ id: number; name: string; rep_code: string }>;
+};
+
+export function useOrderFilterOptions() {
+  return useQuery({
+    queryKey: ["orders", "filter-options"],
+    queryFn: () => apiFetch<OrderFilterOptions>("orders/filter-options"),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useOrderStats(filters: OrderFilters = {}) {
   const params = new URLSearchParams();
   if (filters.q)           params.set("q", filters.q);
   if (filters.date_from)   params.set("date_from", filters.date_from);
   if (filters.date_to)     params.set("date_to", filters.date_to);
   if (filters.customer_id) params.set("customer_id", filters.customer_id);
+  filters.customer_ids?.forEach((value) => params.append("customer_ids[]", value));
+  filters.parent_customer_ids?.forEach((value) => params.append("parent_customer_ids[]", value));
+  filters.brands?.forEach((value) => params.append("brands[]", value));
+  filters.segments?.forEach((value) => params.append("segments[]", value));
+  filters.rep_codes?.forEach((value) => params.append("rep_codes[]", value));
   if (filters.status)      params.set("status", filters.status);
   if (filters.order_type)  params.set("order_type", filters.order_type);
   if (filters.document_type) params.set("document_type", filters.document_type);

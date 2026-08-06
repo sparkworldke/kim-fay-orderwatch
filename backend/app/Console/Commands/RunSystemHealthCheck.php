@@ -55,6 +55,19 @@ class RunSystemHealthCheck extends Command
         [$body, $overallStatus] = $this->buildReport();
         $subject = "OrderWatch System Health [{$overallStatus}] — " . now()->format('D d M Y');
 
+        // Only email on CRITICAL to reduce noise. HEALTHY/DEGRADED are logged only.
+        if ($overallStatus !== 'CRITICAL') {
+            Log::info('system_health_report_skipped_non_critical', [
+                'cron_run_log_id' => $run->id,
+                'overall_status' => $overallStatus,
+            ]);
+
+            return [
+                'status' => 'success',
+                'output' => "System health checked (no email): {$overallStatus}. Email only sent when CRITICAL.",
+            ];
+        }
+
         try {
             Mail::to($recipient)->send(new SyncMonitorAlertMail($subject, $body));
 

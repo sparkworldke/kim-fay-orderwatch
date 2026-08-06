@@ -34,7 +34,7 @@ import { useAuth } from "@/lib/auth";
 import type { AcumaticaShippingZone } from "@/types/admin";
 
 export const Route = createFileRoute("/app/zones")({
-  head: () => ({ meta: [{ title: "Zones — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Zones — Kim-Fay Sight" }] }),
   component: ZonesPage,
 });
 

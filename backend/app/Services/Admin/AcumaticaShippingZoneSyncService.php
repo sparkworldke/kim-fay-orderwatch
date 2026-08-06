@@ -18,6 +18,7 @@ class AcumaticaShippingZoneSyncService
         ?int $triggeredByUserId = null,
         bool $fromCustomersOnly = false,
         bool $allowCustomerFallback = true,
+        array $filters = [],
     ): AcumaticaSyncLog {
         $run = AcumaticaSyncLog::create([
             'sync_type' => 'shipping_zones',
@@ -73,10 +74,10 @@ class AcumaticaShippingZoneSyncService
                 }
             }
 
-            $filters = [
+            $filters = array_merge($filters, [
                 'source' => $source,
                 'master_unavailable' => $masterUnavailable,
-            ];
+            ]);
 
             $run->update([
                 'ended_at' => now(),

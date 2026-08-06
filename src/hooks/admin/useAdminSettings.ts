@@ -201,7 +201,8 @@ export function useSyncCustomers() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => apiFetch<{ sync_run: AcumaticaSyncLog }>("admin/acumatica/sync/customers", { method: "POST" }),
+    mutationFn: (payload: { date_from: string; date_to: string }) =>
+      apiFetch<{ sync_run: AcumaticaSyncLog }>("admin/acumatica/sync/customers", { method: "POST", body: payload }),
     onSuccess: (result) => {
       const run = result.sync_run;
       if (run.status === "completed") {
@@ -222,12 +223,33 @@ export function useSyncOrders() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: { date_from: string; date_to: string }) =>
-      apiFetch<{ sync_run: AcumaticaSyncLog }>("admin/acumatica/sync/orders", { method: "POST", body: payload }),
+    mutationFn: (payload: {
+      date_from: string;
+      date_to: string;
+      /** full = import all SO in range; updates_only = recheck existing local SOs only */
+      mode?: "full" | "updates_only";
+      updates_only?: boolean;
+      max_orders?: number;
+    }) =>
+      apiFetch<{ sync_run: AcumaticaSyncLog; mode?: string }>("admin/acumatica/sync/orders", {
+        method: "POST",
+        body: payload,
+        timeoutMs: 300_000,
+      }),
     onSuccess: (result) => {
       const run = result.sync_run;
+      const updatesOnly = result.mode === "updates_only" || run.sync_type === "sales_order_status_updates";
       if (run.status === "completed") {
-        toast.success(`Order sync complete — ${run.success_count} synced, ${run.failed_count} failed`);
+        if (updatesOnly) {
+          const checked = Number(run.filters?.status_comparison_count ?? run.record_count ?? 0);
+          const updated = Number(run.filters?.status_updates ?? 0);
+          const deleted = Number(run.filters?.orders_deleted_missing_from_acumatica ?? 0);
+          toast.success(
+            `Order updates check complete — ${updated} updated, ${deleted} removed, ${checked} checked`,
+          );
+        } else {
+          toast.success(`Order sync complete — ${run.success_count} synced, ${run.failed_count} failed`);
+        }
       } else if (run.status === "stopped") {
         toast.warning(run.error_message ?? "Order sync stopped.");
       } else {
@@ -244,7 +266,7 @@ export function useSyncCustomerOrders() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: { customer_ids: string[] }) =>
+    mutationFn: (payload: { customer_ids: string[]; date_from: string; date_to: string }) =>
       apiFetch<{ sync_run: AcumaticaSyncLog }>("admin/acumatica/sync/customer-orders", { method: "POST", body: payload }),
     onSuccess: (result) => {
       const run = result.sync_run;
@@ -506,9 +528,9 @@ export function useUserSessions(userId: number | null, page = 1) {
 
 export function useBrandOptions() {
   return useQuery({
-    queryKey: [...adminKey, "brand-options"],
+    queryKey: [...adminKey, "brands"],
     queryFn: () =>
-      apiFetch<{ partner_brands: string[] }>("admin/brand-options"),
+      apiFetch<{ data: Array<{ id: number; name: string; ownership: string | null; is_active: boolean; partner_group?: { id: number; name: string } | null }> }>("admin/brands"),
   });
 }
 
@@ -516,10 +538,10 @@ export function useSyncBrandAssignments() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userId, brands }: { userId: number; brands: string[] }) =>
+    mutationFn: ({ userId, brand_ids }: { userId: number; brand_ids: number[] }) =>
       apiFetch<{ message: string; brands: string[] }>(`admin/users/${userId}/brand-assignments`, {
         method: "PUT",
-        body: { brands },
+        body: { brand_ids },
       }),
     onSuccess: () => {
       toast.success("Brand assignments saved");
@@ -570,13 +592,15 @@ export function useSyncCustomerAssignments() {
     mutationFn: ({
       userId,
       customer_acumatica_ids,
+      assignment_type,
     }: {
       userId: number;
       customer_acumatica_ids: string[];
+      assignment_type: "owner" | "servicing";
     }) =>
       apiFetch<{ message: string; assignments: CustomerAssignmentRow[] }>(
         `admin/users/${userId}/customer-assignments`,
-        { method: "PUT", body: { customer_acumatica_ids } },
+        { method: "PUT", body: { customer_acumatica_ids, assignment_type } },
       ),
     onSuccess: (_, vars) => {
       toast.success("Customer assignments saved");
@@ -667,9 +691,10 @@ export function useApplyCustomerAssignmentBatch() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (batchId: number) =>
+    mutationFn: ({ batchId, assignment_type }: { batchId: number; assignment_type: "owner" | "servicing" }) =>
       apiFetch<CustomerAssignmentBatch>(`admin/customer-assignments/batches/${batchId}/apply`, {
         method: "POST",
+        body: { assignment_type },
         timeoutMs: 300_000,
       }),
     onSuccess: (batch) => {
@@ -1021,7 +1046,16 @@ export interface MatchReviewEmail {
   match_reason_codes: string[] | null;
   match_rule_version: string | null;
   matched_order: AcumaticaSalesOrder | null;
-  attachments: Array<{ id: number; name: string | null; extraction_status: string; extraction_confidence: number | null; extraction_error: string | null }>;
+  attachments: Array<{
+    id: number;
+    name: string | null;
+    content_type?: string | null;
+    size?: number | null;
+    extraction_status: string;
+    extraction_confidence: number | null;
+    extraction_error: string | null;
+    extracted_text?: string | null;
+  }>;
 }
 
 export function usePendingMatchReviews() {
@@ -1044,11 +1078,43 @@ export function useReviewMatch() {
   });
 }
 
-export function useAuditLogs() {
+export function useAuditLogs(params?: {
+  page?: number;
+  q?: string;
+  start_date?: string;
+  end_date?: string;
+}) {
+  const page = params?.page ?? 1;
+  const q = params?.q?.trim() ?? "";
+  const start = params?.start_date ?? "";
+  const end = params?.end_date ?? "";
+  const qs = new URLSearchParams();
+  qs.set("page", String(page));
+  if (q) qs.set("q", q);
+  if (start) qs.set("start_date", start);
+  if (end) qs.set("end_date", end);
+
   return useQuery({
-    queryKey: [...adminKey, "audit-logs"],
-    queryFn: () => apiFetch<PaginatedResponse<AuditLogEntry>>("admin/audit-logs"),
+    queryKey: [...adminKey, "audit-logs", page, q, start, end],
+    queryFn: () => apiFetch<PaginatedResponse<AuditLogEntry>>(`admin/audit-logs?${qs.toString()}`),
   });
+}
+
+export async function exportAuditActivityExcel(params?: {
+  start_date?: string;
+  end_date?: string;
+  actor_user_id?: number;
+}): Promise<void> {
+  const { downloadApiFile } = await import("@/lib/api");
+  const qs = new URLSearchParams();
+  if (params?.start_date) qs.set("start_date", params.start_date);
+  if (params?.end_date) qs.set("end_date", params.end_date);
+  if (params?.actor_user_id) qs.set("actor_user_id", String(params.actor_user_id));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  await downloadApiFile(
+    `admin/audit-logs/export${suffix}`,
+    `user-login-activity-${new Date().toISOString().slice(0, 10)}.xlsx`,
+  );
 }
 
 export function useCronJobs() {
@@ -1143,19 +1209,75 @@ export function useUpdateDailyReportConfig() {
   });
 }
 
+type DailyReportSendResult = {
+  ok?: boolean;
+  message: string;
+  run: DailyReportRun | null;
+};
+
+function toastDailyReportResult(result: DailyReportSendResult) {
+  const detail = result.run?.error_summary?.trim();
+  if (result.ok === false || result.run?.status === "failed" || result.run?.status === "skipped") {
+    toast.error(detail ? `${result.message}` : result.message);
+    return;
+  }
+  if (result.run?.status === "partial") {
+    toast.warning(result.message);
+    return;
+  }
+  toast.success(result.message);
+}
+
 export function useTestDailyReport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (routing?: { send_to?: string[]; cc?: string[]; recipients?: string[] }) =>
-      apiFetch<{ message: string; run: DailyReportRun }>("admin/daily-reports/test-send", {
+    mutationFn: (routing?: {
+      send_to?: string[];
+      cc?: string[];
+      recipients?: string[];
+      report_date?: string;
+    }) =>
+      apiFetch<DailyReportSendResult>("admin/daily-reports/test-send", {
         method: "POST",
         body: routing ? routing : {},
+        timeoutMs: 180_000,
       }),
     onSuccess: (result) => {
-      toast.success(result.message);
+      toastDailyReportResult(result);
       qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
     },
-    onError: showError,
+    onError: (error) => {
+      showError(error);
+      qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
+    },
+  });
+}
+
+/** Send (or resend) the daily report for a selected report date, e.g. 2026-07-16. */
+export function useSendDailyReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      report_date: string;
+      force?: boolean;
+      send_to?: string[];
+      cc?: string[];
+      recipients?: string[];
+    }) =>
+      apiFetch<DailyReportSendResult>("admin/daily-reports/send", {
+        method: "POST",
+        body,
+        timeoutMs: 180_000,
+      }),
+    onSuccess: (result) => {
+      toastDailyReportResult(result);
+      qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
+    },
+    onError: (error) => {
+      showError(error);
+      // Always refresh history — a failed HTTP response may still have created a run.
+      qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
+    },
   });
 }
 
@@ -1163,12 +1285,18 @@ export function useResendDailyReport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiFetch<{ message: string; run: DailyReportRun }>("admin/daily-reports/resend-last", { method: "POST" }),
+      apiFetch<{ message: string; run: DailyReportRun }>("admin/daily-reports/resend-last", {
+        method: "POST",
+        timeoutMs: 180_000,
+      }),
     onSuccess: (result) => {
       toast.success(result.message);
       qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
     },
-    onError: showError,
+    onError: (error) => {
+      showError(error);
+      qc.invalidateQueries({ queryKey: [...adminKey, "daily-reports"] });
+    },
   });
 }
 
@@ -1224,6 +1352,9 @@ export type FolSettings = {
   consumables_months: number;
   require_attachment: boolean;
   allow_admin_on_all_stages: boolean;
+  /** Env/config: when true, all FOL emails redirect to mail_testing_recipient only. */
+  mail_testing_mode?: boolean;
+  mail_testing_recipient?: string;
   stages: FolApprovalStageConfig[];
   available_roles: string[];
   users: Array<{ id: number; name: string; email: string; role: string }>;
@@ -1234,6 +1365,101 @@ export function useFolSettings() {
   return useQuery({
     queryKey: [...adminKey, "fol-settings"],
     queryFn: () => apiFetch<FolSettings>("admin/fol/settings"),
+  });
+}
+
+export type FolProductRow = {
+  id: number;
+  inventory_id: string;
+  description: string | null;
+  is_fol_eligible: boolean;
+  fol_category: string | null;
+  default_uom: string | null;
+  qty_on_hand: string | number | null;
+};
+
+export function useFolProducts(params: { q?: string; eligible_only?: boolean; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.eligible_only) qs.set("eligible_only", "1");
+  if (params.page) qs.set("page", String(params.page));
+  qs.set("per_page", "50");
+  return useQuery({
+    queryKey: [...adminKey, "fol-products", params],
+    queryFn: () =>
+      apiFetch<{
+        data: FolProductRow[];
+        current_page: number;
+        last_page: number;
+        total: number;
+      }>(`admin/fol/products?${qs}`),
+  });
+}
+
+export function useUpdateFolProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      inventoryId,
+      is_fol_eligible,
+      fol_category,
+    }: {
+      inventoryId: string;
+      is_fol_eligible: boolean;
+      fol_category?: string | null;
+    }) =>
+      apiFetch<FolProductRow>(`admin/fol/products/${encodeURIComponent(inventoryId)}`, {
+        method: "PUT",
+        body: { is_fol_eligible, fol_category },
+      }),
+    onSuccess: () => {
+      toast.success("FOL product updated");
+      qc.invalidateQueries({ queryKey: [...adminKey, "fol-products"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useBulkUploadFolProducts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const token = getToken();
+      const form = new FormData();
+      form.append("file", file);
+      form.append("default_eligible", "1");
+      const res = await fetch(`${API_BASE_URL}/admin/fol/products/bulk-upload`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: form,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          (json as { message?: string }).message
+            || (json as { error?: string }).error
+            || `Upload failed (${res.status})`,
+        );
+      }
+      return json as {
+        message: string;
+        updated: number;
+        not_found_count: number;
+        not_found_sample: string[];
+        parse_errors: string[];
+      };
+    },
+    onSuccess: (data) => {
+      toast.success(data.message);
+      if (data.not_found_count > 0) {
+        toast.warning(`${data.not_found_count} SKU(s) not found in inventory (sync first).`);
+      }
+      qc.invalidateQueries({ queryKey: [...adminKey, "fol-products"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 }
 

@@ -26,7 +26,7 @@ import {
 } from "@/lib/sales-management";
 
 export const Route = createFileRoute("/app/sales-management")({
-  head: () => ({ meta: [{ title: "Sales Management - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Sales Management - Kim-Fay Sight" }] }),
   component: SalesManagementPage,
 });
 

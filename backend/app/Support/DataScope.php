@@ -3,9 +3,14 @@
 namespace App\Support;
 
 use App\Models\AcumaticaCustomer;
+use App\Models\AcumaticaSalesOrder;
 use App\Models\User;
+use App\Services\Team\BrandAssignmentScope;
+use App\Services\Team\CustomerAttributionService;
+use App\Services\Team\KpReportingHierarchyService;
 use App\Services\Team\OrgScopeService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -14,8 +19,8 @@ use Illuminate\Http\JsonResponse;
 class DataScope
 {
     /**
-     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
-     * @return Builder<\Illuminate\Database\Eloquent\Model>
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
      */
     public static function applyCustomerScope(Builder $query, ?User $user, string $idColumn = 'acumatica_id'): Builder
     {
@@ -23,12 +28,29 @@ class DataScope
     }
 
     /**
-     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
-     * @return Builder<\Illuminate\Database\Eloquent\Model>
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
      */
     public static function applyOrderScope(Builder $query, ?User $user, string $repColumn = 'sales_consultant_rep_code', string $customerColumn = 'customer_acumatica_id'): Builder
     {
-        return app(OrgScopeService::class)->applyOrderScope($query, $user, $customerColumn);
+        app(OrgScopeService::class)->applyOrderScope($query, $user, $customerColumn);
+
+        if ($query->getModel() instanceof AcumaticaSalesOrder) {
+            $inventoryIds = app(BrandAssignmentScope::class)->inventoryIdsForUser($user);
+            if ($inventoryIds !== null) {
+                $query->whereHas('lines', fn (Builder $lines) => $inventoryIds === []
+                    ? $lines->whereRaw('1 = 0')
+                    : $lines->whereIn('inventory_id', $inventoryIds));
+            }
+        }
+
+        return $query;
+    }
+
+    /** @return list<string>|null */
+    public static function scopedInventoryIds(?User $user): ?array
+    {
+        return app(BrandAssignmentScope::class)->inventoryIdsForUser($user);
     }
 
     public static function customerAccessible(?User $user, string $customerId, ?string $customerClass = null): bool
@@ -69,7 +91,30 @@ class DataScope
             return null;
         }
 
+        // §7.3 precedence: the mapped-only gate overrides any broad access implied
+        // by an ordinary secondary role, so it is evaluated before the org-wide
+        // short-circuit below.
         $orgScope = app(OrgScopeService::class);
+        if (app(KpReportingHierarchyService::class)->requiresPrivilegedKpOverlay($user)) {
+            $query = AcumaticaCustomer::query()->select('acumatica_id');
+            $orgScope->applyCustomerScope($query, $user);
+
+            return $query->pluck('acumatica_id')->all();
+        }
+
+        if ($orgScope->hasOrgWideAccess($user)) {
+            return null;
+        }
+
+        $attribution = app(CustomerAttributionService::class);
+        if ($attribution->isMappedOnlyConsultant($user)) {
+            return $attribution->directCustomerIds($user->id);
+        }
+
+        $attached = $orgScope->attachedPortfolioCustomerIds($user);
+        if ($attached !== null) {
+            return $attached;
+        }
 
         if (! $orgScope->appliesTo($user)) {
             return null;

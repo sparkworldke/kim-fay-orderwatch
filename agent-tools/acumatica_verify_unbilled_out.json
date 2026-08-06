@@ -1,0 +1,211 @@
+[
+  {
+    "label": "2026-07-01..2026-07-26 all open-ish",
+    "row_count": 6090,
+    "distinct_orders": 6090,
+    "status_counts": {
+      "Rejected": 66,
+      "Completed": 5531,
+      "Back Order": 53,
+      "Canceled": 58,
+      "On Hold": 48,
+      "Shipping": 325,
+      "Pending Approval": 9
+    },
+    "fields_present": [
+      "OrderTotal"
+    ],
+    "sum_unbilled_distinct": 0,
+    "orders_missing_unbilled": 6090,
+    "sample_fields": {
+      "ControlTotal": 27840.0,
+      "CreatedDate": "2026-05-08T13:09:34.87+00:00",
+      "CustomerOrder": "PO ; 108UEHM55",
+      "Date": "2026-07-10T00:00:00+00:00",
+      "DisableAutomaticDiscountUpdate": false,
+      "EffectiveDate": "2020-08-04T00:00:00+00:00",
+      "OrderNbr": "SO348319",
+      "OrderTotal": 27840.0,
+      "OrderType": "SO",
+      "OrderedQty": 5.0,
+      "Status": "Rejected",
+      "TaxTotal": 3840.0,
+      "VATExemptTotal": 0.0,
+      "VATTaxableTotal": 24000.0
+    },
+    "top_orders": []
+  },
+  {
+    "label": "2026-07-20..2026-07-26 all open-ish",
+    "row_count": 1770,
+    "distinct_orders": 1770,
+    "status_counts": {
+      "Completed": 1348,
+      "Canceled": 18,
+      "Rejected": 31,
+      "Shipping": 309,
+      "On Hold": 12,
+      "Pending Approval": 9,
+      "Back Order": 43
+    },
+    "fields_present": [
+      "OrderTotal"
+    ],
+    "sum_unbilled_distinct": 0,
+    "orders_missing_unbilled": 1770,
+    "sample_fields": {
+      "ControlTotal": 98463.56,
+      "CreatedDate": "2026-06-09T11:02:12.09+00:00",
+      "CustomerOrder": "PO ; 18170",
+      "Date": "2026-07-20T00:00:00+00:00",
+      "DisableAutomaticDiscountUpdate": false,
+      "EffectiveDate": "2020-08-04T00:00:00+00:00",
+      "OrderNbr": "SO355646",
+      "OrderTotal": 98463.56,
+      "OrderType": "SO",
+      "OrderedQty": 33.0,
+      "Status": "Completed",
+      "TaxTotal": 13581.18,
+      "VATExemptTotal": 0.0,
+      "VATTaxableTotal": 84882.38
+    },
+    "top_orders": []
+  },
+  {
+    "label": "2026-07-01..2026-07-26 status=Back Order",
+    "row_count": 53,
+    "distinct_orders": 53,
+    "status_counts": {
+      "Back Order": 53
+    },
+    "fields_present": [
+      "OrderTotal"
+    ],
+    "sum_unbilled_distinct": 0,
+    "orders_missing_unbilled": 53,
+    "sample_fields": {
+      "ControlTotal": 17.4,
+      "CreatedDate": "2026-07-01T08:30:21.277+00:00",
+      "CustomerOrder": "PO C ; 5387",
+      "Date": "2026-07-01T00:00:00+00:00",
+      "DisableAutomaticDiscountUpdate": false,
+      "EffectiveDate": "2020-08-04T00:00:00+00:00",
+      "OrderNbr": "SO361051",
+      "OrderTotal": 17.4,
+      "OrderType": "SO",
+      "OrderedQty": 150.0,
+      "Status": "Back Order",
+      "TaxTotal": 2.4,
+      "VATExemptTotal": 0.0,
+      "VATTaxableTotal": 15.0
+    },
+    "top_orders": []
+  },
+  {
+    "label": "2026-07-20..2026-07-26 status=Back Order",
+    "row_count": 43,
+    "distinct_orders": 43,
+    "status_counts": {
+      "Back Order": 43
+    },
+    "fields_present": [
+      "OrderTotal"
+    ],
+    "sum_unbilled_distinct": 0,
+    "orders_missing_unbilled": 43,
+    "sample_fields": {
+      "ControlTotal": 86083.65,
+      "CreatedDate": "2026-07-21T06:06:09.13+00:00",
+      "CustomerOrder": "PO ;",
+      "Date": "2026-07-21T00:00:00+00:00",
+      "DisableAutomaticDiscountUpdate": false,
+      "EffectiveDate": "2020-08-04T00:00:00+00:00",
+      "OrderNbr": "SO366172",
+      "OrderTotal": 86083.65,
+      "OrderType": "SO",
+      "OrderedQty": 37.0,
+      "Status": "Back Order",
+      "TaxTotal": 11873.6,
+      "VATExemptTotal": 0.0,
+      "VATTaxableTotal": 74210.05
+    },
+    "top_orders": []
+  },
+  {
+    "label": "2026-07-26..2026-07-26 all open-ish",
+    "row_count": 0,
+    "distinct_orders": 0,
+    "status_counts": {},
+    "fields_present": [],
+    "sum_unbilled_distinct": 0,
+    "orders_missing_unbilled": 0,
+    "sample_fields": {},
+    "top_orders": []
+  },
+  {
+    "label": "2026-07-25..2026-07-26 all open-ish",
+    "row_count": 217,
+    "distinct_orders": 217,
+    "status_counts": {
+      "Shipping": 188,
+      "Completed": 18,
+      "Rejected": 5,
+      "Pending Approval": 5,
+      "Back Order": 1
+    },
+    "fields_present": [
+      "OrderTotal"
+    ],
+    "sum_unbilled_distinct": 0,
+    "orders_missing_unbilled": 217,
+    "sample_fields": {
+      "ControlTotal": 27640.53,
+      "CreatedDate": "2026-07-24T21:00:59.523+00:00",
+      "CustomerOrder": "26032530",
+      "Date": "2026-07-25T00:00:00+00:00",
+      "DisableAutomaticDiscountUpdate": false,
+      "EffectiveDate": "2020-08-04T00:00:00+00:00",
+      "LPODate": "2026-07-23",
+      "LPOExpiryDateandTime": "2026-07-26T21:00:00+00:00",
+      "OrderNbr": "SO367635",
+      "OrderTotal": 27640.53,
+      "OrderType": "SO",
+      "OrderedQty": 15.0,
+      "Status": "Shipping",
+      "TaxTotal": 3812.49,
+      "VATExemptTotal": 0.0,
+      "VATTaxableTotal": 23828.04
+    },
+    "top_orders": []
+  },
+  {
+    "label": "Backorder no-space",
+    "row_count": 53,
+    "distinct_orders": 53,
+    "status_counts": {
+      "Back Order": 53
+    },
+    "fields_present": [
+      "OrderTotal"
+    ],
+    "sum_unbilled_distinct": 0,
+    "orders_missing_unbilled": 53,
+    "sample_fields": {
+      "ControlTotal": 17.4,
+      "CreatedDate": "2026-07-01T08:30:21.277+00:00",
+      "CustomerOrder": "PO C ; 5387",
+      "Date": "2026-07-01T00:00:00+00:00",
+      "DisableAutomaticDiscountUpdate": false,
+      "EffectiveDate": "2020-08-04T00:00:00+00:00",
+      "OrderNbr": "SO361051",
+      "OrderTotal": 17.4,
+      "OrderType": "SO",
+      "OrderedQty": 150.0,
+      "Status": "Back Order",
+      "TaxTotal": 2.4,
+      "VATExemptTotal": 0.0,
+      "VATTaxableTotal": 15.0
+    },
+    "top_orders": []
+  }
+]

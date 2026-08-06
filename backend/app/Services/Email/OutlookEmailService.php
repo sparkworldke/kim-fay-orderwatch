@@ -50,7 +50,7 @@ class OutlookEmailService implements EmailProviderInterface
             'client_id' => $this->clientId,
             'response_type' => 'code',
             'redirect_uri' => $this->redirectUri,
-            'scope' => 'Mail.Read offline_access',
+            'scope' => 'Mail.Read Calendars.Read offline_access',
             'response_mode' => 'query',
             'state' => $state,
         ]);
@@ -1194,7 +1194,7 @@ class OutlookEmailService implements EmailProviderInterface
                     'client_secret' => $this->clientSecret,
                     'refresh_token' => $refreshToken,
                     'grant_type' => 'refresh_token',
-                    'scope' => 'Mail.Read offline_access',
+                    'scope' => 'Mail.Read Calendars.Read offline_access',
                 ]
             );
 
@@ -1251,7 +1251,7 @@ class OutlookEmailService implements EmailProviderInterface
     {
         return (string) config(
             'services.microsoft.graph_user_agent',
-            'OrderWatch/1.0 (Kim-Fay OrderWatch; +https://orderwatch.fayshop.co.ke)',
+            'Sight/1.0 (Kim-Fay Sight; +https://sight.fayshop.co.ke)',
         );
     }
 

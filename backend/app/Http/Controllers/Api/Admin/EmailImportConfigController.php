@@ -206,8 +206,9 @@ class EmailImportConfigController extends Controller
             return;
         }
 
+        // R7 may not exist; require an explicit enabled rule before emailing.
         $rule = NotificationRule::query()->firstWhere('rule_key', 'R7');
-        if ($rule && ! $rule->is_enabled) {
+        if (! $rule || ! $rule->is_enabled) {
             return;
         }
 

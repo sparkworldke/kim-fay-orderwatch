@@ -15,7 +15,7 @@ import { PriorityBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/discrepancies")({
-  head: () => ({ meta: [{ title: "Discrepancies — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Discrepancies — Kim-Fay Sight" }] }),
   component: DiscrepanciesPage,
 });
 

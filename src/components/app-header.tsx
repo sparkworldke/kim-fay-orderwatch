@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import { LogOut, RefreshCw, Loader2, UserCog } from "lucide-react";
+import { useEffect, useState } from "react";
+import { LogOut, RefreshCw, Loader2, Maximize2, Minimize2, UserCog } from "lucide-react";
 import { LogoImage } from "@/components/logo-image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,12 +18,28 @@ import { useAuth } from "@/lib/auth";
 import { canSyncMailboxes } from "@/lib/nav-permissions";
 import { useSyncAllMailboxes } from "@/hooks/mailbox/useMailbox";
 import { useStopImpersonation } from "@/hooks/admin/useImpersonation";
+import { ReportDeliveryDialog } from "@/components/report-delivery-dialog";
 
 export function AppHeader() {
   const { session, logout, isImpersonating } = useAuth();
   const navigate  = useNavigate();
   const syncAll   = useSyncAllMailboxes();
   const stopImpersonation = useStopImpersonation();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const updateFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", updateFullscreenState);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void document.documentElement.requestFullscreen?.();
+    }
+  };
 
   const initials = (session?.name ?? "U")
     .split(" ")
@@ -41,6 +58,7 @@ export function AppHeader() {
       </div>
 
       <div className="ml-auto flex items-center gap-1">
+        <ReportDeliveryDialog defaultEmail={session?.email ?? ""} />
         {isImpersonating && (
           <Badge variant="outline" className="hidden border-amber-500/50 text-amber-800 dark:text-amber-200 sm:inline-flex">
             Impersonating
@@ -60,6 +78,19 @@ export function AppHeader() {
               : <RefreshCw className="h-4 w-4" />}
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+          title={isFullscreen ? "Exit full screen" : "Full screen"}
+        >
+          {isFullscreen ? (
+            <Minimize2 className="h-4 w-4" />
+          ) : (
+            <Maximize2 className="h-4 w-4" />
+          )}
+        </Button>
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

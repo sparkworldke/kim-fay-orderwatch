@@ -52,7 +52,7 @@ import {
 import type { TeamMember, RepCodeHistoryEntry } from "@/types/admin";
 
 export const Route = createFileRoute("/app/team")({
-  head: () => ({ meta: [{ title: "Team Members — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Team Members — Kim-Fay Sight" }] }),
   component: TeamPage,
 });
 
@@ -308,11 +308,27 @@ function TeamMemberDetailSheet({
               <DetailItem label="Name" value={member.name} />
               <DetailItem label="Email" value={member.email} />
               <DetailItem label="Role" value={member.role} />
+              <DetailItem label="Designation" value={member.designation ?? "-"} />
+              <DetailItem label="Division" value={member.division ?? "-"} />
+              <DetailItem label="Phone" value={member.phone_number ?? "-"} />
+              <DetailItem label="WhatsApp" value={member.whatsapp_number ?? "-"} />
               <DetailItem label="Org level" value={member.org_level ?? "-"} />
+              <DetailItem label="Department role" value={member.department_role ?? "-"} />
               <DetailItem label="Manager" value={member.reports_to?.name ?? "-"} />
               <DetailItem label="Departments" value={memberDepartments(member)} />
+              <DetailItem
+                label="Department segments"
+                value={listValue(
+                  (member.departments ?? (member.department ? [member.department] : []))
+                    .map((department) => department.segment)
+                    .filter((segment): segment is string => Boolean(segment)),
+                )}
+              />
               <DetailItem label="Rep code" value={member.rep_code ?? "-"} mono />
               <DetailItem label="Employee number" value={member.employee_number ?? "-"} mono />
+              <DetailItem label="Product scope" value={member.product_type_scope ?? "-"} />
+              <DetailItem label="Data scope" value={member.data_scope_mode ?? "-"} />
+              <DetailItem label="Shared mailbox" value={member.is_shared_mailbox ? "Yes" : "No"} />
               <DetailItem label="Customer assignments" value={member.customer_assignment_count ?? 0} />
               <DetailItem label="Sectors" value={listValue(member.sector_scopes)} />
               <DetailItem label="Brands" value={listValue(member.brand_assignments)} />

@@ -186,7 +186,10 @@ class FillRateCalculator
     private function resolveShippedQty(array $line): float
     {
         if (array_key_exists('shipped_qty', $line) && $line['shipped_qty'] !== null && $line['shipped_qty'] !== '') {
-            return (float) $line['shipped_qty'];
+            $shipped = (float) $line['shipped_qty'];
+            if ($shipped > 0) {
+                return $shipped;
+            }
         }
 
         return (float) ($line['qty_on_shipments'] ?? 0);

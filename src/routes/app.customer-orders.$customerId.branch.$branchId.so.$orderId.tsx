@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  BackorderCard,
   ErrorBlock,
   OrderDetailBody,
   SkeletonRows,
@@ -10,7 +11,7 @@ import {
 import { useOrder } from "@/hooks/useOrders";
 
 export const Route = createFileRoute("/app/customer-orders/$customerId/branch/$branchId/so/$orderId")({
-  head: () => ({ meta: [{ title: "Branch Document - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Branch Document - Kim-Fay Sight" }] }),
   component: BranchDocumentDetailPage,
 });
 
@@ -73,6 +74,9 @@ function BranchDocumentDetailPage() {
         <ErrorBlock message={order.error instanceof Error ? order.error.message : "Document could not be loaded."} onRetry={() => order.refetch()} />
       ) : order.data ? (
         <>
+          {/* Backorder first — unit price × qty before branch / line details */}
+          <BackorderCard lines={lines} orderStatus={order.data.status} />
+
           <Card className="rounded-lg shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Attached To</CardTitle>
@@ -92,7 +96,7 @@ function BranchDocumentDetailPage() {
             </CardContent>
           </Card>
 
-          <OrderDetailBody order={order.data} lines={lines} />
+          <OrderDetailBody order={order.data} lines={lines} includeBackorderCard={false} />
         </>
       ) : null}
     </div>

@@ -2,6 +2,7 @@ import { Link, Outlet, createFileRoute, useRouterState } from "@tanstack/react-r
 import type React from "react";
 import { useState } from "react";
 import { FilePlus2, RefreshCw, Search } from "lucide-react";
+import { CustomerLink } from "@/components/entity-links";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +17,7 @@ import {
 import { money, PCR_STATUS_CLASS, PCR_STATUS_LABEL, shortDate } from "@/lib/price-change";
 
 export const Route = createFileRoute("/app/price-change-requests")({
-  head: () => ({ meta: [{ title: "Price Change Requests - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Price Change Requests - Kim-Fay Sight" }] }),
   component: PriceChangeRequestsRoute,
 });
 
@@ -164,10 +165,12 @@ function PcrRow({ row }: { row: PriceChangeRequest }) {
         )}
       </td>
       <td className="px-4 py-2.5">
-        <div className="font-medium">{row.customer_name ?? row.customer_acumatica_id}</div>
-        <div className="font-mono text-[11px] text-muted-foreground">
-          {row.customer_acumatica_id}
-        </div>
+        <CustomerLink customerId={row.customer_acumatica_id} customerName={row.customer_name} className="block">
+          <div className="font-medium">{row.customer_name ?? row.customer_acumatica_id}</div>
+          <div className="font-mono text-[11px] text-muted-foreground">
+            {row.customer_acumatica_id}
+          </div>
+        </CustomerLink>
       </td>
       <td className="px-4 py-2.5">
         <div className="font-mono text-xs">{row.inventory_id}</div>

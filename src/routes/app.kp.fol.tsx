@@ -1,6 +1,7 @@
 import { Link, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
-import { FilePlus2, RefreshCw, Search } from "lucide-react";
+import { FilePlus2, Pencil, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { CustomerLink } from "@/components/entity-links";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useFolList, type FolRequest } from "@/hooks/useFol";
+import { useAuth } from "@/lib/auth";
 import { FOL_STATUS_CLASS, FOL_STATUS_LABEL, formatFolDate } from "@/lib/fol";
 
 export const Route = createFileRoute("/app/kp/fol")({
-  head: () => ({ meta: [{ title: "KP FOL - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "KP FOL - Kim-Fay Sight" }] }),
   component: FolRoute,
 });
 
@@ -39,6 +41,7 @@ const TABS = [
 ];
 
 function FolListPage() {
+  const { session } = useAuth();
   const caps = useCapabilities();
   const permissions = caps.permissions ?? [];
   const canCreate = permissions.includes("kp.fol.request");
@@ -47,6 +50,7 @@ function FolListPage() {
   const canExecute = permissions.includes("kp.fol.install.execute");
   const canManageInstall = permissions.includes("kp.fol.install.manage");
   const canSeeAll = permissions.includes("kp.fol.report") || caps.department_role === "hod";
+  const canManageSettings = session?.role === "Administrator";
   const isTechnicianFirst = canExecute && !canCreate && !canApprove;
 
   const [view, setView] = useState(isTechnicianFirst ? "my_allocations" : "my");
@@ -66,8 +70,8 @@ function FolListPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">KP FOL Requests</h1>
-          <p className="text-sm text-muted-foreground">Free On Loan requisitions, approvals, and invoicing handoff.</p>
+          <h1 className="text-xl font-semibold tracking-tight">KP CRM · FOL Requests</h1>
+          <p className="text-sm text-muted-foreground">KP CRM — Free On Loan requisitions, approvals, and invoicing handoff.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => list.refetch()}>
@@ -76,6 +80,13 @@ function FolListPage() {
           {(canExecute || canManageInstall) && (
             <Button asChild size="sm" variant="outline">
               <Link to="/app/kp/fol/calendar">Calendar</Link>
+            </Button>
+          )}
+          {canManageSettings && (
+            <Button asChild size="sm" variant="outline">
+              <Link to="/app/kp/fol/settings">
+                <SlidersHorizontal className="mr-1 h-3.5 w-3.5" /> Settings
+              </Link>
             </Button>
           )}
           {canCreate && (
@@ -112,16 +123,19 @@ function FolListPage() {
               <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Stage</th>
               <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Status</th>
               <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Updated</th>
+              <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase text-muted-foreground">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {list.isLoading && Array.from({ length: 6 }).map((_, index) => (
-              <tr key={index}><td colSpan={6} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>
+              <tr key={index}><td colSpan={7} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>
             ))}
             {!list.isLoading && (list.data?.data ?? []).length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">No FOL requests found.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">No FOL requests found.</td></tr>
             )}
-            {(list.data?.data ?? []).map((row) => <FolRow key={row.id} row={row} />)}
+            {(list.data?.data ?? []).map((row) => (
+              <FolRow key={row.id} row={row} canEditDraft={canCreate && row.status === "draft"} />
+            ))}
           </tbody>
         </table>
       </div>
@@ -129,7 +143,9 @@ function FolListPage() {
   );
 }
 
-function FolRow({ row }: { row: FolRequest }) {
+function FolRow({ row, canEditDraft }: { row: FolRequest; canEditDraft: boolean }) {
+  const so = row.so_number ?? row.acumatica_so_number ?? row.linked_so_order_nbrs?.[0] ?? null;
+
   return (
     <tr className="hover:bg-muted/20">
       <td className="px-4 py-2.5">
@@ -137,10 +153,13 @@ function FolRow({ row }: { row: FolRequest }) {
           {row.public_ref}
         </Link>
         <div className="text-[11px] text-muted-foreground">{row.sales_consultant_email ?? "-"}</div>
+        {so && <div className="mt-0.5 font-mono text-[11px] text-emerald-700">SO {so}</div>}
       </td>
       <td className="px-4 py-2.5">
-        <div className="font-medium">{row.customer_name}</div>
-        <div className="font-mono text-[11px] text-muted-foreground">{row.customer_acumatica_id}</div>
+        <CustomerLink customerId={row.customer_acumatica_id} customerName={row.customer_name} className="block">
+          <div className="font-medium">{row.customer_name}</div>
+          <div className="font-mono text-[11px] text-muted-foreground">{row.customer_acumatica_id}</div>
+        </CustomerLink>
       </td>
       <td className="px-4 py-2.5 text-xs text-muted-foreground">{row.lines?.length ?? 0} line(s)</td>
       <td className="px-4 py-2.5 text-xs text-muted-foreground">{row.current_stage_key ?? "-"}</td>
@@ -148,6 +167,17 @@ function FolRow({ row }: { row: FolRequest }) {
         <Badge variant="outline" className={FOL_STATUS_CLASS[row.status]}>{FOL_STATUS_LABEL[row.status]}</Badge>
       </td>
       <td className="px-4 py-2.5 text-xs text-muted-foreground">{formatFolDate(row.submitted_at ?? row.created_at)}</td>
+      <td className="px-4 py-2.5 text-right">
+        {canEditDraft ? (
+          <Button asChild size="sm" variant="outline" className="h-8">
+            <Link to="/app/kp/fol/new" search={{ draft: String(row.id) }}>
+              <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+            </Link>
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
     </tr>
   );
 }

@@ -11,6 +11,7 @@ class Department extends Model
     protected $fillable = [
         'slug',
         'name',
+        'segment',
         'is_customer_facing',
         'sort_order',
     ];

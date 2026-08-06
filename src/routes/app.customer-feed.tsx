@@ -26,7 +26,7 @@ import {
 import { conflictAmountDelta, formatSignedAmount, type MatchConflict } from "@/lib/match-conflicts";
 
 export const Route = createFileRoute("/app/customer-feed")({
-  head: () => ({ meta: [{ title: "Customer Feed — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Customer Feed — Kim-Fay Sight" }] }),
   component: CustomerFeedPage,
 });
 

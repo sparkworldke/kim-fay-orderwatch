@@ -12,8 +12,8 @@ class AiPromptLogService
         $user = Auth::user();
 
         return AiPromptLog::create([
-            'user_id'          => $user?->id,
-            'user_role'        => $user?->role ?? null,
+            'user_id'          => $data['user_id'] ?? $user?->id,
+            'user_role'        => $data['user_role'] ?? $user?->role ?? null,
             'prompt'           => $data['prompt'],
             'intent'           => $data['intent'] ?? null,
             'domains'          => $data['domains'] ?? null,

@@ -38,6 +38,7 @@ export interface ConsultantCustomerRow {
   first_order_date: string | null;
   last_order_date: string | null;
   orders_per_month: number | null;
+  predicted_next_order_date: string | null;
 }
 
 export interface ConsultantCustomersPagination {

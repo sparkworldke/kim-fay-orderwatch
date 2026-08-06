@@ -27,8 +27,8 @@ class TeamMemberAccountMail extends Mailable
     public function envelope(): Envelope
     {
         $subject = $this->isResend
-            ? 'Your Kim-Fay OrderWatch sign-in details (updated)'
-            : 'Your Kim-Fay OrderWatch account is ready';
+            ? 'Your Kim-Fay Sight sign-in details (updated)'
+            : 'Your Kim-Fay Sight account is ready';
 
         return new Envelope(
             from: new \Illuminate\Mail\Mailables\Address(
@@ -65,8 +65,8 @@ class TeamMemberAccountMail extends Mailable
         $otpExpiresAt = $this->formatDateTime($this->otpExpiresAt ?? now()->addMinutes(15));
 
         $intro = $this->isResend
-            ? "{$invitedBy} has resent your OrderWatch sign-in details. Your previous temporary password and OTP no longer work — use the new credentials below."
-            : "{$invitedBy} has created your OrderWatch team account. You can now sign in to monitor orders, customer activity, and operational insights.";
+            ? "{$invitedBy} has resent your Sight sign-in details. Your previous temporary password and OTP no longer work — use the new credentials below."
+            : "{$invitedBy} has created your Sight team account. You can now sign in to monitor orders, customer activity, and operational insights.";
 
         return <<<HTML
         <!DOCTYPE html>
@@ -74,7 +74,7 @@ class TeamMemberAccountMail extends Mailable
         <head>
             <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>Your OrderWatch account</title>
+            <title>Your Sight account</title>
         </head>
         <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
             <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 0;">
@@ -84,7 +84,7 @@ class TeamMemberAccountMail extends Mailable
                             <tr>
                                 <td style="background-color:#1a1a2e;padding:28px 40px;text-align:center;">
                                     <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.5px;">
-                                        Kim-Fay OrderWatch
+                                        Kim-Fay Sight
                                     </span>
                                 </td>
                             </tr>
@@ -188,7 +188,7 @@ class TeamMemberAccountMail extends Mailable
                             <tr>
                                 <td style="padding:24px 40px 36px;text-align:center;">
                                     <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.6;">
-                                        If you were not expecting this account, please contact your OrderWatch administrator.
+                                        If you were not expecting this account, please contact your Sight administrator.
                                     </p>
                                 </td>
                             </tr>

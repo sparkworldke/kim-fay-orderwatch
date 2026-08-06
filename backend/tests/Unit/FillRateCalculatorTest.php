@@ -66,6 +66,16 @@ class FillRateCalculatorTest extends TestCase
         $this->assertSame(7.0, $result['total_shipped_qty']);
     }
 
+    public function test_falls_back_to_qty_on_shipments_when_stored_shipped_qty_is_zero(): void
+    {
+        $result = $this->calculator->compute('Completed', [
+            ['order_qty' => 10, 'shipped_qty' => 0, 'qty_on_shipments' => 7, 'unit_price' => 5],
+        ]);
+
+        $this->assertSame(70.0, $result['fill_rate_pct']);
+        $this->assertSame(7.0, $result['total_shipped_qty']);
+    }
+
     public function test_skips_zero_quantity_lines(): void
     {
         $result = $this->calculator->compute('Completed', [

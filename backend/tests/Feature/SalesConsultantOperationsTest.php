@@ -8,12 +8,27 @@ use App\Models\AcumaticaSalesOrderLine;
 use App\Models\User;
 use App\Services\Admin\AcumaticaClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Mockery;
 use Tests\TestCase;
 
 class SalesConsultantOperationsTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Index defaults to month-to-date; freeze "now" so the hardcoded 2026-07-05 order
+        // dates used throughout this file reliably land inside the default window.
+        Carbon::setTestNow(Carbon::parse('2026-07-23 12:00:00', 'Africa/Nairobi'));
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
 
     public function test_administrator_can_view_all_sales_consultants(): void
     {
@@ -470,6 +485,82 @@ class SalesConsultantOperationsTest extends TestCase
             ->assertJsonPath('customers.0.revenue_lost', 500)
             ->assertJsonPath('customers.1.customer_id', 'CUST-A')
             ->assertJsonPath('customers.1.revenue_lost', 300);
+    }
+
+    public function test_my_team_is_limited_to_reporting_subtree_and_includes_non_consultant_reportees(): void
+    {
+        $leader = User::factory()->create(['role' => 'Executive', 'is_active' => true]);
+        $hod = User::factory()->create([
+            'name' => 'MT HOD',
+            'role' => 'Sales Operations',
+            'reports_to_user_id' => $leader->id,
+            'is_active' => true,
+        ]);
+        $member = User::factory()->create([
+            'name' => 'MT Representative',
+            'role' => 'Sales Consultant',
+            'reports_to_user_id' => $hod->id,
+            'rep_code' => 'P415',
+            'is_active' => true,
+        ]);
+        $outsider = User::factory()->create([
+            'name' => 'Unrelated Employee',
+            'role' => 'Sales Consultant',
+            'rep_code' => 'P999',
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($leader, 'sanctum')
+            ->getJson('/api/operations/sales-consultants')
+            ->assertOk()
+            ->assertJsonPath('scope', 'team')
+            ->assertJsonCount(2, 'items');
+
+        $ids = collect($response->json('items'))->pluck('id');
+        $this->assertTrue($ids->contains($hod->id));
+        $this->assertTrue($ids->contains($member->id));
+        $this->assertFalse($ids->contains($outsider->id));
+    }
+
+    public function test_every_active_user_can_view_their_own_consultant_profile(): void
+    {
+        $viewer = User::factory()->create([
+            'role' => 'Technician',
+            'rep_code' => 'P415',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($viewer, 'sanctum')
+            ->getJson("/api/operations/sales-consultants/{$viewer->id}")
+            ->assertOk()
+            ->assertJsonPath('consultant.id', $viewer->id)
+            ->assertJsonPath('consultant.rep_code', 'P415');
+    }
+
+    public function test_manager_can_view_descendant_profile_but_not_an_outsider(): void
+    {
+        $leader = User::factory()->create(['role' => 'Executive', 'is_active' => true]);
+        $hod = User::factory()->create(['reports_to_user_id' => $leader->id, 'is_active' => true]);
+        $descendant = User::factory()->create([
+            'role' => 'Sales Consultant',
+            'reports_to_user_id' => $hod->id,
+            'rep_code' => 'P272',
+            'is_active' => true,
+        ]);
+        $outsider = User::factory()->create([
+            'role' => 'Sales Consultant',
+            'rep_code' => 'P999',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($leader, 'sanctum')
+            ->getJson("/api/operations/sales-consultants/{$descendant->id}")
+            ->assertOk()
+            ->assertJsonPath('consultant.id', $descendant->id);
+
+        $this->actingAs($leader, 'sanctum')
+            ->getJson("/api/operations/sales-consultants/{$outsider->id}")
+            ->assertForbidden();
     }
 
     private function createOrder(

@@ -86,17 +86,53 @@ class OperationsExcelExportTest extends TestCase
         ]);
 
         $response = $this->actingAs($user, 'sanctum')
-            ->get('/api/operations/backorders/export?reason_code=out_of_stock_procurement');
+            ->get('/api/operations/backorders/export?reason_code=out_of_stock_procurement&date_from=2026-07-01&date_to=2026-07-31');
 
         $response->assertOk();
         $this->assertStringContainsString('backorders-export-', $response->headers->get('content-disposition'));
         $workbook = $this->workbookFromResponse($response);
 
-        $this->assertSame('Backorders', $workbook->getSheet(0)->getTitle());
-        $this->assertSame('SO-KEEP', $workbook->getSheetByName('Backorders')->getCell('A2')->getValue());
-        $this->assertSame('out_of_stock_procurement', $workbook->getSheetByName('Backorders')->getCell('V2')->getValue());
-        $this->assertSame('Out of stock - Procurement', $workbook->getSheetByName('Backorders')->getCell('W2')->getValue());
-        $this->assertSame(null, $workbook->getSheetByName('Backorders')->getCell('A3')->getValue());
+        // Multi-sheet structure mirrors Fill Rate export (Instructions + Summary + detail).
+        $sheetNames = [];
+        foreach ($workbook->getAllSheets() as $s) {
+            $sheetNames[] = $s->getTitle();
+        }
+        $this->assertContains('Instructions', $sheetNames);
+        $this->assertContains('Summary', $sheetNames);
+        $this->assertContains('Backorders', $sheetNames);
+        $this->assertContains('Manufactured Lines', $sheetNames);
+        $this->assertContains('Trading (Partners) Lines', $sheetNames);
+        $this->assertContains('Exposure by SKU', $sheetNames);
+        $this->assertContains('Reason Summary', $sheetNames);
+        $this->assertContains('Customer Summary', $sheetNames);
+        $this->assertContains('Product Summary', $sheetNames);
+        $this->assertContains('Orders with Backorders', $sheetNames);
+        $this->assertContains('Missing Price Values', $sheetNames);
+
+        $this->assertSame('Instructions', $workbook->getSheet(0)->getTitle());
+
+        $sheet = $workbook->getSheetByName('Backorders');
+        $this->assertNotNull($sheet);
+        $this->assertSame('SO-KEEP', $sheet->getCell('A2')->getValue());
+
+        // Locate reason columns by header (column layout can grow over time).
+        $reasonCodeCol = null;
+        $reasonLabelCol = null;
+        for ($col = 1; $col <= 40; $col++) {
+            $letter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+            $header = (string) $sheet->getCell("{$letter}1")->getValue();
+            if ($header === 'Reason Code') {
+                $reasonCodeCol = $letter;
+            }
+            if ($header === 'Reason') {
+                $reasonLabelCol = $letter;
+            }
+        }
+        $this->assertNotNull($reasonCodeCol, 'Reason Code column missing');
+        $this->assertNotNull($reasonLabelCol, 'Reason column missing');
+        $this->assertSame('out_of_stock_procurement', $sheet->getCell("{$reasonCodeCol}2")->getValue());
+        $this->assertSame('Out of stock - Procurement', $sheet->getCell("{$reasonLabelCol}2")->getValue());
+        $this->assertSame(null, $sheet->getCell('A3')->getValue());
     }
 
     public function test_fill_rate_export_includes_product_line_reasons(): void
@@ -140,7 +176,7 @@ class OperationsExcelExportTest extends TestCase
             'sales_order_id' => $order->id,
             'order_nbr' => 'SO-FR',
             'customer_acumatica_id' => 'CUST-1',
-            'status' => 'Open',
+            'status' => 'Completed',
             'total_ordered_qty' => 10,
             'total_shipped_qty' => 2,
             'fill_rate_pct' => 20,
@@ -215,7 +251,7 @@ class OperationsExcelExportTest extends TestCase
             'sales_order_id' => $incomplete->id,
             'order_nbr' => 'SO-INCOMPLETE',
             'customer_acumatica_id' => 'CUST-1',
-            'status' => 'Open',
+            'status' => 'Completed',
             'total_ordered_qty' => 10,
             'total_shipped_qty' => 5,
             'fill_rate_pct' => 50,
@@ -260,7 +296,7 @@ class OperationsExcelExportTest extends TestCase
         ]);
 
         $response = $this->actingAs($user, 'sanctum')
-            ->get('/api/operations/fill-rate/export?date_from=2026-07-01&date_to=2026-07-31');
+            ->get('/api/operations/fill-rate/export?date_from=2026-07-01&date_to=2026-07-31&include_out_of_stock=1');
 
         $response->assertOk();
         $workbook = $this->workbookFromResponse($response);
@@ -344,7 +380,7 @@ class OperationsExcelExportTest extends TestCase
             'sales_order_id' => $order->id,
             'order_nbr' => 'SO-MP',
             'customer_acumatica_id' => 'CUST-MP',
-            'status' => 'Open',
+            'status' => 'Completed',
             'total_ordered_qty' => 30,
             'total_shipped_qty' => 4,
             'fill_rate_pct' => 13,
@@ -354,7 +390,7 @@ class OperationsExcelExportTest extends TestCase
         ]);
 
         $response = $this->actingAs($user, 'sanctum')
-            ->get('/api/operations/fill-rate/export?date_from=2026-07-01&date_to=2026-07-31');
+            ->get('/api/operations/fill-rate/export?date_from=2026-07-01&date_to=2026-07-31&include_out_of_stock=1');
 
         $response->assertOk();
         $workbook = $this->workbookFromResponse($response);
@@ -457,7 +493,7 @@ class OperationsExcelExportTest extends TestCase
             'sales_order_id' => $order->id,
             'order_nbr' => 'SO-SUM',
             'customer_acumatica_id' => 'CUST-SUM',
-            'status' => 'Open',
+            'status' => 'Completed',
             'total_ordered_qty' => 10,
             'total_shipped_qty' => 4,
             'fill_rate_pct' => 40,
@@ -483,6 +519,286 @@ class OperationsExcelExportTest extends TestCase
         $this->assertSame('KES 300.00', $sheet->getCell('B8')->getValue());
         $this->assertSame('SKUs Affected', $sheet->getCell('A10')->getValue());
         $this->assertEquals(1, $sheet->getCell('B10')->getValue());
+    }
+
+    public function test_fill_rate_period_uses_order_date_not_computed_at_for_summary_list_and_export(): void
+    {
+        $user = User::factory()->create(['role' => 'Administrator', 'is_active' => true]);
+        AcumaticaCustomer::create([
+            'acumatica_id' => 'CUST-JUNE',
+            'name' => 'June Customer',
+            'synced_at' => now(),
+        ]);
+
+        $order = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-JUNE-FR',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST-JUNE',
+            'customer_name' => 'June Customer',
+            'status' => 'Completed',
+            'order_date' => '2026-06-10 09:00:00',
+        ]);
+
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $order->id,
+            'inventory_id' => 'SKU-JUNE',
+            'description' => 'June Product',
+            'order_qty' => 10,
+            'shipped_qty' => 4,
+            'qty_on_shipments' => 4,
+            'open_qty' => 6,
+            'unit_price' => 50,
+            'uom' => 'EA',
+            'fill_rate_pct' => 40,
+            'unfilled_reason_code' => 'delay_in_delivery',
+        ]);
+
+        AcumaticaFillRateSnapshot::create([
+            'sales_order_id' => $order->id,
+            'order_nbr' => 'SO-JUNE-FR',
+            'customer_acumatica_id' => 'CUST-JUNE',
+            'status' => 'Completed',
+            'total_ordered_qty' => 10,
+            'total_shipped_qty' => 4,
+            'fill_rate_pct' => 40,
+            'fill_rate_status' => 'critical',
+            'revenue_not_shipped' => 300,
+            'computed_at' => '2026-07-14 15:18:00',
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/operations/fill-rate/summary?date_from=2026-06-01&date_to=2026-06-13&include_out_of_stock=1')
+            ->assertOk()
+            ->assertJsonPath('order_count', 1)
+            ->assertJsonPath('overall_fill_rate', 40);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/operations/fill-rate?date_from=2026-06-01&date_to=2026-06-13&include_out_of_stock=1')
+            ->assertOk()
+            ->assertJsonPath('data.0.order_nbr', 'SO-JUNE-FR');
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->get('/api/operations/fill-rate/export?date_from=2026-06-01&date_to=2026-06-13&include_out_of_stock=1');
+
+        $response->assertOk();
+        $workbook = $this->workbookFromResponse($response);
+
+        $this->assertSame('SO-JUNE-FR', $workbook->getSheetByName('Fill Rate')->getCell('A2')->getValue());
+        $this->assertSame('SO-JUNE-FR', $workbook->getSheetByName('Product Lines')->getCell('A2')->getValue());
+    }
+
+    public function test_fill_rate_export_recomputes_include_out_of_stock_toggle(): void
+    {
+        $user = User::factory()->create(['role' => 'Administrator', 'is_active' => true]);
+        $order = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-OOS-EXPORT',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST-OOS',
+            'customer_name' => 'OOS Customer',
+            'status' => 'Completed',
+            'order_date' => '2026-06-10',
+        ]);
+
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $order->id,
+            'inventory_id' => 'SKU-OOS',
+            'description' => 'Out of Stock Product',
+            'order_qty' => 10,
+            'shipped_qty' => 0,
+            'qty_on_shipments' => 0,
+            'open_qty' => 10,
+            'unit_price' => 20,
+            'fill_rate_pct' => 0,
+            'unfilled_reason_code' => 'out_of_stock_procurement',
+        ]);
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $order->id,
+            'inventory_id' => 'SKU-SHIPPED',
+            'description' => 'Delivered Product',
+            'order_qty' => 10,
+            'shipped_qty' => 10,
+            'qty_on_shipments' => 10,
+            'open_qty' => 0,
+            'unit_price' => 20,
+            'fill_rate_pct' => 100,
+        ]);
+
+        AcumaticaFillRateSnapshot::create([
+            'sales_order_id' => $order->id,
+            'order_nbr' => 'SO-OOS-EXPORT',
+            'customer_acumatica_id' => 'CUST-OOS',
+            'status' => 'Completed',
+            'total_ordered_qty' => 20,
+            'total_shipped_qty' => 10,
+            'fill_rate_pct' => 50,
+            'fill_rate_status' => 'critical',
+            'revenue_not_shipped' => 200,
+            'computed_at' => '2026-07-14 15:18:00',
+        ]);
+
+        $excluded = $this->actingAs($user, 'sanctum')
+            ->get('/api/operations/fill-rate/export?date_from=2026-06-01&date_to=2026-06-13&include_out_of_stock=0');
+        $included = $this->actingAs($user, 'sanctum')
+            ->get('/api/operations/fill-rate/export?date_from=2026-06-01&date_to=2026-06-13&include_out_of_stock=1');
+
+        $excluded->assertOk();
+        $included->assertOk();
+
+        $excludedWorkbook = $this->workbookFromResponse($excluded);
+        $includedWorkbook = $this->workbookFromResponse($included);
+        $excludedSheet = $excludedWorkbook->getSheetByName('Fill Rate');
+        $includedSheet = $includedWorkbook->getSheetByName('Fill Rate');
+
+        $this->assertSame(10.0, $excludedSheet->getCell('F2')->getValue());
+        $this->assertSame(10.0, $excludedSheet->getCell('G2')->getValue());
+        $this->assertSame(100.0, $excludedSheet->getCell('H2')->getValue());
+        $this->assertSame('healthy', $excludedSheet->getCell('I2')->getValue());
+        $this->assertSame('SKU-SHIPPED', $excludedWorkbook->getSheetByName('Product Lines')->getCell('C2')->getValue());
+        $this->assertSame(null, $excludedWorkbook->getSheetByName('Product Lines')->getCell('C3')->getValue());
+        // Product Summary is InventoryID shortfall only — fully shipped lines contribute 0 and are omitted.
+        $this->assertSame(null, $excludedWorkbook->getSheetByName('Product Summary')->getCell('A2')->getValue());
+
+        $this->assertSame(20.0, $includedSheet->getCell('F2')->getValue());
+        $this->assertSame(10.0, $includedSheet->getCell('G2')->getValue());
+        $this->assertSame(50.0, $includedSheet->getCell('H2')->getValue());
+        $this->assertSame('critical', $includedSheet->getCell('I2')->getValue());
+        $this->assertSame('SKU-OOS', $includedWorkbook->getSheetByName('Product Summary')->getCell('A2')->getValue());
+        $this->assertSame(200.0, $includedWorkbook->getSheetByName('Product Summary')->getCell('D2')->getValue());
+    }
+
+    public function test_backorders_product_summary_exports_all_inventory_ids_for_june_value_reconciliation(): void
+    {
+        $user = User::factory()->create(['role' => 'Administrator', 'is_active' => true]);
+        $expectedTotal = 0.0;
+
+        for ($i = 1; $i <= 12; $i++) {
+            $inventoryId = sprintf('SKU-BO-%02d', $i);
+            AcumaticaInventoryItem::create([
+                'inventory_id' => $inventoryId,
+                'description' => "Backorder Product {$i}",
+                'synced_at' => now(),
+            ]);
+            AcumaticaSalesOrder::create([
+                'acumatica_order_nbr' => sprintf('SO-BO-%02d', $i),
+                'order_type' => 'SO',
+                'customer_acumatica_id' => 'CUST-BO',
+                'customer_name' => 'Backorder Customer',
+                'order_date' => '2026-06-10',
+            ]);
+
+            $value = 9000000.0;
+            $expectedTotal += $value;
+            AcumaticaBackorderLine::create([
+                'order_nbr' => sprintf('SO-BO-%02d', $i),
+                'inventory_id' => $inventoryId,
+                'customer_acumatica_id' => 'CUST-BO',
+                'customer_name' => 'Backorder Customer',
+                'open_qty' => 1,
+                'backorder_qty' => 1,
+                'revenue_at_risk' => $value,
+                'synced_at' => '2026-07-14 15:18:00',
+            ]);
+        }
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->get('/api/operations/backorders/export?date_from=2026-06-01&date_to=2026-06-30');
+
+        $response->assertOk();
+        $sheet = $this->workbookFromResponse($response)->getSheetByName('Product Summary');
+
+        $this->assertSame('SKU-BO-01', $sheet->getCell('A2')->getValue());
+        $this->assertSame('SKU-BO-12', $sheet->getCell('A13')->getValue());
+        $this->assertSame(null, $sheet->getCell('A14')->getValue());
+
+        $actualTotal = 0.0;
+        for ($row = 2; $row <= 13; $row++) {
+            $actualTotal += (float) $sheet->getCell("E{$row}")->getValue();
+        }
+
+        $this->assertGreaterThan(100000000, $actualTotal);
+        $this->assertSame($expectedTotal, $actualTotal);
+    }
+
+    public function test_fill_rate_product_summary_exports_all_inventory_ids_grouped_by_inventory_id_for_june_orders(): void
+    {
+        $user = User::factory()->create(['role' => 'Administrator', 'is_active' => true]);
+        $order = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-FR-JUNE-PRODUCTS',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST-FR-PRODUCTS',
+            'customer_name' => 'Fill Rate Customer',
+            'status' => 'Completed',
+            'order_date' => '2026-06-10',
+        ]);
+
+        for ($i = 1; $i <= 12; $i++) {
+            $inventoryId = sprintf('SKU-FR-%02d', $i);
+            AcumaticaInventoryItem::create([
+                'inventory_id' => $inventoryId,
+                'description' => "Fill Rate Product {$i}",
+                'synced_at' => now(),
+            ]);
+            AcumaticaSalesOrderLine::create([
+                'sales_order_id' => $order->id,
+                'inventory_id' => $inventoryId,
+                'description' => "Fill Rate Product {$i}",
+                'order_qty' => 1,
+                'shipped_qty' => 0,
+                'qty_on_shipments' => 0,
+                'open_qty' => 1,
+                'unit_price' => 9000000,
+                'uom' => 'EA',
+                'fill_rate_pct' => 0,
+                'unfilled_reason_code' => 'delay_in_delivery',
+            ]);
+        }
+
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $order->id,
+            'inventory_id' => 'SKU-FR-01',
+            'description' => 'Fill Rate Product 1',
+            'order_qty' => 1,
+            'shipped_qty' => 0,
+            'qty_on_shipments' => 0,
+            'open_qty' => 1,
+            'unit_price' => 1000000,
+            'uom' => 'EA',
+            'fill_rate_pct' => 0,
+            'unfilled_reason_code' => 'delay_in_delivery',
+        ]);
+
+        AcumaticaFillRateSnapshot::create([
+            'sales_order_id' => $order->id,
+            'order_nbr' => 'SO-FR-JUNE-PRODUCTS',
+            'customer_acumatica_id' => 'CUST-FR-PRODUCTS',
+            'status' => 'Completed',
+            'total_ordered_qty' => 13,
+            'total_shipped_qty' => 0,
+            'fill_rate_pct' => 0,
+            'fill_rate_status' => 'critical',
+            'revenue_not_shipped' => 109000000,
+            'computed_at' => '2026-07-14 15:18:00',
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->get('/api/operations/fill-rate/export?date_from=2026-06-01&date_to=2026-06-30&include_out_of_stock=1');
+
+        $response->assertOk();
+        $sheet = $this->workbookFromResponse($response)->getSheetByName('Product Summary');
+
+        $this->assertSame('SKU-FR-01', $sheet->getCell('A2')->getValue());
+        $this->assertSame(2, $sheet->getCell('C2')->getValue());
+        $this->assertSame(10000000.0, $sheet->getCell('D2')->getValue());
+        $this->assertSame('SKU-FR-12', $sheet->getCell('A13')->getValue());
+        $this->assertSame(null, $sheet->getCell('A14')->getValue());
+
+        $actualTotal = 0.0;
+        for ($row = 2; $row <= 13; $row++) {
+            $actualTotal += (float) $sheet->getCell("D{$row}")->getValue();
+        }
+
+        $this->assertGreaterThan(100000000, $actualTotal);
+        $this->assertSame(109000000.0, $actualTotal);
     }
 
     public function test_sales_consultant_backorders_export_is_scoped_to_rep_code(): void

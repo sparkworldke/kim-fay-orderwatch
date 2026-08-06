@@ -2,6 +2,13 @@
 
 return [
 
+    'acumatica' => [
+        'sales_invoice_detail_filter_supported' => env(
+            'ACUMATICA_SALES_INVOICE_DETAIL_FILTER_SUPPORTED',
+            false,
+        ),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
@@ -43,8 +50,25 @@ return [
         'frontend_url'  => env('FRONTEND_URL', env('MICROSOFT_FRONTEND_URL', 'http://localhost:5173')),
         'graph_user_agent' => env(
             'MICROSOFT_GRAPH_USER_AGENT',
-            'OrderWatch/1.0 (Kim-Fay OrderWatch; +https://orderwatch.fayshop.co.ke)',
+            'Sight/1.0 (Kim-Fay Sight; +https://sight.fayshop.co.ke)',
         ),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | WhatsApp OTP (Meta Cloud API)
+    |--------------------------------------------------------------------------
+    | driver=log    → local/testing (message logged, not sent)
+    | driver=meta   → production Graph API send
+    | Optional otp_template for business-initiated authentication templates.
+    */
+    'whatsapp' => [
+        'driver' => env('WHATSAPP_DRIVER', 'log'),
+        'token' => env('WHATSAPP_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
+        'otp_template' => env('WHATSAPP_OTP_TEMPLATE'),
+        'otp_template_language' => env('WHATSAPP_OTP_TEMPLATE_LANGUAGE', 'en'),
     ],
 
 ];

@@ -9,6 +9,7 @@ use App\Models\AcumaticaSalesOrder;
 use App\Models\AcumaticaSalesOrderLine;
 use App\Models\AcumaticaSyncLog;
 use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
+use App\Services\Cache\DomainCache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -36,6 +37,7 @@ class AcumaticaFillRateSyncService
     public function __construct(
         private readonly AcumaticaClient $client,
         private readonly FillRateCalculator $calculator,
+        private readonly ?CompletedOrderInvoiceReconciliationService $completedReconciliation = null,
     ) {
     }
 
@@ -62,6 +64,17 @@ class AcumaticaFillRateSyncService
         try {
             $orders = $this->client->fetchOrdersForFillRate($dateFrom, $dateTo, fn () => $this->touchSyncRun($run));
             $run    = $this->processOrders($orders, $run);
+            $invoiceStats = $this->completedReconciliation()->reconcile(
+                $orders,
+                $run->id,
+                fn () => $this->touchSyncRun($run),
+            );
+            $run->update([
+                'filters' => array_merge($run->filters ?? [], ['completed_invoice_reconciliation' => $invoiceStats]),
+                'error_message' => $invoiceStats['unavailable']
+                    ? 'Active fill rate synced; completed-order invoice reconciliation is unavailable: '.$invoiceStats['error']
+                    : $run->error_message,
+            ]);
         } catch (AcumaticaSyncStoppedException $e) {
             $run = $this->stopSyncRun($run, $e->getMessage());
         } catch (Throwable $e) {
@@ -128,7 +141,20 @@ class AcumaticaFillRateSyncService
 
         $this->logSyncSummary($run, $success, $failed);
 
+        if ($run->status === 'completed') {
+            app(DomainCache::class)->bump(
+                DomainCache::FILL_RATE,
+                DomainCache::BUSINESS_OPTIMIZATION,
+            );
+        }
+
         return $run;
+    }
+
+    private function completedReconciliation(): CompletedOrderInvoiceReconciliationService
+    {
+        return $this->completedReconciliation
+            ?? new CompletedOrderInvoiceReconciliationService($this->client);
     }
 
     private function upsertFillRate(array $raw, int $runId): void

@@ -11,7 +11,9 @@ use App\Models\AcumaticaInventoryItem;
 use App\Models\AcumaticaInventoryRunRateLog;
 use App\Models\AcumaticaSalesOrder;
 use App\Models\AcumaticaSalesOrderLine;
+use App\Models\Department;
 use App\Models\User;
+use App\Models\UserCustomerAssignment;
 use App\Services\Admin\AcumaticaBackorderSyncService;
 use App\Services\Admin\AcumaticaClient;
 use App\Services\Admin\AcumaticaFillRateSyncService;
@@ -27,10 +29,81 @@ class AcumaticaOperationsSyncTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_operations_lists_include_explicitly_assigned_customer_when_acumatica_rep_differs(): void
+    {
+        $department = Department::query()->create([
+            'slug' => 'mt_consumer_sales',
+            'name' => 'MT / Consumer Sales',
+            'is_customer_facing' => true,
+            'sort_order' => 1,
+        ]);
+        $user = User::factory()->create([
+            'role' => 'Sales Consultant',
+            'rep_code' => 'REP-LOCAL',
+            'is_consultant' => true,
+            'is_super_admin' => false,
+            'data_scope_mode' => 'scoped',
+            'department_id' => $department->id,
+        ]);
+
+        foreach (['ASSIGNED-OPS', 'HIDDEN-OPS'] as $customerId) {
+            AcumaticaCustomer::query()->create([
+                'acumatica_id' => $customerId,
+                'name' => $customerId,
+                'customer_class' => 'MT-CHAIN',
+            ]);
+        }
+        UserCustomerAssignment::query()->create([
+            'user_id' => $user->id,
+            'customer_acumatica_id' => 'ASSIGNED-OPS',
+            'assignment_type' => UserCustomerAssignment::TYPE_SERVICING,
+        ]);
+
+        foreach (['ASSIGNED-OPS', 'HIDDEN-OPS'] as $index => $customerId) {
+            AcumaticaBackorderLine::query()->create([
+                'order_nbr' => 'SO-BO-SCOPE-'.$index,
+                'inventory_id' => 'ITEM-SCOPE-'.$index,
+                'customer_acumatica_id' => $customerId,
+                'order_qty' => 10,
+                'open_qty' => 5,
+                'revenue_at_risk' => 50,
+                'first_backordered_at' => now(),
+            ]);
+            $order = AcumaticaSalesOrder::query()->create([
+                'acumatica_order_nbr' => 'SO-FR-SCOPE-'.$index,
+                'order_type' => 'SO',
+                'customer_acumatica_id' => $customerId,
+                'customer_name' => $customerId,
+                'status' => 'Completed',
+                'sales_consultant_rep_code' => 'REP-SOMEONE-ELSE',
+            ]);
+            AcumaticaFillRateSnapshot::query()->create([
+                'sales_order_id' => $order->id,
+                'order_nbr' => $order->acumatica_order_nbr,
+                'customer_acumatica_id' => $customerId,
+                'status' => 'Completed',
+                'total_ordered_qty' => 10,
+                'total_shipped_qty' => 5,
+                'fill_rate_pct' => 50,
+                'fill_rate_status' => 'critical',
+                'computed_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($user)->getJson('/api/operations/backorders')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.customer_acumatica_id', 'ASSIGNED-OPS');
+        $this->actingAs($user)->getJson('/api/operations/fill-rate')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.customer_acumatica_id', 'ASSIGNED-OPS');
+    }
+
     public function test_inventory_sync_upserts_and_logs_run_rate(): void
     {
         $client = Mockery::mock(AcumaticaClient::class);
-        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0, 50, null, null)->andReturn([
+        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0, 50, null, null, true)->andReturn([
             [
                 'InventoryID' => ['value' => 'ITEM-001'],
                 'Description' => ['value' => 'Widget'],
@@ -60,10 +133,238 @@ class AcumaticaOperationsSyncTest extends TestCase
         $this->assertSame('10.0000', $logs[1]->qty_delta);
     }
 
+    public function test_backorder_resolution_is_archived_when_line_clears(): void
+    {
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchAllOpenSalesOrdersForBackorders')
+            ->twice()
+            ->andReturn(
+                [
+                    [
+                        'OrderNbr'     => ['value' => 'SO200'],
+                        'Status'       => ['value' => 'Open'],
+                        'CustomerID'   => ['value' => 'CUST02'],
+                        'CustomerName' => ['value' => 'Beta Co'],
+                        'CurrencyID'   => ['value' => 'KES'],
+                        'DocumentDetails' => [
+                            [
+                                'InventoryID' => ['value' => 'ITEM-002'],
+                                'OrderQty'    => ['value' => 5],
+                                'ShippedQty'  => ['value' => 2],
+                                'OpenQty'     => ['value' => 3],
+                                'UnitPrice'   => ['value' => 50],
+                            ],
+                        ],
+                    ],
+                    [
+                        'OrderNbr'     => ['value' => 'SO300'],
+                        'Status'       => ['value' => 'Open'],
+                        'CustomerID'   => ['value' => 'CUST03'],
+                        'CustomerName' => ['value' => 'Gamma Ltd'],
+                        'CurrencyID'   => ['value' => 'KES'],
+                        'DocumentDetails' => [
+                            [
+                                'InventoryID' => ['value' => 'ITEM-003'],
+                                'OrderQty'    => ['value' => 4],
+                                'ShippedQty'  => ['value' => 2],
+                                'OpenQty'     => ['value' => 2],
+                                'UnitPrice'   => ['value' => 20],
+                            ],
+                        ],
+                    ],
+                ],
+                // Second sync: SO200 no longer appears in the open-orders fetch at all
+                // (fully shipped / order completed) — SO300 stays open.
+                [
+                    [
+                        'OrderNbr'     => ['value' => 'SO300'],
+                        'Status'       => ['value' => 'Open'],
+                        'CustomerID'   => ['value' => 'CUST03'],
+                        'CustomerName' => ['value' => 'Gamma Ltd'],
+                        'CurrencyID'   => ['value' => 'KES'],
+                        'DocumentDetails' => [
+                            [
+                                'InventoryID' => ['value' => 'ITEM-003'],
+                                'OrderQty'    => ['value' => 4],
+                                'ShippedQty'  => ['value' => 2],
+                                'OpenQty'     => ['value' => 2],
+                                'UnitPrice'   => ['value' => 20],
+                            ],
+                        ],
+                    ],
+                ],
+            );
+
+        $service = new AcumaticaBackorderSyncService($client, new \App\Services\Operations\SalesOrderReasonCatalog());
+
+        $service->run();
+        $this->assertDatabaseHas('acumatica_backorder_lines', [
+            'order_nbr' => 'SO200',
+            'inventory_id' => 'ITEM-002',
+        ]);
+
+        // Backdate so days_to_resolve is deterministic rather than 0.
+        AcumaticaBackorderLine::where('order_nbr', 'SO200')->update([
+            'first_backordered_at' => now()->subDays(4),
+        ]);
+
+        $secondRun = $service->run();
+        $this->assertSame('completed', $secondRun->status);
+
+        $this->assertDatabaseMissing('acumatica_backorder_lines', [
+            'order_nbr' => 'SO200',
+            'inventory_id' => 'ITEM-002',
+        ]);
+        // SO300 never resolved — it must not be archived.
+        $this->assertDatabaseMissing('backorder_resolutions', ['order_nbr' => 'SO300']);
+
+        $this->assertDatabaseHas('backorder_resolutions', [
+            'order_nbr' => 'SO200',
+            'inventory_id' => 'ITEM-002',
+            'customer_acumatica_id' => 'CUST02',
+            'customer_name' => 'Beta Co',
+            'revenue_at_risk' => 150,
+            'days_to_resolve' => 4,
+            'first_backordered_at_is_backfilled' => false,
+        ]);
+        $this->assertNotNull(
+            \App\Models\BackorderResolution::where('order_nbr', 'SO200')->value('resolved_at'),
+        );
+    }
+
+    public function test_backorders_and_resolved_backorders_filter_by_rep_code(): void
+    {
+        $user = User::factory()->create();
+
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-REPA',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST-REPA',
+            'customer_name' => 'Rep A Customer',
+            'status' => 'Open',
+            'order_date' => '2026-06-12',
+            'sales_consultant_rep_code' => 'REPA',
+            'synced_at' => now(),
+        ]);
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-REPB',
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST-REPB',
+            'customer_name' => 'Rep B Customer',
+            'status' => 'Open',
+            'order_date' => '2026-06-12',
+            'sales_consultant_rep_code' => 'REPB',
+            'synced_at' => now(),
+        ]);
+
+        AcumaticaBackorderLine::create([
+            'order_nbr' => 'SO-REPA',
+            'inventory_id' => 'ITEM-REPA',
+            'customer_acumatica_id' => 'CUST-REPA',
+            'customer_name' => 'Rep A Customer',
+            'order_qty' => 5,
+            'shipped_qty' => 1,
+            'open_qty' => 4,
+            'backorder_qty' => 4,
+            'fulfillment_status' => 'Backorders Imported',
+            'unit_price' => 100,
+            'revenue_at_risk' => 400,
+            'synced_at' => now(),
+        ]);
+        AcumaticaBackorderLine::create([
+            'order_nbr' => 'SO-REPB',
+            'inventory_id' => 'ITEM-REPB',
+            'customer_acumatica_id' => 'CUST-REPB',
+            'customer_name' => 'Rep B Customer',
+            'order_qty' => 5,
+            'shipped_qty' => 1,
+            'open_qty' => 4,
+            'backorder_qty' => 4,
+            'fulfillment_status' => 'Backorders Imported',
+            'unit_price' => 100,
+            'revenue_at_risk' => 400,
+            'synced_at' => now(),
+        ]);
+
+        \App\Models\BackorderResolution::create([
+            'order_nbr' => 'SO-REPA',
+            'inventory_id' => 'ITEM-REPA-OLD',
+            'customer_acumatica_id' => 'CUST-REPA',
+            'unit_price' => 50,
+            'revenue_at_risk' => 200,
+            'resolved_at' => now(),
+        ]);
+        \App\Models\BackorderResolution::create([
+            'order_nbr' => 'SO-REPB',
+            'inventory_id' => 'ITEM-REPB-OLD',
+            'customer_acumatica_id' => 'CUST-REPB',
+            'unit_price' => 50,
+            'revenue_at_risk' => 200,
+            'resolved_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders?rep_code=REPA')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.order_nbr', 'SO-REPA');
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders/resolved?rep_code=REPA')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.order_nbr', 'SO-REPA');
+    }
+
+    public function test_resolved_backorders_endpoint_returns_enriched_history(): void
+    {
+        $user = User::factory()->create();
+
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'ITEM-RES',
+            'description'  => 'Resolved Widget',
+            'brand'        => 'Fay Tissues',
+            'qty_on_hand'  => 5,
+            'synced_at'    => now(),
+        ]);
+
+        AcumaticaCustomer::create([
+            'acumatica_id' => 'CUST-RES',
+            'name'         => 'Resolved Buyer Ltd',
+            'synced_at'    => now(),
+        ]);
+
+        \App\Models\BackorderResolution::create([
+            'order_nbr'             => 'SO-RES-1',
+            'inventory_id'          => 'ITEM-RES',
+            'customer_acumatica_id' => 'CUST-RES',
+            'customer_name'         => null,
+            'reason_code'           => 'delay_in_delivery',
+            'unit_price'            => 100,
+            'revenue_at_risk'       => 300,
+            'order_qty'             => 10,
+            'last_open_qty'         => 3,
+            'last_backorder_qty'    => 3,
+            'first_backordered_at'  => now()->subDays(10),
+            'first_backordered_at_is_backfilled' => false,
+            'resolved_at'           => now()->subDays(2),
+            'days_to_resolve'       => 8,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders/resolved')
+            ->assertOk()
+            ->assertJsonPath('data.0.order_nbr', 'SO-RES-1')
+            ->assertJsonPath('data.0.product_name', 'Resolved Widget')
+            ->assertJsonPath('data.0.brand', 'Fay Tissues')
+            ->assertJsonPath('data.0.customer_name', 'Resolved Buyer Ltd')
+            ->assertJsonPath('data.0.days_to_resolve', 8);
+    }
+
     public function test_inventory_sync_skips_inactive_items_without_counting_as_failed(): void
     {
         $client = Mockery::mock(AcumaticaClient::class);
-        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0, 50, null, null)->andReturn([
+        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0, 50, null, null, true)->andReturn([
             [
                 'InventoryID' => ['value' => 'ITEM-ACTIVE'],
                 'Description' => ['value' => 'Active widget'],
@@ -123,6 +424,144 @@ class AcumaticaOperationsSyncTest extends TestCase
             'backorder_qty'       => 6,
             'fulfillment_status'  => 'Backorders Imported',
             'revenue_at_risk'     => 600,
+            'first_backordered_at_is_backfilled' => false,
+        ]);
+        $this->assertNotNull(AcumaticaBackorderLine::where('order_nbr', 'SO100')->value('first_backordered_at'));
+    }
+
+    public function test_date_range_backorder_sync_skips_rejected_and_prunes_period_lines(): void
+    {
+        // Stale active line on a rejected SO should be cleared when the period is re-synced.
+        AcumaticaBackorderLine::create([
+            'order_nbr' => 'SO-REJECT',
+            'inventory_id' => 'ITEM-R',
+            'order_qty' => 5,
+            'open_qty' => 5,
+            'unit_price' => 10,
+            'revenue_at_risk' => 50,
+            'shortfall_kind' => 'active_backorder',
+            'synced_at' => now(),
+        ]);
+        AcumaticaBackorderLine::create([
+            'order_nbr' => 'SO-SHIP',
+            'inventory_id' => 'ITEM-OLD',
+            'order_qty' => 2,
+            'open_qty' => 2,
+            'unit_price' => 10,
+            'revenue_at_risk' => 20,
+            'shortfall_kind' => 'active_backorder',
+            'synced_at' => now(),
+        ]);
+
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchAllSalesOrdersByDateRange')
+            ->once()
+            ->with('2026-07-22', '2026-07-25', Mockery::any())
+            ->andReturn([
+                [
+                    'OrderNbr' => ['value' => 'SO-REJECT'],
+                    'Status' => ['value' => 'Rejected'],
+                    'CustomerID' => ['value' => 'C1'],
+                    'Details' => [[
+                        'InventoryID' => ['value' => 'ITEM-R'],
+                        'OrderQty' => ['value' => 5],
+                        'OpenQty' => ['value' => 5],
+                        'UnitPrice' => ['value' => 10],
+                    ]],
+                ],
+                [
+                    'OrderNbr' => ['value' => 'SO-SHIP'],
+                    'Status' => ['value' => 'Shipping'],
+                    'CustomerID' => ['value' => 'C2'],
+                    'Details' => [[
+                        'InventoryID' => ['value' => 'ITEM-S'],
+                        'OrderQty' => ['value' => 10],
+                        'ShippedQty' => ['value' => 4],
+                        'QtyOnShipments' => ['value' => 4],
+                        'OpenQty' => ['value' => 6],
+                        'UnitPrice' => ['value' => 50],
+                    ]],
+                ],
+            ]);
+
+        $service = new AcumaticaBackorderSyncService($client, new \App\Services\Operations\SalesOrderReasonCatalog());
+        $run = $service->run(null, 'manual', null, '2026-07-22', '2026-07-25');
+
+        $this->assertSame('completed', $run->status);
+        $this->assertDatabaseMissing('acumatica_backorder_lines', [
+            'order_nbr' => 'SO-REJECT',
+            'inventory_id' => 'ITEM-R',
+        ]);
+        $this->assertDatabaseMissing('acumatica_backorder_lines', [
+            'order_nbr' => 'SO-SHIP',
+            'inventory_id' => 'ITEM-OLD',
+        ]);
+        $this->assertDatabaseHas('acumatica_backorder_lines', [
+            'order_nbr' => 'SO-SHIP',
+            'inventory_id' => 'ITEM-S',
+            'open_qty' => 6,
+            'revenue_at_risk' => 300,
+            'shortfall_kind' => 'active_backorder',
+        ]);
+        $this->assertSame(1, $run->filters['open_orders_for_active_backorders'] ?? null);
+        $this->assertSame(2, $run->filters['orders_in_range'] ?? null);
+    }
+
+    public function test_active_open_fetch_date_range_skips_full_pull_and_completed_recon(): void
+    {
+        AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => 'SO-SHIP',
+            'order_type' => 'SO',
+            'status' => 'Shipping',
+            'order_date' => '2026-07-23',
+            'customer_acumatica_id' => 'C2',
+        ]);
+        AcumaticaBackorderLine::create([
+            'order_nbr' => 'SO-SHIP',
+            'inventory_id' => 'ITEM-OLD',
+            'order_qty' => 2,
+            'open_qty' => 2,
+            'unit_price' => 10,
+            'revenue_at_risk' => 20,
+            'shortfall_kind' => 'active_backorder',
+            'synced_at' => now(),
+        ]);
+
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchAllOpenSalesOrdersForBackordersByDateRange')
+            ->once()
+            ->with('2026-07-22', '2026-07-25', Mockery::any())
+            ->andReturn([[
+                'OrderNbr' => ['value' => 'SO-SHIP'],
+                'Status' => ['value' => 'Shipping'],
+                'CustomerID' => ['value' => 'C2'],
+                'Details' => [[
+                    'InventoryID' => ['value' => 'ITEM-S'],
+                    'OrderQty' => ['value' => 10],
+                    'OpenQty' => ['value' => 6],
+                    'UnitPrice' => ['value' => 50],
+                ]],
+            ]]);
+        $client->shouldNotReceive('fetchAllSalesOrdersByDateRange');
+
+        $service = new AcumaticaBackorderSyncService($client, new \App\Services\Operations\SalesOrderReasonCatalog());
+        $run = $service->run(null, 'manual', null, '2026-07-22', '2026-07-25', [
+            'active_open_fetch' => true,
+            'skip_completed_recon' => true,
+        ]);
+
+        $this->assertSame('completed', $run->status);
+        $this->assertSame('active_open_fetch', $run->filters['mode'] ?? null);
+        $this->assertTrue((bool) ($run->filters['completed_invoice_reconciliation']['skipped'] ?? false));
+        $this->assertDatabaseHas('acumatica_backorder_lines', [
+            'order_nbr' => 'SO-SHIP',
+            'inventory_id' => 'ITEM-S',
+            'open_qty' => 6,
+            'revenue_at_risk' => 300,
+        ]);
+        $this->assertDatabaseMissing('acumatica_backorder_lines', [
+            'order_nbr' => 'SO-SHIP',
+            'inventory_id' => 'ITEM-OLD',
         ]);
     }
 
@@ -132,7 +571,7 @@ class AcumaticaOperationsSyncTest extends TestCase
         $client->shouldReceive('fetchOrdersForFillRate')->once()->andReturn([
             [
                 'OrderNbr'   => ['value' => 'SO200'],
-                'Status'     => ['value' => 'Open'],
+                'Status'     => ['value' => 'Completed'],
                 'CustomerID' => ['value' => 'CUST02'],
                 'CurrencyID' => ['value' => 'KES'],
                 'DocumentDetails' => [
@@ -147,6 +586,14 @@ class AcumaticaOperationsSyncTest extends TestCase
                 ],
             ],
         ]);
+        $client->shouldReceive('fetchSalesInvoicesForSalesOrders')->once()->andReturn([[
+            'Released' => ['value' => true],
+            'Details' => [[
+                'OrderNbr' => ['value' => 'SO200'],
+                'InventoryID' => ['value' => 'ITEM-002'],
+                'Qty' => ['value' => 5],
+            ]],
+        ]]);
 
         $service = new AcumaticaFillRateSyncService($client, new FillRateCalculator);
         $run = $service->syncDateRange('2026-06-01', '2026-06-30');
@@ -159,7 +606,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'fill_rate_pct'    => 50,
             'fill_rate_status' => 'critical',
             'revenue_not_shipped' => 100,
-            'out_of_stock_line_count' => 0,
+            'out_of_stock_line_count' => 1,
         ]);
     }
 
@@ -169,7 +616,7 @@ class AcumaticaOperationsSyncTest extends TestCase
         $client->shouldReceive('fetchOrdersForFillRate')->once()->andReturn([
             [
                 'OrderNbr'   => ['value' => 'SO359765'],
-                'Status'     => ['value' => 'Rejected'],
+                'Status'     => ['value' => 'Completed'],
                 'CustomerID' => ['value' => 'CUST102396'],
                 'CurrencyID' => ['value' => 'KES'],
                 'Details' => [
@@ -189,6 +636,14 @@ class AcumaticaOperationsSyncTest extends TestCase
                 ],
             ],
         ]);
+        $client->shouldReceive('fetchSalesInvoicesForSalesOrders')->once()->andReturn([[
+            'Released' => ['value' => true],
+            'Details' => [[
+                'OrderNbr' => ['value' => 'SO359765'],
+                'InventoryID' => ['value' => 'FAYWP0025'],
+                'Qty' => ['value' => 5],
+            ]],
+        ]]);
 
         $service = new AcumaticaFillRateSyncService($client, new FillRateCalculator);
         $run = $service->syncDateRange('2026-06-01', '2026-06-30');
@@ -279,7 +734,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'acumatica_order_nbr'   => 'SO-OPT',
             'order_type'            => 'SO',
             'customer_acumatica_id' => 'CUST-OPT',
-            'status'                => 'Open',
+            'status'                => 'Completed',
             'order_date'            => now(),
         ]);
 
@@ -295,7 +750,7 @@ class AcumaticaOperationsSyncTest extends TestCase
         AcumaticaFillRateSnapshot::create([
             'order_nbr'             => 'SO-OPT',
             'customer_acumatica_id' => 'CUST-OPT',
-            'status'                => 'Open',
+            'status'                => 'Completed',
             'total_ordered_qty'     => 20,
             'total_shipped_qty'     => 10,
             'fill_rate_pct'         => 50,
@@ -387,14 +842,14 @@ class AcumaticaOperationsSyncTest extends TestCase
             'acumatica_order_nbr'   => 'SO-Z1',
             'order_type'            => 'SO',
             'customer_acumatica_id' => 'CUST-Z1',
-            'status'                => 'Open',
+            'status'                => 'Completed',
             'order_date'            => now(),
         ]);
         $orderZ2 = AcumaticaSalesOrder::create([
             'acumatica_order_nbr'   => 'SO-Z2',
             'order_type'            => 'SO',
             'customer_acumatica_id' => 'CUST-Z2',
-            'status'                => 'Open',
+            'status'                => 'Completed',
             'order_date'            => now(),
         ]);
 
@@ -590,6 +1045,8 @@ class AcumaticaOperationsSyncTest extends TestCase
             'shipped_qty'           => 2,
             'open_qty'              => 8,
             'revenue_at_risk'       => 800,
+            'first_backordered_at'  => now()->subDays(8),
+            'first_backordered_at_is_backfilled' => true,
             'synced_at'             => now(),
         ]);
 
@@ -599,20 +1056,26 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertJsonPath('data.0.product_name', 'Backorder Widget')
             ->assertJsonPath('data.0.customer_name', 'Backorder Buyer Ltd')
             ->assertJsonPath('data.0.qty_on_hand', '5.0000')
-            ->assertJsonPath('data.0.stock_shortfall', true);
+            ->assertJsonPath('data.0.stock_shortfall', true)
+            ->assertJsonPath('data.0.backorder_age_days', 8)
+            ->assertJsonPath('data.0.aging_bucket', '8-14')
+            ->assertJsonPath('data.0.missing_reason_exception', true)
+            ->assertJsonPath('data.0.first_backordered_at_is_backfilled', true);
     }
 
-    public function test_inventory_stocks_only_updates_existing_items(): void
+    public function test_inventory_stocks_only_updates_balances_and_creates_missing_master_items(): void
     {
         $client = Mockery::mock(AcumaticaClient::class);
-        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0, 50, null, null)->andReturn([
+        $client->shouldReceive('fetchStockItemsForWarehouseBalances')->once()->with(0, 50)->andReturn([
             [
                 'InventoryID' => ['value' => 'ITEM-STK'],
                 'DefaultUOM'  => ['value' => 'EA'],
+                'DefaultWarehouseID' => ['value' => 'FGS'],
                 'QtyOnHand'   => ['value' => 99],
             ],
             [
                 'InventoryID' => ['value' => 'ITEM-NEW'],
+                'DefaultWarehouseID' => ['value' => 'FGS'],
                 'QtyOnHand'   => ['value' => 50],
             ],
         ]);
@@ -630,40 +1093,66 @@ class AcumaticaOperationsSyncTest extends TestCase
 
         $this->assertSame('completed', $run->status);
         $this->assertSame('inventory_stocks', $run->sync_type);
-        $this->assertSame(1, $run->success_count);
-        $this->assertSame(1, $run->filters['skipped_unknown']);
+        $this->assertSame(2, $run->success_count);
+        $this->assertSame(0, $run->filters['skipped_unknown']);
+        $this->assertSame(2, $run->filters['balances_saved']);
+        $this->assertSame(1, $run->filters['masters_created']);
         $this->assertDatabaseHas('acumatica_inventory_items', [
             'inventory_id' => 'ITEM-STK',
-            'qty_on_hand'  => 99,
             'default_uom'  => 'EA',
         ]);
-        $this->assertDatabaseMissing('acumatica_inventory_items', ['inventory_id' => 'ITEM-NEW']);
+        $this->assertDatabaseHas('acumatica_inventory_items', ['inventory_id' => 'ITEM-NEW']);
+        $this->assertDatabaseHas('inventory_warehouse_balances', [
+            'inventory_id' => 'ITEM-STK',
+            'warehouse_id' => 'FGS',
+            'qty_on_hand' => 99,
+        ]);
+        $this->assertDatabaseHas('inventory_warehouse_balances', [
+            'inventory_id' => 'ITEM-NEW',
+            'warehouse_id' => 'FGS',
+            'qty_on_hand' => 50,
+        ]);
     }
 
     public function test_inventory_stocks_only_imports_selected_warehouse_quantity(): void
     {
         $client = Mockery::mock(AcumaticaClient::class);
-        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0, 50, 'FGS', null)->andReturn([
-            [
-                'InventoryID' => ['value' => 'ITEM-FGS'],
-                'DefaultUOM'  => ['value' => 'EA'],
-                'DefaultWarehouseID' => ['value' => 'FGS'],
-                'WarehouseDetails' => [
-                    [
-                        'WarehouseID' => ['value' => 'DTC'],
-                        'QtyOnHand' => ['value' => 300],
-                    ],
-                    [
-                        'WarehouseID' => ['value' => 'FGS'],
-                        'QtyOnHand' => ['value' => 2000],
-                    ],
-                    [
-                        'WarehouseID' => ['value' => 'PRMS'],
-                        'QtyOnHand' => ['value' => 75],
+        // Stocks-only warehouse jobs scan all SKUs via WarehouseDetails (no DefaultWarehouseID filter).
+        $client->shouldReceive('fetchStockItemsForWarehouseBalances')
+            ->once()
+            ->with(0, 50)
+            ->andReturn([
+                [
+                    'InventoryID' => ['value' => 'ITEM-FGS'],
+                    'DefaultUOM'  => ['value' => 'EA'],
+                    'DefaultWarehouseID' => ['value' => 'DTC'],
+                    'WarehouseDetails' => [
+                        [
+                            'WarehouseID' => ['value' => 'DTC'],
+                            'QtyOnHand' => ['value' => 300],
+                        ],
+                        [
+                            'WarehouseID' => ['value' => 'FGS'],
+                            'QtyOnHand' => ['value' => 2000],
+                        ],
+                        [
+                            'WarehouseID' => ['value' => 'PRMS'],
+                            'QtyOnHand' => ['value' => 75],
+                        ],
                     ],
                 ],
-            ],
-        ]);
+                [
+                    // SKU with no FGS site row — must not create a zero FGS balance.
+                    'InventoryID' => ['value' => 'ITEM-NO-FGS'],
+                    'DefaultWarehouseID' => ['value' => 'MSA'],
+                    'WarehouseDetails' => [
+                        [
+                            'WarehouseID' => ['value' => 'MSA'],
+                            'QtyOnHand' => ['value' => 10],
+                        ],
+                    ],
+                ],
+            ]);
 
         AcumaticaInventoryItem::create([
             'inventory_id' => 'ITEM-FGS',
@@ -677,10 +1166,108 @@ class AcumaticaOperationsSyncTest extends TestCase
 
         $this->assertSame('completed', $run->status);
         $this->assertSame('FGS', $run->filters['warehouse_id']);
-        $this->assertDatabaseHas('acumatica_inventory_items', [
+        $this->assertDatabaseHas('inventory_warehouse_balances', [
             'inventory_id' => 'ITEM-FGS',
-            'default_warehouse_id' => 'FGS',
+            'warehouse_id' => 'FGS',
             'qty_on_hand' => 2000,
+        ]);
+        $this->assertDatabaseMissing('inventory_warehouse_balances', [
+            'inventory_id' => 'ITEM-NO-FGS',
+            'warehouse_id' => 'FGS',
+        ]);
+    }
+
+    public function test_inventory_stocks_only_reads_secondary_warehouse_tpfgs_from_details(): void
+    {
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchStockItemsForWarehouseBalances')
+            ->once()
+            ->with(0, 50)
+            ->andReturn([
+                [
+                    'InventoryID' => ['value' => 'COSTP0023'],
+                    'DefaultWarehouseID' => ['value' => 'FGS'],
+                    'WarehouseDetails' => [
+                        [
+                            'WarehouseID' => ['value' => 'FGS'],
+                            'QtyOnHand' => ['value' => 500],
+                        ],
+                        [
+                            'WarehouseID' => ['value' => 'TPFGS'],
+                            'QtyOnHand' => ['value' => 1125],
+                        ],
+                    ],
+                ],
+            ]);
+
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'COSTP0023',
+            'description' => 'Tatu FG item',
+            'qty_on_hand' => 500,
+            'synced_at' => now()->subDay(),
+        ]);
+
+        $run = $this->inventoryService($client)->runStocksOnly(filters: ['warehouse_id' => 'TPFGS']);
+
+        $this->assertSame('completed', $run->status);
+        $this->assertSame(1, $run->success_count);
+        $this->assertSame(1, $run->filters['balances_written']);
+        $this->assertDatabaseHas('inventory_warehouse_balances', [
+            'inventory_id' => 'COSTP0023',
+            'warehouse_id' => 'TPFGS',
+            'qty_on_hand' => 1125,
+        ]);
+        // Targeted TPFGS run must not write FGS from the same page.
+        $this->assertDatabaseMissing('inventory_warehouse_balances', [
+            'inventory_id' => 'COSTP0023',
+            'warehouse_id' => 'FGS',
+            'qty_on_hand' => 500,
+        ]);
+    }
+
+    public function test_inventory_stocks_only_without_warehouse_writes_all_configured_sites(): void
+    {
+        config(['inventory.warehouses' => ['FGS', 'TPFGS', 'MSA']]);
+
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('fetchStockItemsForWarehouseBalances')
+            ->once()
+            ->with(0, 50)
+            ->andReturn([
+                [
+                    'InventoryID' => ['value' => 'ITEM-MULTI'],
+                    'WarehouseDetails' => [
+                        ['WarehouseID' => ['value' => 'FGS'], 'QtyOnHand' => ['value' => 10]],
+                        ['WarehouseID' => ['value' => 'TPFGS'], 'QtyOnHand' => ['value' => 20]],
+                        ['WarehouseID' => ['value' => 'EXPORT'], 'QtyOnHand' => ['value' => 99]], // not in config
+                    ],
+                ],
+            ]);
+
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'ITEM-MULTI',
+            'description' => 'Multi-site',
+            'qty_on_hand' => 0,
+            'synced_at' => now()->subDay(),
+        ]);
+
+        $run = $this->inventoryService($client)->runStocksOnly();
+
+        $this->assertSame('completed', $run->status);
+        $this->assertSame(2, $run->filters['balances_written']);
+        $this->assertDatabaseHas('inventory_warehouse_balances', [
+            'inventory_id' => 'ITEM-MULTI',
+            'warehouse_id' => 'FGS',
+            'qty_on_hand' => 10,
+        ]);
+        $this->assertDatabaseHas('inventory_warehouse_balances', [
+            'inventory_id' => 'ITEM-MULTI',
+            'warehouse_id' => 'TPFGS',
+            'qty_on_hand' => 20,
+        ]);
+        $this->assertDatabaseMissing('inventory_warehouse_balances', [
+            'inventory_id' => 'ITEM-MULTI',
+            'warehouse_id' => 'EXPORT',
         ]);
     }
 
@@ -697,7 +1284,7 @@ class AcumaticaOperationsSyncTest extends TestCase
         ]);
 
         $client = Mockery::mock(AcumaticaClient::class);
-        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0, 50, null, null)->andReturnUsing(function () {
+        $client->shouldReceive('fetchActiveInventoryItems')->once()->with(0, 50, null, null, true)->andReturnUsing(function () {
             AcumaticaSyncLog::query()
                 ->where('sync_type', 'inventory')
                 ->where('status', 'running')
@@ -827,7 +1414,24 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertJsonPath('excel_summary.by_customer_group.0.contribution_pct', 100)
             ->assertJsonPath('charts.category_distribution.0.product_line', 'Trading')
             ->assertJsonPath('charts.customer_group_distribution.0.customer_group', 'Consumer sales')
-            ->assertJsonPath('charts.reason_distribution.0.reason_code', 'delay_in_delivery');
+            ->assertJsonPath('charts.reason_distribution.0.reason_code', 'delay_in_delivery')
+            ->assertJsonFragment(['fulfillment_statuses' => [
+                'Fully Fulfilled',
+                'Backorders Imported',
+                'Cancelled',
+                'Partially Shipped — Backorder Pending',
+                'Pending Shipment',
+            ]]);
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders?fulfillment_status=Backorders%20Imported')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders?fulfillment_status=Not%20A%20Status')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('fulfillment_status');
 
         $this->actingAs($user)
             ->patchJson('/api/operations/backorders/'.$line->id, [
@@ -870,7 +1474,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'order_type'            => 'SO',
             'customer_acumatica_id' => 'CUST-FR',
             'customer_name'         => null,
-            'status'                => 'Open',
+            'status'                => 'Completed',
             'order_date'            => now()->subHours(30),
         ]);
 
@@ -892,7 +1496,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             'sales_order_id'        => $order->id,
             'order_nbr'             => 'SO-FR-1',
             'customer_acumatica_id' => 'CUST-FR',
-            'status'                => 'Open',
+            'status'                => 'Completed',
             'total_ordered_qty'     => 10,
             'total_shipped_qty'     => 7,
             'fill_rate_pct'         => 70,
@@ -920,7 +1524,7 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertJsonPath('delivery_sla_rules.metro_sla_hours', 24)
             ->assertJsonPath('excel_summary.totals.ordered_qty', 10)
             ->assertJsonPath('excel_summary.totals.actual_qty', 7)
-            ->assertJsonPath('excel_summary.totals.undershipped_value', 0);
+            ->assertJsonPath('excel_summary.totals.undershipped_value', 60);
     }
 
     public function test_fill_rate_list_filters_by_shipping_zone(): void
@@ -1022,6 +1626,218 @@ class AcumaticaOperationsSyncTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.order_nbr', 'SO-FR-LOW')
             ->assertJsonPath('data.1.order_nbr', 'SO-FR-HIGH');
+    }
+
+    public function test_backorders_summary_returns_value_summary_with_segment_splits(): void
+    {
+        $user = User::factory()->create();
+        $this->seedValueSummaryData();
+
+        $response = $this->actingAs($user)
+            ->getJson('/api/operations/backorders/summary')
+            ->assertOk();
+
+        // Value summary is based on backorder lines (same as table/export):
+        // KP FAY: order 100@10=1000, shipped 80@10=800, open 20@10=200.
+        // CS DOV: order 50@20=1000, shipped 40@20=800, open 10@20=200.
+        $response
+            ->assertJsonPath('value_summary.order_value', 2000)
+            ->assertJsonPath('value_summary.invoiced_value', 1600)
+            ->assertJsonPath('value_summary.backorder_value', 400)
+            ->assertJsonPath('value_summary.by_product_segment.manufactured.backorder_value', 200)
+            ->assertJsonPath('value_summary.by_product_segment.trading.backorder_value', 200)
+            ->assertJsonPath('value_summary.by_product_segment.trading.invoiced_value', 800)
+            ->assertJsonPath('value_summary.by_customer_segment.KP.backorder_value', 200)
+            ->assertJsonPath('value_summary.by_customer_segment.CS.backorder_value', 200)
+            ->assertJsonPath('value_summary.by_customer_segment.CS.invoiced_value', 800);
+    }
+
+    public function test_backorders_summary_value_summary_honors_product_segment_filter(): void
+    {
+        $user = User::factory()->create();
+        $this->seedValueSummaryData();
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders/summary?product_segment=manufactured')
+            ->assertOk()
+            ->assertJsonPath('value_summary.order_value', 1000)
+            ->assertJsonPath('value_summary.invoiced_value', 800)
+            ->assertJsonPath('value_summary.backorder_value', 200)
+            // Breakdown cards keep both buckets for comparison (unfiltered split).
+            ->assertJsonPath('value_summary.by_product_segment.trading.order_value', 1000)
+            ->assertJsonPath('value_summary.by_product_segment.trading.backorder_value', 200)
+            // Customer split is full (not filtered) so cards stay stable when a segment is active.
+            ->assertJsonPath('value_summary.by_customer_segment.KP.order_value', 1000)
+            ->assertJsonPath('value_summary.by_customer_segment.CS.order_value', 1000);
+
+        // Trading segment filter must not zero out partner exposure.
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders/summary?product_segment=trading')
+            ->assertOk()
+            ->assertJsonPath('value_summary.order_value', 1000)
+            ->assertJsonPath('value_summary.backorder_value', 200)
+            ->assertJsonPath('value_summary.by_product_segment.trading.backorder_value', 200)
+            ->assertJsonPath('value_summary.by_product_segment.manufactured.backorder_value', 200);
+    }
+
+    public function test_backorders_list_honors_product_segment_filter(): void
+    {
+        $user = User::factory()->create();
+        $this->seedValueSummaryData();
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders?product_segment=manufactured')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.inventory_id', 'FAY0001');
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders?product_segment=trading')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.inventory_id', 'DOV0001');
+
+        $this->actingAs($user)
+            ->getJson('/api/operations/backorders?segment=KP')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.order_nbr', 'SO-VAL-KP');
+    }
+
+    public function test_truncate_backorders_and_fill_rate_require_admin(): void
+    {
+        AcumaticaBackorderLine::create([
+            'order_nbr'       => 'SO-TRUNC',
+            'inventory_id'    => 'ITEM-TRUNC',
+            'order_qty'       => 5,
+            'open_qty'        => 5,
+            'unit_price'      => 10,
+            'revenue_at_risk' => 50,
+            'synced_at'       => now(),
+        ]);
+        AcumaticaFillRateSnapshot::create([
+            'order_nbr'         => 'SO-TRUNC',
+            'fill_rate_pct'     => 50,
+            'fill_rate_status'  => 'critical',
+            'total_ordered_qty' => 10,
+            'total_shipped_qty' => 5,
+            'computed_at'       => now(),
+        ]);
+
+        $nonAdmin = User::factory()->create(['role' => 'Customer Service Manager']);
+        $this->actingAs($nonAdmin)
+            ->postJson('/api/admin/so-imports/truncate/backorders')
+            ->assertForbidden();
+        $this->actingAs($nonAdmin)
+            ->postJson('/api/admin/so-imports/truncate/fill-rate')
+            ->assertForbidden();
+
+        $admin = User::factory()->create(['role' => 'Administrator']);
+        $this->actingAs($admin)
+            ->postJson('/api/admin/so-imports/truncate/backorders', ['clear_all' => true])
+            ->assertOk();
+        $this->actingAs($admin)
+            ->postJson('/api/admin/so-imports/truncate/fill-rate', ['clear_all' => true])
+            ->assertOk();
+
+        $this->assertDatabaseCount('acumatica_backorder_lines', 0);
+        $this->assertDatabaseCount('acumatica_fill_rate_snapshots', 0);
+    }
+
+    /**
+     * Seeds one KP customer buying a Manufactured SKU (partially shipped)
+     * and one CS customer buying a Trading SKU (fully shipped).
+     */
+    private function seedValueSummaryData(): void
+    {
+        AcumaticaCustomer::create([
+            'acumatica_id'   => 'CUST-VAL-KP',
+            'name'           => 'Professional Buyer',
+            'customer_class' => 'KP-DISTRIB',
+            'synced_at'      => now(),
+        ]);
+        AcumaticaCustomer::create([
+            'acumatica_id'   => 'CUST-VAL-CS',
+            'name'           => 'Retail Buyer',
+            'customer_class' => 'RETAIL',
+            'synced_at'      => now(),
+        ]);
+
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'FAY0001',
+            'description'  => 'Kim-Fay Bales',
+            'product_type' => 'manufactured',
+            'qty_on_hand'  => 0,
+            'synced_at'    => now(),
+        ]);
+        AcumaticaInventoryItem::create([
+            'inventory_id' => 'DOV0001',
+            'description'  => 'Partner Soap',
+            'product_type' => 'trading',
+            'qty_on_hand'  => 0,
+            'synced_at'    => now(),
+        ]);
+
+        $kpOrder = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr'   => 'SO-VAL-KP',
+            'order_type'            => 'SO',
+            'customer_acumatica_id' => 'CUST-VAL-KP',
+            'status'                => 'Open',
+            'order_date'            => now(),
+        ]);
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $kpOrder->id,
+            'inventory_id'   => 'FAY0001',
+            'order_qty'      => 100,
+            'shipped_qty'    => 80,
+            'unit_price'     => 10,
+        ]);
+
+        $csOrder = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr'   => 'SO-VAL-CS',
+            'order_type'            => 'SO',
+            'customer_acumatica_id' => 'CUST-VAL-CS',
+            'status'                => 'Open',
+            'order_date'            => now(),
+        ]);
+        AcumaticaSalesOrderLine::create([
+            'sales_order_id' => $csOrder->id,
+            'inventory_id'   => 'DOV0001',
+            'order_qty'      => 50,
+            'shipped_qty'    => 40,
+            'unit_price'     => 20,
+        ]);
+
+        // Value summary (dashboard cards) is driven by backorder lines so it
+        // matches the table and Excel export — not the full SO order book.
+        // qty_on_shipments equals shipped on purpose: residual open must NOT be
+        // open − qty_on_shipments again (that zeroed partial-ship lines).
+        AcumaticaBackorderLine::create([
+            'order_nbr'             => 'SO-VAL-KP',
+            'inventory_id'          => 'FAY0001',
+            'customer_acumatica_id' => 'CUST-VAL-KP',
+            'order_qty'             => 100,
+            'shipped_qty'           => 80,
+            'qty_on_shipments'      => 80,
+            'open_qty'              => 20,
+            'unit_price'            => 10,
+            'revenue_at_risk'       => 200,
+            'shortfall_kind'        => 'active_backorder',
+            'synced_at'             => now(),
+        ]);
+        AcumaticaBackorderLine::create([
+            'order_nbr'             => 'SO-VAL-CS',
+            'inventory_id'          => 'DOV0001',
+            'customer_acumatica_id' => 'CUST-VAL-CS',
+            'order_qty'             => 50,
+            'shipped_qty'           => 40,
+            'qty_on_shipments'      => 40,
+            'open_qty'              => 10,
+            'unit_price'            => 20,
+            'revenue_at_risk'       => 200,
+            'shortfall_kind'        => 'active_backorder',
+            'synced_at'             => now(),
+        ]);
     }
 
     private function ensureShippingZone(string $acumaticaId, string $description): AcumaticaShippingZone

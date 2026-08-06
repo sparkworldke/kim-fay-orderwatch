@@ -19,6 +19,9 @@ class AcumaticaCustomer extends Model
         'email',
         'phone',
         'customer_class',
+        'main_account_name',
+        'sales_channel_code',
+        'sales_region',
         'payment_terms',
         'tax_zone',
         'shipping_zone_id',
@@ -69,5 +72,10 @@ class AcumaticaCustomer extends Model
     public function branches(): HasMany
     {
         return $this->hasMany(self::class, 'parent_acumatica_id', 'acumatica_id');
+    }
+
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(CustomerContact::class, 'customer_acumatica_id', 'acumatica_id');
     }
 }

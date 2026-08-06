@@ -43,6 +43,7 @@ export type WarehouseCount = {
   label?: string;
   sku_count: number;
   configured?: boolean;
+  synced_at?: string | null;
 };
 
 export type InventoryWarehouseViewProps = {
@@ -162,6 +163,11 @@ function WarehouseSummaryTable({
                       ({wh.warehouse_id})
                     </span>
                   )}
+                  {wh.synced_at && (
+                    <div className="text-[11px] font-normal text-muted-foreground">
+                      Snapshot {new Date(wh.synced_at).toLocaleString()}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {wh.sku_count.toLocaleString()} SKU{wh.sku_count === 1 ? "" : "s"}
@@ -258,7 +264,7 @@ function InventoryDetailTable({
                   <InventoryBrandColumnCell item={item} />
                 </TableCell>
                 <TableCell className="hidden py-3 text-sm md:table-cell">
-                  {item.default_warehouse_id?.trim() || "—"}
+                  {item.selected_warehouse_id?.trim() || item.default_warehouse_id?.trim() || "—"}
                 </TableCell>
                 <TableCell
                   className={`py-3 text-right tabular-nums text-sm font-medium ${

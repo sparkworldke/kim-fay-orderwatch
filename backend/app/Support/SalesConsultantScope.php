@@ -3,6 +3,8 @@
 namespace App\Support;
 
 use App\Models\User;
+use App\Services\Team\AccessTierService;
+use App\Services\Team\CustomerAttributionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,7 +15,7 @@ class SalesConsultantScope
 
     public static function appliesTo(?User $user): bool
     {
-        return $user !== null && $user->role === self::ROLE;
+        return app(AccessTierService::class)->isExclusivelySalesConsultant($user);
     }
 
     public static function repCode(?User $user): ?string
@@ -36,18 +38,21 @@ class SalesConsultantScope
      * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
      * @return Builder<\Illuminate\Database\Eloquent\Model>
      */
-    public static function applyOrderScope(Builder $query, ?User $user, string $column = 'sales_consultant_rep_code'): Builder
+    public static function applyOrderScope(Builder $query, ?User $user, string $column = 'customer_acumatica_id'): Builder
     {
         if (! self::appliesTo($user)) {
             return $query;
         }
 
-        $repCode = self::repCode($user);
-        if ($repCode === null) {
+        // §7.8: a transaction is visible only when its customer_acumatica_id is
+        // in the effective mapped set, never by rep_code alone.
+        $mappedIds = self::attribution()->directCustomerIds($user->id);
+
+        if ($mappedIds === []) {
             return $query->whereRaw('1 = 0');
         }
 
-        return $query->where($column, $repCode);
+        return $query->whereIn($column, $mappedIds);
     }
 
     /**
@@ -60,12 +65,12 @@ class SalesConsultantScope
             return $query;
         }
 
-        $repCode = self::repCode($user);
-        if ($repCode === null) {
-            return $query->whereRaw('1 = 0');
-        }
+        // §7.3 mapped-only: exact mapped customer set, never rep-code unions.
+        $mappedIds = self::attribution()->directCustomerIds($user->id);
 
-        return $query->whereIn('acumatica_id', self::customerIdsSubquery($repCode));
+        return $mappedIds === []
+            ? $query->whereRaw('1 = 0')
+            : $query->whereIn('acumatica_id', $mappedIds);
     }
 
     public static function customerIdsSubquery(string $repCode): \Closure
@@ -85,15 +90,8 @@ class SalesConsultantScope
             return true;
         }
 
-        $repCode = self::repCode($user);
-        if ($repCode === null) {
-            return false;
-        }
-
-        return \App\Models\AcumaticaSalesOrder::query()
-            ->where('sales_consultant_rep_code', $repCode)
-            ->where('customer_acumatica_id', $customerId)
-            ->exists();
+        // §7.3: access is gated by mapped membership, not rep-code order history.
+        return in_array($customerId, self::attribution()->directCustomerIds($user->id), true);
     }
 
     public static function denyUnlessCustomerAccessible(?User $user, string $customerId): ?JsonResponse
@@ -117,5 +115,10 @@ class SalesConsultantScope
         }
 
         return strtoupper(trim((string) ($orderRepCode ?? ''))) === $repCode;
+    }
+
+    private static function attribution(): CustomerAttributionService
+    {
+        return app(CustomerAttributionService::class);
     }
 }

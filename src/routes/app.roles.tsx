@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRoles, usePermissions } from "@/hooks/admin/useAdminSettings";
 
 export const Route = createFileRoute("/app/roles")({
-  head: () => ({ meta: [{ title: "Roles & Permissions — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Roles & Permissions — Kim-Fay Sight" }] }),
   component: RolesPage,
 });
 

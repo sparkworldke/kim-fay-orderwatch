@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\NotificationRule;
 use App\Models\FolApprovalStage;
+use App\Models\NotificationRule;
 use App\Models\Permission;
 use App\Models\PriceChangeApprovalStage;
 use App\Models\Role;
@@ -27,6 +27,8 @@ class RolesPermissionsSeeder extends Seeder
             'HOD',
             'Technician Manager',
             'Technician',
+            'Partner Brands HOD',
+            'Partner Brands Member',
         ];
 
         foreach ($roles as $roleName) {
@@ -91,6 +93,20 @@ class RolesPermissionsSeeder extends Seeder
             'sales.management.resolve',
             'sales.management.manage',
             'sales.management.config',
+            'dtc.view',
+            'dtc.quotes.create',
+            'dtc.quotes.convert',
+            'commissions.view_own',
+            'commissions.review',
+            'commissions.rules.manage',
+            'commissions.approve',
+            'commissions.lock',
+            'kp.crm.items_not_ordered.view',
+            'kp.crm.dormant.manage',
+            'kp.crm.performance.view',
+            'adoption.report.view',
+            'adoption.report.manage',
+            'production.planning.manage',
         ];
 
         foreach ($permissions as $slug) {
@@ -143,6 +159,12 @@ class RolesPermissionsSeeder extends Seeder
                 'pricing.pcr.create',
                 'sales.management.view',
                 'sales.management.resolve',
+                'dtc.view',
+                'dtc.quotes.create',
+                'dtc.quotes.convert',
+                'commissions.view_own',
+                'kp.crm.items_not_ordered.view',
+                'kp.crm.performance.view',
             ])->pluck('id')->all()
         );
 
@@ -158,6 +180,14 @@ class RolesPermissionsSeeder extends Seeder
                 'customers.assign.view',
                 'customers.assign.manage',
                 'customers.assign.export',
+                'dtc.view',
+                'dtc.quotes.create',
+                'dtc.quotes.convert',
+                'commissions.review',
+                'commissions.rules.manage',
+                'kp.crm.items_not_ordered.view',
+                'kp.crm.dormant.manage',
+                'kp.crm.performance.view',
             ])->pluck('id')->all()
         );
 
@@ -173,6 +203,18 @@ class RolesPermissionsSeeder extends Seeder
                 'sales.management.view',
                 'sales.management.resolve',
                 'sales.management.manage',
+                'dtc.view',
+                'dtc.quotes.create',
+                'dtc.quotes.convert',
+                'commissions.view_own',
+                'commissions.review',
+                'commissions.rules.manage',
+                'commissions.approve',
+                'commissions.lock',
+                'production.planning.manage',
+                'kp.crm.items_not_ordered.view',
+                'kp.crm.dormant.manage',
+                'kp.crm.performance.view',
             ])->pluck('id')->all()
         );
 
@@ -192,6 +234,15 @@ class RolesPermissionsSeeder extends Seeder
                 'customers.assign.view',
                 'customers.assign.manage',
                 'customers.assign.export',
+                'dtc.view',
+                'dtc.quotes.create',
+                'dtc.quotes.convert',
+                'commissions.view_own',
+                'commissions.review',
+                'commissions.approve',
+                'kp.crm.items_not_ordered.view',
+                'kp.crm.dormant.manage',
+                'kp.crm.performance.view',
             ])->pluck('id')->all()
         );
 
@@ -212,6 +263,9 @@ class RolesPermissionsSeeder extends Seeder
                 'sales.management.view',
                 'sales.management.resolve',
                 'sales.management.manage',
+                'dtc.view',
+                'dtc.quotes.create',
+                'dtc.quotes.convert',
             ])->pluck('id')->all()
         );
 
@@ -221,6 +275,29 @@ class RolesPermissionsSeeder extends Seeder
 
         Role::where('name', 'Technician')->first()?->permissions()->sync(
             Permission::whereIn('name', ['kp.fol.view', 'kp.fol.install.execute'])->pluck('id')->all()
+        );
+
+        $partnerReadPermissions = Permission::whereIn('name', [
+            'orders.view',
+            'reports.export',
+            'customers.assign.view',
+            'consultants.view',
+            'sales.management.view',
+            'dtc.view',
+            'kp.fol.view',
+            'kp.crm.items_not_ordered.view',
+            'kp.crm.performance.view',
+        ])->pluck('id')->all();
+        Role::where('name', 'Partner Brands Member')->first()?->permissions()->sync($partnerReadPermissions);
+        Role::where('name', 'Partner Brands HOD')->first()?->permissions()->sync(
+            Permission::whereIn('name', [
+                ...Permission::whereIn('id', $partnerReadPermissions)->pluck('name')->all(),
+                'customers.assign.manage',
+                'customers.assign.export',
+                'sales.management.resolve',
+                'sales.management.manage',
+                'kp.crm.dormant.manage',
+            ])->pluck('id')->all()
         );
 
         User::whereNotNull('role')->get()->each(function (User $user): void {
@@ -296,42 +373,44 @@ class RolesPermissionsSeeder extends Seeder
             ]
         );
 
+        // Bulk ops emails OFF (R1–R3, R5–R6, SM-*). Workflow emails ON: FOL N1–N6, PCR P1–P6.
+        // Also active outside rules: System Health [CRITICAL], Daily management report.
         $rules = [
             [
-                'rule_key'   => 'R1',
-                'label'      => 'Critical Orders Pending',
-                'channels'   => ['email', 'in_app'],
+                'rule_key' => 'R1',
+                'label' => 'Critical Orders Pending',
+                'channels' => ['email', 'in_app'],
+                'is_enabled' => false,
+            ],
+            [
+                'rule_key' => 'R2',
+                'label' => 'SLA Breach',
+                'channels' => ['email'],
+                'is_enabled' => false,
+            ],
+            [
+                'rule_key' => 'R3',
+                'label' => 'Revenue at Risk',
+                'channels' => ['email'],
+                'is_enabled' => false,
+            ],
+            [
+                'rule_key' => 'R4',
+                'label' => 'AI Cycle Complete',
+                'channels' => ['in_app'],
                 'is_enabled' => true,
             ],
             [
-                'rule_key'   => 'R2',
-                'label'      => 'SLA Breach',
-                'channels'   => ['email'],
-                'is_enabled' => true,
+                'rule_key' => 'R5',
+                'label' => 'Order Match Queue Backlog',
+                'channels' => ['email'],
+                'is_enabled' => false,
             ],
             [
-                'rule_key'   => 'R3',
-                'label'      => 'Revenue at Risk',
-                'channels'   => ['email'],
-                'is_enabled' => true,
-            ],
-            [
-                'rule_key'   => 'R4',
-                'label'      => 'AI Cycle Complete',
-                'channels'   => ['in_app'],
-                'is_enabled' => true,
-            ],
-            [
-                'rule_key'   => 'R5',
-                'label'      => 'Order Match Queue Backlog',
-                'channels'   => ['email'],
-                'is_enabled' => true,
-            ],
-            [
-                'rule_key'   => 'R6',
-                'label'      => 'Order Match Duplicate PO',
-                'channels'   => ['email'],
-                'is_enabled' => true,
+                'rule_key' => 'R6',
+                'label' => 'Order Match Duplicate PO',
+                'channels' => ['email'],
+                'is_enabled' => false,
             ],
             [
                 'rule_key' => 'FOL-N1',
@@ -409,34 +488,34 @@ class RolesPermissionsSeeder extends Seeder
                 'rule_key' => 'SM-P1',
                 'label' => 'Sales Management Order Cycle Due',
                 'channels' => ['email', 'in_app'],
-                'is_enabled' => true,
+                'is_enabled' => false,
             ],
             [
                 'rule_key' => 'SM-P2',
                 'label' => 'Sales Management Order Cycle Overdue',
                 'channels' => ['email', 'in_app'],
-                'is_enabled' => true,
+                'is_enabled' => false,
             ],
             [
                 'rule_key' => 'SM-P3',
                 'label' => 'Sales Management Month Close Gap',
                 'channels' => ['email', 'in_app'],
-                'is_enabled' => true,
+                'is_enabled' => false,
             ],
             [
                 'rule_key' => 'SM-P4',
                 'label' => 'Sales Management Prompt Resolved Summary',
                 'channels' => ['email', 'in_app'],
-                'is_enabled' => true,
+                'is_enabled' => false,
             ],
         ];
 
         foreach ($rules as $rule) {
-            NotificationRule::firstOrCreate(
+            NotificationRule::updateOrCreate(
                 ['rule_key' => $rule['rule_key']],
                 [
-                    'label'      => $rule['label'],
-                    'channels'   => $rule['channels'],
+                    'label' => $rule['label'],
+                    'channels' => $rule['channels'],
                     'is_enabled' => $rule['is_enabled'],
                 ]
             );

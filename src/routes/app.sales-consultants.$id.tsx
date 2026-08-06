@@ -7,15 +7,19 @@ import {
   ArrowUpDown,
   BriefcaseBusiness,
   Calendar,
+  CheckCircle2,
   DollarSign,
+  PackageX,
   Search,
   UserCheck,
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +38,7 @@ import {
   type ConsultantCustomerFilters,
 } from "@/hooks/useSalesConsultants";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useBackorders, useBackordersSummary, useResolvedBackorders } from "@/hooks/useOperations";
 import { useSalesManagementPrompts } from "@/hooks/useSalesManagement";
 import { ApiError } from "@/lib/api";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -44,7 +49,7 @@ import {
 } from "@/lib/sales-management";
 
 export const Route = createFileRoute("/app/sales-consultants/$id")({
-  head: () => ({ meta: [{ title: "Sales Consultant — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Sales Consultant — Kim-Fay Sight" }] }),
   component: SalesConsultantDetailPage,
 });
 
@@ -120,6 +125,7 @@ function SalesConsultantDetailPage() {
     { key: "fill_rate_pct", label: "Fill Rate", align: "right" },
     { key: "revenue_lost", label: "Rev. Lost", align: "right" },
     { key: "last_order_date", label: "Last Order", align: "right" },
+    { key: "predicted_next_order_date", label: "Predicted Next", align: "right" },
   ];
 
   function handleSort(columnKey: string) {
@@ -252,6 +258,10 @@ function SalesConsultantDetailPage() {
         />
       </div>
 
+      {consultant?.rep_code && (
+        <ConsultantBackorderPanel repCode={consultant.rep_code} dateFrom={dateFrom} dateTo={dateTo} />
+      )}
+
       {consultant && canViewSalesPrompts && <ConsultantPromptPanel consultant={consultant} />}
 
       <Card className="rounded-lg shadow-sm">
@@ -348,6 +358,11 @@ function SalesConsultantDetailPage() {
                       <TableCell className="text-right tabular-nums">
                         <DateWithActions value={row.last_order_date} emptyText="-" />
                       </TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {row.predicted_next_order_date
+                          ? formatDate(row.predicted_next_order_date)
+                          : "-"}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -383,6 +398,167 @@ function BackLink() {
         Sales Consultants
       </Link>
     </Button>
+  );
+}
+
+const AGING_BUCKETS = ["0-7", "8-14", "15-30", "30+"] as const;
+type AgingBucket = (typeof AGING_BUCKETS)[number];
+
+/** Status ramp (green → blue → amber → red) — validated for CVD separation and lightness band. */
+const AGING_BUCKET_COLOR: Record<AgingBucket, string> = {
+  "0-7": "#10b981",
+  "8-14": "#0ea5e9",
+  "15-30": "#f59e0b",
+  "30+": "#ef4444",
+};
+
+const agingChartConfig = {
+  value: { label: "Revenue at risk" },
+} satisfies ChartConfig;
+
+/**
+ * A rep's own backorder exposure: how much is at risk right now, how it's aging, and
+ * what's cleared recently. Scoped server-side by portfolio for this rep (assignments ∪
+ * Acumatica SO rep-code) — same live backorder data as `/app/backorders`, not rep_code alone.
+ */
+function ConsultantBackorderPanel({
+  repCode,
+  dateFrom,
+  dateTo,
+}: {
+  repCode: string;
+  dateFrom: string;
+  dateTo: string;
+}) {
+  const summary = useBackordersSummary({ rep_code: repCode });
+  // Enough lines to build an aging distribution for one rep's portfolio without a dedicated
+  // aggregation endpoint — mirrors the client-side grouping already used on /app/backorders.
+  const openLines = useBackorders({ rep_code: repCode, per_page: 200 });
+  const resolved = useResolvedBackorders({
+    rep_code: repCode,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+    per_page: 200,
+  });
+
+  const isLoading = summary.isLoading || openLines.isLoading;
+
+  const agingData = useMemo(() => {
+    const buckets = new Map<AgingBucket, { value: number; count: number }>(
+      AGING_BUCKETS.map((bucket) => [bucket, { value: 0, count: 0 }]),
+    );
+    for (const line of openLines.data?.data ?? []) {
+      if (!line.aging_bucket) continue;
+      const bucket = buckets.get(line.aging_bucket);
+      if (!bucket) continue;
+      bucket.value += Number(line.revenue_at_risk) || 0;
+      bucket.count += 1;
+    }
+    return AGING_BUCKETS.map((bucket) => ({
+      bucket,
+      value: Math.round(buckets.get(bucket)!.value),
+      count: buckets.get(bucket)!.count,
+    }));
+  }, [openLines.data?.data]);
+
+  const resolvedRows = resolved.data?.data ?? [];
+  const resolvedValue = resolvedRows.reduce((sum, row) => sum + (Number(row.revenue_at_risk) || 0), 0);
+  const resolvedCount = resolved.data?.total ?? resolvedRows.length;
+  const hasOpenExposure = agingData.some((row) => row.count > 0);
+
+  return (
+    <Card className="rounded-lg shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+        <div className="flex items-center gap-2">
+          <PackageX className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-base">My backorders</CardTitle>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/app/backorders">Open full report</Link>
+        </Button>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <p className="text-sm text-muted-foreground">Value at risk (open)</p>
+            {isLoading ? (
+              <Skeleton className="mt-2 h-8 w-28" />
+            ) : (
+              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                {formatMoney(summary.data?.revenue_at_risk)}
+              </p>
+            )}
+          </div>
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <p className="text-sm text-muted-foreground">Open lines</p>
+            {isLoading ? (
+              <Skeleton className="mt-2 h-8 w-16" />
+            ) : (
+              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                {(summary.data?.open_lines ?? 0).toLocaleString("en-KE")}
+              </p>
+            )}
+          </div>
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Resolved this period
+            </div>
+            {resolved.isLoading ? (
+              <Skeleton className="mt-2 h-8 w-28" />
+            ) : (
+              <>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">{formatMoney(resolvedValue)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {resolvedCount.toLocaleString("en-KE")} line{resolvedCount === 1 ? "" : "s"} cleared
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-medium">Open exposure by age</p>
+          {isLoading ? (
+            <Skeleton className="h-[180px] w-full" />
+          ) : !hasOpenExposure ? (
+            <p className="rounded border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              No open backorder lines for this consultant right now.
+            </p>
+          ) : (
+            <ChartContainer config={agingChartConfig} className="aspect-auto h-[180px] w-full">
+              <BarChart data={agingData} margin={{ left: 4, right: 12, top: 16, bottom: 0 }}>
+                <XAxis dataKey="bucket" tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis hide />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value, _name, item) =>
+                        `${formatMoney(value as number)} · ${item.payload.count} line${item.payload.count === 1 ? "" : "s"}`
+                      }
+                    />
+                  }
+                />
+                <Bar dataKey="value" radius={4}>
+                  {agingData.map((row) => (
+                    <Cell key={row.bucket} fill={AGING_BUCKET_COLOR[row.bucket]} />
+                  ))}
+                  <LabelList
+                    dataKey="value"
+                    position="top"
+                    className="fill-foreground text-xs font-medium"
+                    formatter={(value: number) => (value > 0 ? formatMoney(value) : "")}
+                  />
+                </Bar>
+              </BarChart>
+            </ChartContainer>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Days since first backordered — 30+ is the chronic bucket worth a follow-up call.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -9,18 +9,21 @@ use App\Models\PasswordChangeLog;
 use App\Models\UserRepCodeHistory;
 use App\Services\Admin\AuditLogger;
 use App\Services\OtpService;
+use App\Services\WhatsAppOtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
 {
     public function __construct(
         private readonly OtpService $otpService,
         private readonly AuditLogger $audit,
+        private readonly WhatsAppOtpService $whatsAppOtp,
     ) {}
 
     /**
@@ -36,6 +39,8 @@ class ProfileController extends Controller
             'email'           => $user->email,
             'role'            => $user->role,
             'phone_number'    => $user->phone_number,
+            'whatsapp_number' => $user->whatsapp_number,
+            'must_change_password' => $user->password_changed_at === null,
             'rep_code'        => $user->rep_code,
             'employee_number' => $user->employee_number,
             'updated_at'      => $user->updated_at,
@@ -53,6 +58,7 @@ class ProfileController extends Controller
             [
                 'name'         => 'sometimes|string|min:2|max:100',
                 'phone_number' => ['sometimes', 'nullable', 'regex:/^\+[1-9]\d{6,14}$/'],
+                'whatsapp_number' => ['sometimes', 'nullable', 'regex:/^\+[1-9]\d{6,14}$/'],
                 'rep_code'     => [
                     'sometimes',
                     'nullable',
@@ -66,6 +72,7 @@ class ProfileController extends Controller
                 'name.min'            => 'Name must be between 2 and 100 characters.',
                 'name.max'            => 'Name must be between 2 and 100 characters.',
                 'phone_number.regex'  => 'Phone number must be in international format (e.g., +254712345678).',
+                'whatsapp_number.regex' => 'WhatsApp number must be in international format (e.g., +254712345678).',
                 'rep_code.regex'      => 'Rep code may only contain letters, numbers, spaces, dots, hyphens, underscores, and slashes.',
                 'rep_code.unique'     => 'This rep code is already assigned to another Sales Consultant.',
                 'rep_code.max'        => 'Rep code must not exceed 50 characters.',
@@ -107,9 +114,58 @@ class ProfileController extends Controller
             'email'           => $user->email,
             'role'            => $user->role,
             'phone_number'    => $user->phone_number,
+            'whatsapp_number' => $user->whatsapp_number,
+            'must_change_password' => $user->password_changed_at === null,
             'rep_code'        => $user->rep_code,
             'employee_number' => $user->employee_number,
             'updated_at'      => $user->updated_at,
+        ]);
+    }
+
+    public function completeOnboarding(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'new_password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()],
+            'phone_number' => ['nullable', 'regex:/^\+254(?:7|1)\d{8}$/'],
+            'whatsapp_number' => ['nullable', 'regex:/^\+[1-9]\d{6,14}$/'],
+        ], [
+            'phone_number.regex' => 'Use a Kenyan mobile number in international format, for example +254712345678.',
+            'whatsapp_number.regex' => 'Use international format, for example +254712345678.',
+        ]);
+
+        $user = $request->user();
+        if (Hash::check($validated['new_password'], $user->password)) {
+            return response()->json([
+                'message' => 'Choose a password different from your temporary or current password.',
+                'errors' => ['new_password' => ['Choose a different password.']],
+            ], 422);
+        }
+
+        $user->forceFill([
+            'password' => Hash::make($validated['new_password']),
+            'password_changed_at' => now(),
+            'phone_number' => $validated['phone_number'] ?? $user->phone_number,
+            'whatsapp_number' => $validated['whatsapp_number'] ?? $user->whatsapp_number,
+        ])->save();
+
+        PasswordChangeLog::create([
+            'user_id' => $user->id,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+        $this->audit->log('first_login_password_changed', 'user', (string) $user->id, [
+            'phone_updated' => array_key_exists('phone_number', $validated),
+            'whatsapp_updated' => array_key_exists('whatsapp_number', $validated),
+        ], $user->id, $request->ip());
+
+        return response()->json([
+            'message' => 'Your password and contact preferences have been saved.',
+            'user' => [
+                'id' => $user->id, 'name' => $user->name, 'email' => $user->email,
+                'role' => $user->role, 'rep_code' => $user->rep_code,
+                'phone_number' => $user->phone_number, 'whatsapp_number' => $user->whatsapp_number,
+                'must_change_password' => false,
+            ],
         ]);
     }
 
@@ -145,13 +201,37 @@ class ProfileController extends Controller
     }
 
     /**
-     * Request an OTP for password update (authenticated user, uses current user email).
+     * Request an OTP for password update.
+     * Delivery: channel = email | whatsapp | both (default email).
      */
     public function requestPasswordUpdateOtp(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'channel' => ['sometimes', 'string', Rule::in(['email', 'whatsapp', 'both'])],
+        ]);
+
         $user = $request->user();
         $email = $user->email;
         $purpose = 'password-update';
+        $channel = strtolower((string) ($validated['channel'] ?? 'email'));
+        $sendEmail = in_array($channel, ['email', 'both'], true);
+        $sendWhatsApp = in_array($channel, ['whatsapp', 'both'], true);
+
+        if ($sendWhatsApp) {
+            $whatsapp = trim((string) ($user->whatsapp_number ?? ''));
+            if ($whatsapp === '') {
+                return response()->json([
+                    'message' => 'Add a WhatsApp number on your profile before receiving codes via WhatsApp.',
+                    'code' => 'whatsapp_number_missing',
+                ], 422);
+            }
+            if (! $this->whatsAppOtp->isConfigured()) {
+                return response()->json([
+                    'message' => 'WhatsApp delivery is not available right now. Choose Email or contact support.',
+                    'code' => 'whatsapp_not_configured',
+                ], 503);
+            }
+        }
 
         $existingOtp = Otp::where('email', $email)->where('purpose', $purpose)->first();
         $now = now();
@@ -166,6 +246,7 @@ class ProfileController extends Controller
                 $this->audit->log('password_update_otp_resend_blocked', 'user', (string) $user->id, [
                     'reason' => 'too_many_resends',
                     'email_hash' => hash('sha256', $email),
+                    'channel' => $channel,
                 ], $user->id, $request->ip());
 
                 return response()->json([
@@ -191,31 +272,96 @@ class ProfileController extends Controller
             'resend_window_start' => $resendWindowStart,
         ]);
 
-        try {
-            Mail::to($email)->send(new OtpMail($otp, $user->name, $purpose));
-        } catch (\Throwable $e) {
-            $otpRecord->delete();
-            Log::error('password_otp_mail_failed', [
-                'email_hash' => hash('sha256', $email),
-                'exception' => $e::class,
-                'error' => $e->getMessage(),
-            ]);
+        $delivered = [];
+        $failures = [];
 
+        if ($sendEmail) {
+            try {
+                Mail::to($email)->send(new OtpMail($otp, $user->name, $purpose));
+                $delivered[] = 'email';
+            } catch (\Throwable $e) {
+                $failures['email'] = $e->getMessage();
+                Log::error('password_otp_mail_failed', [
+                    'email_hash' => hash('sha256', $email),
+                    'exception' => $e::class,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($sendWhatsApp) {
+            try {
+                $this->whatsAppOtp->sendOtp((string) $user->whatsapp_number, $otp, $purpose);
+                $delivered[] = 'whatsapp';
+            } catch (\Throwable $e) {
+                $failures['whatsapp'] = $e->getMessage();
+                Log::error('password_otp_whatsapp_failed', [
+                    'user_id' => $user->id,
+                    'exception' => $e::class,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($delivered === []) {
+            $otpRecord->delete();
             $this->audit->log('password_update_otp_request_failed', 'user', (string) $user->id, [
-                'reason' => 'mail_failed',
+                'reason' => 'delivery_failed',
+                'channel' => $channel,
+                'failures' => array_keys($failures),
                 'email_hash' => hash('sha256', $email),
             ], $user->id, $request->ip());
 
-            return response()->json(['message' => 'Failed to send verification email.'], 503);
+            $message = match (true) {
+                isset($failures['email']) && isset($failures['whatsapp']) => 'Failed to send verification code by email and WhatsApp.',
+                isset($failures['whatsapp']) => 'Failed to send verification code via WhatsApp.',
+                default => 'Failed to send verification email.',
+            };
+
+            return response()->json(['message' => $message, 'code' => 'delivery_failed'], 503);
         }
 
+        // Partial success on "both": keep OTP if at least one channel worked.
         $this->audit->log('password_update_otp_requested', 'user', (string) $user->id, [
             'email_hash' => hash('sha256', $email),
             'expires_in_minutes' => 15,
             'resend_attempts' => $resendAttempts,
+            'channel' => $channel,
+            'delivered' => $delivered,
+            'failed' => array_keys($failures),
         ], $user->id, $request->ip());
 
-        return response()->json(['message' => 'Verification code sent to your email.']);
+        return response()->json([
+            'message' => $this->passwordOtpDeliveryMessage($delivered, $failures),
+            'channel' => $channel,
+            'delivered' => $delivered,
+            'failed' => array_keys($failures),
+        ]);
+    }
+
+    /**
+     * @param  list<string>  $delivered
+     * @param  array<string, string>  $failures
+     */
+    private function passwordOtpDeliveryMessage(array $delivered, array $failures): string
+    {
+        $hasEmail = in_array('email', $delivered, true);
+        $hasWhatsApp = in_array('whatsapp', $delivered, true);
+
+        if ($hasEmail && $hasWhatsApp) {
+            return 'Verification code sent to your email and WhatsApp.';
+        }
+        if ($hasEmail && isset($failures['whatsapp'])) {
+            return 'Verification code sent to your email. WhatsApp delivery failed — use the email code.';
+        }
+        if ($hasWhatsApp && isset($failures['email'])) {
+            return 'Verification code sent to your WhatsApp. Email delivery failed — use the WhatsApp code.';
+        }
+        if ($hasWhatsApp) {
+            return 'Verification code sent to your WhatsApp.';
+        }
+
+        return 'Verification code sent to your email.';
     }
 
     /**
@@ -258,6 +404,7 @@ class ProfileController extends Controller
         }
 
         $user->password = Hash::make($validated['new_password']);
+        $user->password_changed_at = now();
         $user->save();
 
         PasswordChangeLog::create([

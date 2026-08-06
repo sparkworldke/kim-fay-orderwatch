@@ -11,13 +11,14 @@ use Illuminate\Console\Command;
 class RunInventorySync extends Command
 {
     protected $signature = 'orderwatch:inventory-sync
-                            {--source=scheduler}
+                            {--source=manual : Trigger source (manual|cli|scheduler). Use manual/cli for ops so min-interval is not applied}
                             {--user-id=}
                             {--job-key= : Cron job key (e.g. inventory-sync-fgs) so settings/lock match the scheduled row}
                             {--full : Run a full item sync (creates new items) instead of stocks-only update}
                             {--warehouse= : Filter by Acumatica warehouse ID (e.g. FGS, DTC)}
                             {--category= : Filter by Acumatica ItemClass / product category}
-                            {--min-qty= : Only sync items with QtyOnHand >= this value}';
+                            {--min-qty= : Only sync items with QtyOnHand >= this value}
+                            {--force : Break a stale cron lock and bypass min-interval (after Ctrl+C / killed sync)}';
 
     protected $description = 'Synchronize Acumatica inventory stock positions. Prefer per-warehouse scheduled jobs.';
 
@@ -27,6 +28,8 @@ class RunInventorySync extends Command
         $userId = $this->option('user-id') !== null ? (int) $this->option('user-id') : null;
         $settings = $job->settings ?? [];
         $full = (bool) $this->option('full');
+        $force = (bool) $this->option('force');
+        $source = trim((string) $this->option('source')) ?: 'manual';
 
         // CLI options take precedence over cron_jobs.settings defaults
         $filters = array_filter([
@@ -46,6 +49,9 @@ class RunInventorySync extends Command
         }
 
         $warehouseLabel = $filters['warehouse_id'] ?? 'ALL';
+        if ($force) {
+            $this->warn('Force mode: releasing stale lock / bypassing min-interval for job_key='.$job->job_key);
+        }
         if ($full) {
             $this->info("Running full inventory sync for warehouse [{$warehouseLabel}]…");
         } else {
@@ -54,12 +60,13 @@ class RunInventorySync extends Command
 
         $run = $cron->run(
             $job,
-            fn (CronRunLog $run) => $this->perform($run, $inventory, (string) $this->option('source'), $userId, $filters, $full),
-            (string) $this->option('source'),
+            fn (CronRunLog $run) => $this->perform($run, $inventory, $source, $userId, $filters, $full),
+            $source,
             $userId,
             // Twice daily (morning + midday) — leave room between waves for the same warehouse
             2 * 60 * 60,
             50 * 60, // lock: under 30 min stagger + buffer
+            $force,
         );
 
         $this->info("Cron run {$run->id}: {$run->status}");
@@ -114,6 +121,9 @@ class RunInventorySync extends Command
 
         $syncFilters = $sync->filters ?? [];
         $skippedLowQty = (int) ($syncFilters['skipped_low_qty'] ?? 0);
+        $balancesSaved = (int) ($syncFilters['balances_saved'] ?? $sync->success_count);
+        $mastersCreated = (int) ($syncFilters['masters_created'] ?? 0);
+        $zeroQtyCount = (int) ($syncFilters['zero_qty_count'] ?? 0);
         $activeFilters = array_filter([
             'warehouse' => $syncFilters['warehouse_id'] ?? null,
             'category' => $syncFilters['item_class'] ?? null,
@@ -143,6 +153,9 @@ class RunInventorySync extends Command
                     'metrics' => [
                         'items_checked' => (int) $sync->record_count,
                         'items_processed' => (int) $sync->success_count,
+                        'balances_saved' => $balancesSaved,
+                        'masters_created' => $mastersCreated,
+                        'zero_qty_balances' => $zeroQtyCount,
                         'failed_records' => (int) $sync->failed_count,
                         'skipped_low_qty' => $skippedLowQty,
                         'filter_warehouse' => $syncFilters['warehouse_id'] ?? null,

@@ -1,4 +1,4 @@
-const CACHE = "orderwatch-v2";
+const CACHE = "orderwatch-v3";
 const PRECACHE = ["/kim-fay-logo.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -27,34 +27,20 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Never serve cached HTML for a different route — that causes React hydration errors.
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(
-        () =>
-          new Response(
-            "<!doctype html><html><body><p>Offline. Check your connection and refresh.</p></body></html>",
-            { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } },
-          ),
-      ),
-    );
-    return;
-  }
-
-  if (!isStaticAsset(url.pathname)) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
+  if (event.request.mode === "navigate" || !isStaticAsset(url.pathname)) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-        }
-        return response;
-      });
+      return fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            event.waitUntil(caches.open(CACHE).then((cache) => cache.put(event.request, copy)));
+          }
+          return response;
+        })
+        .catch(() => cached || Response.error());
     }),
   );
 });

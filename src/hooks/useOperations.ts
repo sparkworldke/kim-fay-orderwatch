@@ -102,16 +102,19 @@ export type FillRateFlaggedRecord = {
 
 export type FillRateReasonCaptureReport = {
   summary: FillRateReasonCaptureSummary;
-  by_business_category: Record<string, {
-    business_category: string;
-    label: string;
-    line_count: number;
-    order_count: number;
-    undershipped_value: number;
-    valid_reason_lines: number;
-    missing_reason_lines: number;
-    unclassified_reason_lines: number;
-  }>;
+  by_business_category: Record<
+    string,
+    {
+      business_category: string;
+      label: string;
+      line_count: number;
+      order_count: number;
+      undershipped_value: number;
+      valid_reason_lines: number;
+      missing_reason_lines: number;
+      unclassified_reason_lines: number;
+    }
+  >;
   breakdown: FillRateReasonBreakdownRow[];
   flagged_records: FillRateFlaggedRecord[];
 };
@@ -221,6 +224,7 @@ export type InventoryItem = {
   supplier: string | null;
   default_uom: string | null;
   default_warehouse_id: string | null;
+  selected_warehouse_id?: string | null;
   qty_on_hand: string;
   qty_available: string | null;
   sales_price: string;
@@ -231,6 +235,8 @@ export type InventoryItem = {
 export type BackorderLine = {
   id: number;
   order_nbr: string;
+  /** Sales order date from Acumatica (joined from sales orders). */
+  order_date?: string | null;
   inventory_id: string;
   product_name: string | null;
   brand?: string | null;
@@ -242,15 +248,35 @@ export type BackorderLine = {
   qty_on_hand: string | null;
   qty_available: string | null;
   stock_shortfall: boolean;
+  fgs_qty_on_hand?: string | null;
+  fgs_qty_available?: string | null;
+  fgs_synced_at?: string | null;
+  stock_covers_open?: boolean;
+  stock_signal?: "true_stockout" | "partial_cover" | "stock_available_not_shipped" | "unknown";
+  suggested_reason_family?: "PRODUCTION" | "PROCUREMENT" | "LOGISTICS" | "UNCLASSIFIED";
+  reason_stock_mismatch?: boolean;
+  product_segment?: "manufactured" | "trading";
+  product_segment_label?: "Manufactured" | "Trading (Partners)";
+  is_excluded_from_kpi?: boolean;
   customer_acumatica_id: string | null;
   customer_name: string | null;
   order_qty: string;
   shipped_qty: string;
+  invoiced_qty: string | null;
+  shortfall_kind: "active_backorder" | "completed_shortfall";
+  order_status: string | null;
+  invoice_reconciliation_status: "reconciled" | "unavailable" | null;
+  fulfillment_source: string | null;
   open_qty: string;
   backorder_qty: string;
   cancelled_qty: string;
   qty_at_approval: string | null;
   fulfillment_status: string | null;
+  first_backordered_at: string | null;
+  first_backordered_at_is_backfilled: boolean;
+  backorder_age_days: number | null;
+  aging_bucket: "0-7" | "8-14" | "15-30" | "30+" | null;
+  missing_reason_exception: boolean;
   unit_price: string;
   revenue_at_risk: string;
   warehouse_id: string | null;
@@ -262,12 +288,91 @@ export type BackorderLine = {
   synced_at: string | null;
 };
 
+/**
+ * A backorder line that has resolved (shipped, or its order completed) and was archived
+ * out of the active list. `first_backordered_at` (when it started) and `resolved_at` (when
+ * it cleared) are tracked independently — a line spanning two months belongs to both
+ * months on their own terms, not to a single "owning" month.
+ */
+export type BackorderResolutionLine = {
+  id: number;
+  order_nbr: string;
+  inventory_id: string;
+  product_name: string | null;
+  brand?: string | null;
+  posting_class?: string | null;
+  sub_trading_group?: string | null;
+  supplier?: string | null;
+  customer_acumatica_id: string | null;
+  customer_name: string | null;
+  warehouse_id: string | null;
+  uom: string | null;
+  currency_id: string | null;
+  reason_code: string | null;
+  reason_notes: string | null;
+  unit_price: string;
+  revenue_at_risk: string;
+  order_qty: string;
+  last_open_qty: string;
+  last_backorder_qty: string;
+  last_fulfillment_status: string | null;
+  first_backordered_at: string | null;
+  first_backordered_at_is_backfilled: boolean;
+  resolved_at: string;
+  days_to_resolve: number | null;
+};
+
+export function useResolvedBackorders(params: {
+  q?: string;
+  customer_id?: string;
+  warehouse_id?: string;
+  reason_code?: string;
+  partner_brand?: string;
+  brand?: string;
+  category?: string;
+  /** Filters on resolved_at — "what cleared in this range." */
+  date_from?: string;
+  date_to?: string;
+  /** Filters on first_backordered_at — "what started in this range," independent of date_from/date_to. */
+  opened_from?: string;
+  opened_to?: string;
+  /** Filter to a specific sales consultant's portfolio (e.g. the consultant detail page). */
+  rep_code?: string;
+  page?: number;
+  per_page?: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.customer_id) qs.set("customer_id", params.customer_id);
+  if (params.warehouse_id) qs.set("warehouse_id", params.warehouse_id);
+  if (params.reason_code) qs.set("reason_code", params.reason_code);
+  if (params.partner_brand) qs.set("partner_brand", params.partner_brand);
+  if (params.brand) qs.set("brand", params.brand);
+  if (params.category) qs.set("category", params.category);
+  if (params.date_from) qs.set("date_from", params.date_from);
+  if (params.date_to) qs.set("date_to", params.date_to);
+  if (params.opened_from) qs.set("opened_from", params.opened_from);
+  if (params.opened_to) qs.set("opened_to", params.opened_to);
+  if (params.rep_code) qs.set("rep_code", params.rep_code);
+  qs.set("page", String(params.page ?? 1));
+  qs.set("per_page", String(params.per_page ?? 50));
+
+  return useQuery({
+    queryKey: ["operations-backorders-resolved", params],
+    queryFn: () => apiFetch<Paginated<BackorderResolutionLine>>(`operations/backorders/resolved?${qs}`),
+  });
+}
+
 export type BackordersAnalytics = {
   summary: {
     open_lines: number;
     open_orders: number;
+    open_skus?: number;
     revenue_at_risk: number;
     total_open_qty: number;
+    historical_shortfall_amount: number;
+    current_outstanding_amount: number;
+    historical_snapshot_count: number;
   };
   excel_summary: BackordersExcelSummary;
   filters: {
@@ -276,6 +381,7 @@ export type BackordersAnalytics = {
     departments: string[];
     warehouse_ids: string[];
     reason_codes: string[];
+    fulfillment_statuses: string[];
   };
   charts: {
     trend: Array<{
@@ -366,32 +472,30 @@ export type InventoryWarehouseOption = {
   label?: string;
   sku_count: number;
   configured?: boolean;
+  synced_at?: string | null;
 };
 
 /** Stockout prediction tab filter values (backend stockout_filter). */
-export type InventoryStockoutFilter =
-  | "critical_or_oos"
-  | "critical"
-  | "out_of_stock"
-  | "at_risk";
+export type InventoryStockoutFilter = "critical_or_oos" | "critical" | "out_of_stock" | "at_risk";
 
 export function useInventorySummary() {
   return useQuery({
     queryKey: ["operations-inventory-summary"],
-    queryFn: () => apiFetch<{
-      total_items: number;
-      low_stock_count: number;
-      at_risk_count: number;
-      out_of_stock_count?: number;
-      critical_stockout_count?: number;
-      last_synced_at: string | null;
-      warehouse_ids: string[];
-      warehouse_counts: InventoryWarehouseOption[];
-      warehouses?: InventoryWarehouseOption[];
-      brands: string[];
-      manufactured_count: number;
-      trading_count: number;
-    }>("operations/inventory/summary"),
+    queryFn: () =>
+      apiFetch<{
+        total_items: number;
+        low_stock_count: number;
+        at_risk_count: number;
+        out_of_stock_count?: number;
+        critical_stockout_count?: number;
+        last_synced_at: string | null;
+        warehouse_ids: string[];
+        warehouse_counts: InventoryWarehouseOption[];
+        warehouses?: InventoryWarehouseOption[];
+        brands: string[];
+        manufactured_count: number;
+        trading_count: number;
+      }>("operations/inventory/summary"),
   });
 }
 
@@ -428,16 +532,96 @@ export function useInventory(params: {
   });
 }
 
-export function useBackordersSummary() {
+export type ValueSummaryTotals = {
+  order_value: number;
+  invoiced_value: number;
+  backorder_value: number;
+};
+
+export type BackordersValueSummary = ValueSummaryTotals & {
+  by_product_segment: Record<"manufactured" | "trading", ValueSummaryTotals>;
+  by_customer_segment: Record<"KP" | "CS", ValueSummaryTotals>;
+};
+
+export type BackordersSummary = {
+  open_lines: number;
+  open_orders: number;
+  revenue_at_risk: number;
+  total_open_qty: number;
+  last_synced_at: string | null;
+  historical_shortfall_amount: number;
+  current_outstanding_amount: number;
+  completed: {
+    shortfall_lines: number;
+    affected_orders: number;
+    missed_qty: number;
+    missed_value: number;
+    fill_rate_pct: number | null;
+  };
+  value_summary: BackordersValueSummary;
+  open_episodes: number;
+  open_skus: number;
+  backorder_qty: number;
+  by_product_segment: Record<
+    "manufactured" | "trading",
+    { revenue_at_risk: number; line_count: number; order_count: number }
+  >;
+  by_brand: Array<{
+    brand: string;
+    product_segment: "manufactured" | "trading";
+    revenue_at_risk: number;
+    line_count: number;
+    order_count: number;
+  }>;
+  stock_diagnosis: {
+    rar_true_stockout: number;
+    rar_partial_cover: number;
+    rar_stock_available_not_shipped: number;
+    fgs_synced_at: string | null;
+  };
+  data_quality: {
+    reason_coverage_pct: number;
+    backfilled_pct: number;
+    excluded_count: number;
+  };
+};
+
+export function useBackordersSummary(
+  params: {
+    q?: string;
+    customer_id?: string;
+    customer_group?: string;
+    date_from?: string;
+    date_to?: string;
+    product_line?: string;
+    warehouse_id?: string;
+    reason_code?: string;
+    partner_brand?: string;
+    brand?: string;
+    category?: string;
+    segment?: string;
+    product_segment?: string;
+    shortfall_kind?: string;
+    fulfillment_status?: string;
+    include_branches?: boolean;
+    /** Filter to a specific sales consultant's portfolio (e.g. the consultant detail page). */
+    rep_code?: string;
+  } = {},
+) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === "" || value === false) return;
+    qs.set(key, value === true ? "1" : String(value));
+  });
+  const query = qs.toString();
+
   return useQuery({
-    queryKey: ["operations-backorders-summary"],
-    queryFn: () => apiFetch<{
-      open_lines: number;
-      open_orders: number;
-      revenue_at_risk: number;
-      total_open_qty: number;
-      last_synced_at: string | null;
-    }>("operations/backorders/summary"),
+    queryKey: ["operations-backorders-summary", params],
+    queryFn: () =>
+      apiFetch<BackordersSummary>(
+        `operations/backorders/summary${query ? `?${query}` : ""}`,
+        { timeoutMs: 180_000 },
+      ),
   });
 }
 
@@ -453,6 +637,14 @@ export function useBackorders(params: {
   partner_brand?: string;
   brand?: string;
   category?: string;
+  segment?: string;
+  product_segment?: string;
+  shortfall_kind?: string;
+  fulfillment_status?: string;
+  /** When true with customer_id, also include backorders on child branch accounts. */
+  include_branches?: boolean;
+  /** Filter to a specific sales consultant's portfolio (e.g. the consultant detail page). */
+  rep_code?: string;
   page?: number;
   per_page?: number;
 }) {
@@ -468,12 +660,21 @@ export function useBackorders(params: {
   if (params.partner_brand) qs.set("partner_brand", params.partner_brand);
   if (params.brand) qs.set("brand", params.brand);
   if (params.category) qs.set("category", params.category);
+  if (params.segment) qs.set("segment", params.segment);
+  if (params.product_segment) qs.set("product_segment", params.product_segment);
+  if (params.shortfall_kind) qs.set("shortfall_kind", params.shortfall_kind);
+  if (params.fulfillment_status) qs.set("fulfillment_status", params.fulfillment_status);
+  if (params.include_branches) qs.set("include_branches", "1");
+  if (params.rep_code) qs.set("rep_code", params.rep_code);
   qs.set("page", String(params.page ?? 1));
   qs.set("per_page", String(params.per_page ?? 50));
 
   return useQuery({
     queryKey: ["operations-backorders", params],
-    queryFn: () => apiFetch<Paginated<BackorderLine>>(`operations/backorders?${qs}`),
+    queryFn: () =>
+      apiFetch<Paginated<BackorderLine>>(`operations/backorders?${qs}`, {
+        timeoutMs: 180_000,
+      }),
   });
 }
 
@@ -487,6 +688,10 @@ export function useBackordersAnalytics(params: {
   partner_brand?: string;
   brand?: string;
   category?: string;
+  segment?: string;
+  product_segment?: string;
+  shortfall_kind?: string;
+  fulfillment_status?: string;
 }) {
   const qs = new URLSearchParams();
   if (params.date_from) qs.set("date_from", params.date_from);
@@ -498,24 +703,34 @@ export function useBackordersAnalytics(params: {
   if (params.partner_brand) qs.set("partner_brand", params.partner_brand);
   if (params.brand) qs.set("brand", params.brand);
   if (params.category) qs.set("category", params.category);
+  if (params.segment) qs.set("segment", params.segment);
+  if (params.product_segment) qs.set("product_segment", params.product_segment);
+  if (params.shortfall_kind) qs.set("shortfall_kind", params.shortfall_kind);
+  if (params.fulfillment_status) qs.set("fulfillment_status", params.fulfillment_status);
 
   return useQuery({
     queryKey: ["operations-backorders-analytics", params],
-    queryFn: () => apiFetch<BackordersAnalytics>(`operations/backorders/analytics?${qs}`),
+    queryFn: () =>
+      apiFetch<BackordersAnalytics>(`operations/backorders/analytics?${qs}`, {
+        timeoutMs: 180_000,
+      }),
   });
 }
 
 export function useBackordersByAccount(top = 10) {
   return useQuery({
     queryKey: ["operations-backorders-accounts", top],
-    queryFn: () => apiFetch<{ accounts: Array<{
-      customer_acumatica_id: string;
-      customer_name: string | null;
-      order_count: number;
-      open_lines: number;
-      revenue_at_risk: string;
-      total_open_qty: string;
-    }> }>(`operations/backorders/by-account?top=${top}`),
+    queryFn: () =>
+      apiFetch<{
+        accounts: Array<{
+          customer_acumatica_id: string;
+          customer_name: string | null;
+          order_count: number;
+          open_lines: number;
+          revenue_at_risk: string;
+          total_open_qty: string;
+        }>;
+      }>(`operations/backorders/by-account?top=${top}`),
   });
 }
 
@@ -534,9 +749,7 @@ export function useBusinessCategorySkuBreakdown(
   return useQuery({
     queryKey: ["operations-business-category-skus", module, businessCategory, filters],
     queryFn: () =>
-      apiFetch<BusinessCategorySkuBreakdown>(
-        `operations/${module}/sku-breakdown?${qs}`,
-      ),
+      apiFetch<BusinessCategorySkuBreakdown>(`operations/${module}/sku-breakdown?${qs}`),
     enabled,
   });
 }
@@ -561,8 +774,7 @@ export function useFillRateOutOfStockReport(
 
   return useQuery({
     queryKey: ["operations-fill-rate-oos", params],
-    queryFn: () =>
-      apiFetch<FillRateOutOfStockReport>(`operations/fill-rate/out-of-stock?${qs}`),
+    queryFn: () => apiFetch<FillRateOutOfStockReport>(`operations/fill-rate/out-of-stock?${qs}`),
     enabled,
   });
 }
@@ -728,7 +940,12 @@ export type BusinessOptimizationData = {
     date_to: string;
   };
   filters?: {
-    shipping_zones: Array<{ acumatica_id: string; description: string | null; name: string | null; region: string | null }>;
+    shipping_zones: Array<{
+      acumatica_id: string;
+      description: string | null;
+      name: string | null;
+      region: string | null;
+    }>;
     selected_shipping_zone_id: string | null;
     selected_region: string | null;
     region_options: Array<{ value: string; label: string }>;
@@ -848,10 +1065,7 @@ export function useBusinessOptimization(
 
   return useQuery({
     queryKey: ["operations-business-optimization", dateFrom, dateTo, shippingZoneId, region],
-    queryFn: () =>
-      apiFetch<BusinessOptimizationData>(
-        `operations/business-optimization?${qs}`,
-      ),
+    queryFn: () => apiFetch<BusinessOptimizationData>(`operations/business-optimization?${qs}`),
   });
 }
 
@@ -914,7 +1128,11 @@ export type FillRateOutOfStockReport = {
   skus: FillRateOutOfStockSkuRow[];
 };
 
-export function useFillRateSummary(dateFrom: string, dateTo: string, filters: FillRateSummaryFilters = {}) {
+export function useFillRateSummary(
+  dateFrom: string,
+  dateTo: string,
+  filters: FillRateSummaryFilters = {},
+) {
   const qs = new URLSearchParams();
   qs.set("date_from", dateFrom);
   qs.set("date_to", dateTo);
@@ -933,38 +1151,44 @@ export function useFillRateSummary(dateFrom: string, dateTo: string, filters: Fi
 
   return useQuery({
     queryKey: ["operations-fill-rate-summary", dateFrom, dateTo, filters],
-    queryFn: () => apiFetch<{
-      date_from: string;
-      date_to: string;
-      include_out_of_stock?: boolean;
-      overall_fill_rate: number | null;
-      overall_status: string;
-      segment_split: FillRateSegmentSplit;
-      revenue_not_shipped: number;
-      order_count: number;
-      healthy_count: number;
-      at_risk_count: number;
-      critical_count: number;
-      na_count: number;
-      out_of_stock_line_count?: number;
-      delivery_sla_breach_count: number;
-      delivery_sla_warning_count: number;
-      delivery_sla_rules: {
-        metro_zones: string;
-        metro_sla_hours: number;
-        regional_warning_hours: number;
-        regional_breach_hours: number;
-      };
-      last_computed_at: string | null;
-      excel_summary: FillRateExcelSummary;
-      filters: {
-        customer_groups: string[];
-        departments: string[];
-        reason_codes: string[];
-        product_lines: string[];
-        shipping_zones: Array<{ acumatica_id: string; description: string | null; name: string | null; region: string | null }>;
-      };
-    }>(`operations/fill-rate/summary?${qs}`),
+    queryFn: () =>
+      apiFetch<{
+        date_from: string;
+        date_to: string;
+        include_out_of_stock?: boolean;
+        overall_fill_rate: number | null;
+        overall_status: string;
+        segment_split: FillRateSegmentSplit;
+        revenue_not_shipped: number;
+        order_count: number;
+        healthy_count: number;
+        at_risk_count: number;
+        critical_count: number;
+        na_count: number;
+        out_of_stock_line_count?: number;
+        delivery_sla_breach_count: number;
+        delivery_sla_warning_count: number;
+        delivery_sla_rules: {
+          metro_zones: string;
+          metro_sla_hours: number;
+          regional_warning_hours: number;
+          regional_breach_hours: number;
+        };
+        last_computed_at: string | null;
+        excel_summary: FillRateExcelSummary;
+        filters: {
+          customer_groups: string[];
+          departments: string[];
+          reason_codes: string[];
+          product_lines: string[];
+          shipping_zones: Array<{
+            acumatica_id: string;
+            description: string | null;
+            name: string | null;
+            region: string | null;
+          }>;
+        };
+      }>(`operations/fill-rate/summary?${qs}`),
   });
 }
 
@@ -1040,7 +1264,7 @@ export function formatOpsSyncToast(label: string, run: OpsSyncRun): string {
         ? `${label} stopped: ${run.error_message ?? "Stopped by user"}`
         : run.status === "running"
           ? `${label} started and is running in the background`
-        : `${label} failed: ${run.error_message ?? "Unknown error"}`;
+          : `${label} failed: ${run.error_message ?? "Unknown error"}`;
 
   const parts = [base];
   if (run.record_count > 0 && run.record_count !== run.success_count) {
@@ -1063,19 +1287,34 @@ export function formatOpsSyncToast(label: string, run: OpsSyncRun): string {
   return parts.join(" · ");
 }
 
-function useOpsSync(endpoint: string, keys: string[]) {
+function useOpsSync(endpoint: string, keys: string[], options?: { timeoutMs?: number }) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body?: Record<string, string>) =>
-      apiFetch<{ sync_run: OpsSyncRun }>(
-        `admin/acumatica/sync/${endpoint}`,
-        { method: "POST", body: body ?? undefined },
-      ),
-    onSuccess: () => {
+      apiFetch<{ sync_run: OpsSyncRun; message?: string }>(`admin/acumatica/sync/${endpoint}`, {
+        method: "POST",
+        body: body ?? undefined,
+        timeoutMs: options?.timeoutMs,
+      }),
+    onSuccess: (res) => {
       keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       qc.invalidateQueries({ queryKey: ["operations-status"] });
       qc.invalidateQueries({ queryKey: ["operations-business-optimization"] });
       qc.invalidateQueries({ queryKey: ["admin-settings", "sync-logs"] });
+      // Background imports keep status "running" — poll until they settle.
+      if (res.sync_run?.status === "running") {
+        const started = Date.now();
+        const poll = window.setInterval(() => {
+          qc.invalidateQueries({ queryKey: ["operations-status"] });
+          qc.invalidateQueries({ queryKey: ["admin-settings", "sync-logs"] });
+          keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+          if (Date.now() - started > 30 * 60_000) {
+            window.clearInterval(poll);
+          }
+        }, 8_000);
+        // Clear after 30 min max; user can refresh anytime.
+        window.setTimeout(() => window.clearInterval(poll), 30 * 60_000);
+      }
     },
   });
 }
@@ -1093,7 +1332,50 @@ export function useSyncInventoryStocks() {
 }
 
 export function useSyncBackorders() {
-  return useOpsSync("backorders", ["operations-backorders", "operations-backorders-summary", "operations-backorders-accounts"]);
+  // Runs synchronously server-side now (no defer/queue) — the response only arrives once the
+  // sync has actually finished, so this needs real headroom for large date ranges.
+  return useOpsSync(
+    "backorders",
+    [
+      "operations-backorders",
+      "operations-backorders-summary",
+      "operations-backorders-analytics",
+      "operations-backorders-accounts",
+    ],
+    { timeoutMs: 300_000 },
+  );
+}
+
+function useTruncateOperationsData(endpoint: string, keys: string[]) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { date_from: string; date_to: string } | { clear_all: true }) =>
+      apiFetch<{ message: string; deleted_count: number; clear_all: boolean; date_from: string | null; date_to: string | null }>(`admin/so-imports/truncate/${endpoint}`, {
+        method: "POST",
+        body,
+      }),
+    onSuccess: () => {
+      keys.forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
+      qc.invalidateQueries({ queryKey: ["operations-status"] });
+    },
+  });
+}
+
+export function useTruncateBackorders() {
+  return useTruncateOperationsData("backorders", [
+    "operations-backorders",
+    "operations-backorders-summary",
+    "operations-backorders-analytics",
+    "operations-backorders-accounts",
+  ]);
+}
+
+export function useTruncateFillRate() {
+  return useTruncateOperationsData("fill-rate", [
+    "operations-fill-rate",
+    "operations-fill-rate-summary",
+    "operations-fill-rate-oos",
+  ]);
 }
 
 export function useSyncFillRate() {
@@ -1104,22 +1386,34 @@ export function useSyncCreditNotesAndMore() {
   return useOpsSync("credit-notes-more", ["orders", "order-stats"]);
 }
 
-export function fillRateStatusColor(status: string): "default" | "secondary" | "destructive" | "outline" {
+export function fillRateStatusColor(
+  status: string,
+): "default" | "secondary" | "destructive" | "outline" {
   switch (status) {
-    case "healthy": return "default";
-    case "at_risk": return "secondary";
-    case "critical": return "destructive";
-    default: return "outline";
+    case "healthy":
+      return "default";
+    case "at_risk":
+      return "secondary";
+    case "critical":
+      return "destructive";
+    default:
+      return "outline";
   }
 }
 
 export function predictionStatusLabel(status: string | null | undefined): string {
   switch (status) {
-    case "critical": return "Stockout ≤ 7 days";
-    case "at_risk": return "Stockout ≤ 14 days";
-    case "healthy": return "Stock healthy";
-    case "stable_or_replenished": return "Stable / replenished";
-    case "insufficient_history": return "Needs more sync history";
-    default: return status ?? "Unknown";
+    case "critical":
+      return "Stockout ≤ 7 days";
+    case "at_risk":
+      return "Stockout ≤ 14 days";
+    case "healthy":
+      return "Stock healthy";
+    case "stable_or_replenished":
+      return "Stable / replenished";
+    case "insufficient_history":
+      return "Needs more sync history";
+    default:
+      return status ?? "Unknown";
   }
 }

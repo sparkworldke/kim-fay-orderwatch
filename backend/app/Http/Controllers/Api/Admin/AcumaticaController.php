@@ -23,11 +23,6 @@ use RuntimeException;
 
 class AcumaticaController extends Controller
 {
-    /** @see config('inventory.warehouses') — keep in sync for validation */
-    private const INVENTORY_WAREHOUSES = [
-        'DTC', 'FGS', 'FGS2', 'FGS2 RETURNS', 'MSA', 'EXPORT', 'PRMS', 'RMS1', 'TRMS',
-    ];
-
     private const LOOKUP_DEFINITIONS = [
         'inventory_id' => [
             'label' => 'Inventory ID',
@@ -157,7 +152,12 @@ class AcumaticaController extends Controller
 
     public function syncCustomers(Request $request): JsonResponse
     {
-        $run = $this->customerSync->run($request->user()?->id);
+        $validated = $this->validateDateRange($request);
+        $run = $this->customerSync->run(
+            $request->user()?->id,
+            $validated['date_from'],
+            $validated['date_to'],
+        );
 
         return response()->json(['sync_run' => $run]);
     }
@@ -174,15 +174,35 @@ class AcumaticaController extends Controller
         $validated = $request->validate([
             'date_from' => ['required', 'date', 'before_or_equal:date_to'],
             'date_to'   => ['required', 'date'],
+            // full = import all SO in range; updates_only = recheck existing local SOs only
+            'mode' => ['nullable', 'string', 'in:full,updates_only'],
+            'updates_only' => ['nullable', 'boolean'],
+            'max_orders' => ['nullable', 'integer', 'min:50', 'max:5000'],
         ]);
 
-        $run = $this->salesOrderSync->syncDateRange(
-            $validated['date_from'],
-            $validated['date_to'],
-            $request->user()?->id,
-        );
+        $updatesOnly = (bool) ($validated['updates_only'] ?? false)
+            || (($validated['mode'] ?? 'full') === 'updates_only');
 
-        return response()->json(['sync_run' => $run]);
+        if ($updatesOnly) {
+            $run = $this->salesOrderSync->syncStatusUpdatesForDateRange(
+                $validated['date_from'],
+                $validated['date_to'],
+                (int) ($validated['max_orders'] ?? 5000),
+                $request->user()?->id,
+                'manual',
+            );
+        } else {
+            $run = $this->salesOrderSync->syncDateRange(
+                $validated['date_from'],
+                $validated['date_to'],
+                $request->user()?->id,
+            );
+        }
+
+        return response()->json([
+            'sync_run' => $run,
+            'mode' => $updatesOnly ? 'updates_only' : 'full',
+        ]);
     }
 
     public function refreshOrderStatuses(Request $request): JsonResponse
@@ -225,11 +245,15 @@ class AcumaticaController extends Controller
         $validated = $request->validate([
             'customer_ids'   => ['required', 'array', 'min:1', 'max:50'],
             'customer_ids.*' => ['required', 'string', 'max:50'],
+            'date_from' => ['required', 'date', 'before_or_equal:date_to'],
+            'date_to' => ['required', 'date'],
         ]);
 
         $run = $this->salesOrderSync->syncForCustomers(
             $validated['customer_ids'],
             $request->user()?->id,
+            $validated['date_from'],
+            $validated['date_to'],
         );
 
         return response()->json(['sync_run' => $run]);
@@ -238,13 +262,17 @@ class AcumaticaController extends Controller
     public function syncInventory(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'warehouse_id' => ['nullable', 'string', 'in:' . implode(',', self::INVENTORY_WAREHOUSES)],
+            'warehouse_id' => ['nullable', 'string', 'in:'.$this->inventoryWarehouseRule()],
+            'date_from' => ['required', 'date', 'before_or_equal:date_to'],
+            'date_to' => ['required', 'date'],
         ]);
 
         $run = $this->inventorySync->run(
             $request->user()?->id,
             filters: array_filter([
                 'warehouse_id' => $validated['warehouse_id'] ?? null,
+                'date_from' => $validated['date_from'],
+                'date_to' => $validated['date_to'],
             ], fn ($v) => $v !== null && $v !== ''),
         );
 
@@ -254,17 +282,45 @@ class AcumaticaController extends Controller
     public function syncInventoryStocks(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'warehouse_id' => ['nullable', 'string', 'in:' . implode(',', self::INVENTORY_WAREHOUSES)],
+            'warehouse_id' => ['nullable', 'string', 'in:'.$this->inventoryWarehouseRule()],
+            'date_from' => ['required', 'date', 'before_or_equal:date_to'],
+            'date_to' => ['required', 'date'],
         ]);
 
         $run = $this->inventorySync->runStocksOnly(
             $request->user()?->id,
             filters: array_filter([
                 'warehouse_id' => $validated['warehouse_id'] ?? null,
+                'date_from' => $validated['date_from'],
+                'date_to' => $validated['date_to'],
             ], fn ($v) => $v !== null && $v !== ''),
         );
 
         return response()->json(['sync_run' => $run]);
+    }
+
+    /**
+     * Allowed warehouse IDs for manual inventory sync (from config/inventory.php).
+     */
+    private function inventoryWarehouseRule(): string
+    {
+        $warehouses = array_values(array_filter(array_map(
+            static fn ($w) => strtoupper(trim((string) $w)),
+            config('inventory.warehouses', []),
+        )));
+
+        return $warehouses !== []
+            ? implode(',', $warehouses)
+            : 'DTC,FGS,FGS2,FGS2 RETURNS,MSA,EXPORT,PRMS,RMS1,TRMS,TPFGS';
+    }
+
+    /** @return array{date_from:string,date_to:string} */
+    private function validateDateRange(Request $request): array
+    {
+        return $request->validate([
+            'date_from' => ['required', 'date', 'before_or_equal:date_to'],
+            'date_to' => ['required', 'date'],
+        ]);
     }
 
     public function syncBackorders(Request $request): JsonResponse
@@ -274,15 +330,29 @@ class AcumaticaController extends Controller
             'date_to' => ['nullable', 'date', 'required_with:date_from'],
         ]);
 
+        $dateFrom = $validated['date_from'] ?? null;
+        $dateTo = $validated['date_to'] ?? null;
+
+        // Straightforward and synchronous — no defer, no queue. The prior defer()-after-response
+        // approach was meant to dodge gateway timeouts on large ranges, but if the deferred
+        // callback never actually ran (worker recycled, connection dropped, etc.) the sync log
+        // was left stuck on "running" forever with nothing to retry it. Running inline means the
+        // response always reflects the real outcome. For very large backfills, prefer the CLI:
+        // php artisan orderwatch:import-backorders --from=YYYY-MM-DD --to=YYYY-MM-DD
         $run = $this->backorderSync->run(
             $request->user()?->id,
             'manual',
             null,
-            $validated['date_from'] ?? null,
-            $validated['date_to'] ?? null,
+            $dateFrom,
+            $dateTo,
         );
 
-        return response()->json(['sync_run' => $run]);
+        return response()->json([
+            'sync_run' => $run,
+            'message' => $run->status === 'failed'
+                ? ('Backorder sync failed: '.($run->error_message ?? 'unknown error'))
+                : "Backorder sync {$run->status}: {$run->success_count} line(s) synced from {$run->record_count} order(s).",
+        ]);
     }
 
     public function syncFillRate(Request $request): JsonResponse
@@ -332,6 +402,22 @@ class AcumaticaController extends Controller
 
     public function syncLogs(): JsonResponse
     {
+        // Passive self-heal: a "running" row otherwise only gets swept when someone starts a
+        // brand-new sync of the same type. Sweeping here too means a stuck row (e.g. a killed
+        // worker) clears itself the next time anyone opens this list, instead of sitting on
+        // "Running…" indefinitely and blocking the trigger button via the active-sync check.
+        $runningTypes = AcumaticaSyncLog::query()
+            ->where('status', 'running')
+            ->distinct()
+            ->pluck('sync_type')
+            ->filter()
+            ->values()
+            ->all();
+        if ($runningTypes !== []) {
+            AcumaticaSyncLog::failStaleRunning($runningTypes);
+            AcumaticaSyncLog::failLongRunning($runningTypes);
+        }
+
         $logs = AcumaticaSyncLog::orderByDesc('started_at')->limit(50)->get();
 
         return response()->json($logs);

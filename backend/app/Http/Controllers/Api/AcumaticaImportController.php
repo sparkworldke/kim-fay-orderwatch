@@ -153,6 +153,71 @@ class AcumaticaImportController extends Controller
         return response()->json(['message' => 'Customer data cleared successfully.']);
     }
 
+    public function truncateBackorders(Request $request): JsonResponse
+    {
+        $scope = $this->validateClearScope($request);
+        if ($scope['clear_all']) {
+            $deleted = DB::table('acumatica_backorder_lines')->delete();
+        } else {
+            $orderNbrs = DB::table('acumatica_sales_orders')
+                ->whereBetween('order_date', [$scope['date_from'].' 00:00:00', $scope['date_to'].' 23:59:59'])
+                ->select('acumatica_order_nbr');
+            $deleted = DB::table('acumatica_backorder_lines')->whereIn('order_nbr', $orderNbrs)->delete();
+        }
+
+        return response()->json($this->clearResponse('Backorder', $deleted, $scope));
+    }
+
+    public function truncateFillRate(Request $request): JsonResponse
+    {
+        $scope = $this->validateClearScope($request);
+        if ($scope['clear_all']) {
+            $deleted = DB::table('acumatica_fill_rate_snapshots')->delete();
+        } else {
+            $orders = DB::table('acumatica_sales_orders')
+                ->whereBetween('order_date', [$scope['date_from'].' 00:00:00', $scope['date_to'].' 23:59:59']);
+            $orderIds = (clone $orders)->select('id');
+            $orderNbrs = (clone $orders)->select('acumatica_order_nbr');
+            $deleted = DB::table('acumatica_fill_rate_snapshots')
+                ->where(function ($query) use ($orderIds, $orderNbrs) {
+                    $query->whereIn('sales_order_id', $orderIds)->orWhereIn('order_nbr', $orderNbrs);
+                })
+                ->delete();
+        }
+
+        return response()->json($this->clearResponse('Fill rate', $deleted, $scope));
+    }
+
+    /** @return array{clear_all:bool,date_from:?string,date_to:?string} */
+    private function validateClearScope(Request $request): array
+    {
+        $validated = $request->validate([
+            'clear_all' => ['nullable', 'boolean'],
+            'date_from' => ['required_unless:clear_all,true', 'nullable', 'date', 'before_or_equal:date_to', 'prohibited_if:clear_all,true'],
+            'date_to' => ['required_unless:clear_all,true', 'nullable', 'date', 'prohibited_if:clear_all,true'],
+        ]);
+
+        return [
+            'clear_all' => (bool) ($validated['clear_all'] ?? false),
+            'date_from' => $validated['date_from'] ?? null,
+            'date_to' => $validated['date_to'] ?? null,
+        ];
+    }
+
+    /** @param array{clear_all:bool,date_from:?string,date_to:?string} $scope */
+    private function clearResponse(string $label, int $deleted, array $scope): array
+    {
+        return [
+            'message' => $scope['clear_all']
+                ? "{$label} data cleared successfully ({$deleted} rows)."
+                : "{$label} data cleared for {$scope['date_from']} to {$scope['date_to']} ({$deleted} rows).",
+            'deleted_count' => $deleted,
+            'clear_all' => $scope['clear_all'],
+            'date_from' => $scope['date_from'],
+            'date_to' => $scope['date_to'],
+        ];
+    }
+
     public function index(Request $request): JsonResponse
     {
         $today     = now()->toDateString();

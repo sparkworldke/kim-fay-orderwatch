@@ -138,7 +138,7 @@ For **testing and operational override**, any user with `role = Administrator` *
 
 ### 3.3 Dynamic configuration (Admin-editable — no code deploy)
 
-All FOL runtime behaviour that used to be hard-coded or env-only is **editable in Administration → FOL Settings**:
+All FOL runtime behaviour that used to be hard-coded or env-only is **editable in KP CRM → FOL Settings**:
 
 | Setting | Storage | Editable |
 |---|---|---|

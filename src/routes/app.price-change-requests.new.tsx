@@ -18,7 +18,7 @@ import {
 import { money, pct } from "@/lib/price-change";
 
 export const Route = createFileRoute("/app/price-change-requests/new")({
-  head: () => ({ meta: [{ title: "New Price Change Request - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "New Price Change Request - Kim-Fay Sight" }] }),
   component: NewPriceChangePage,
 });
 
@@ -114,11 +114,19 @@ function NewPriceChangePage() {
 
         <aside className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
           <h2 className="text-sm font-semibold">System price snapshot</h2>
+          <Snapshot
+            label="Price class"
+            value={resolved.data?.customer_price_class ? String(resolved.data.customer_price_class) : "-"}
+          />
           <Snapshot label="Current selling price" value={resolved.data ? money(resolved.data.current_selling_price as number) : "-"} />
           <Snapshot label="Source" value={resolved.data?.current_price_source ? String(resolved.data.current_price_source) : "-"} />
           {"base_price_snapshot" in (resolved.data ?? {}) && (
             <>
               <Snapshot label="Base price" value={money(resolved.data?.base_price_snapshot as number)} />
+              <Snapshot
+                label="Base source"
+                value={resolved.data?.base_price_source ? String(resolved.data.base_price_source) : "-"}
+              />
               <Snapshot label="Margin %" value={pct(resolved.data?.margin_pct_snapshot as number)} />
               <Snapshot label="Margin KES" value={money(resolved.data?.margin_kes_snapshot as number)} />
             </>

@@ -18,6 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.or.manager' => \App\Http\Middleware\AdminOrCustomerServiceManager::class,
             'admin.or.cs' => \App\Http\Middleware\AdminOrCustomerService::class,
             'view.only' => \App\Http\Middleware\ViewOnlyUnlessPrivileged::class,
+            'response.cache' => \App\Http\Middleware\CacheDomainResponse::class,
+            'kp.crm' => \App\Http\Middleware\EnsureKpCrmAccess::class,
+            'super.admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

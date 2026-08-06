@@ -63,6 +63,7 @@ class CronJob extends Model
         self::otpPrune();
         self::orderMatchNotificationEvaluation();
         self::fixedDailyReport();
+        self::folSalesOrderRetry();
     }
 
     public function computedNextRunAt(): ?\DateTimeInterface
@@ -149,25 +150,51 @@ class CronJob extends Model
 
     public static function salesOrderSync(): self
     {
-        return self::firstOrCreate(
+        $job = self::firstOrCreate(
+            // job_key kept for lock/log continuity (legacy name from the 3h era).
             ['job_key' => 'sales-order-sync-3h'],
             [
-                'name' => 'Sales Order Synchronization',
-                'description' => 'Acumatica sales order sync. Rolling 2-hour window each run; deep 3-day scan at 4PM.',
+                'name' => 'Sales Order + Backorder Sync',
+                'description' => 'Acumatica sales orders (sales_orders) every 2 hours + chained backorders. Full import of last lookback_days. Manual: php artisan orderwatch:sales-orders-sync --force',
                 'is_enabled' => true,
                 'frequency_label' => 'Every 2 Hours',
                 'cron_expression' => '0 */2 * * *',
                 'trigger_type' => 'scheduler',
                 'command' => 'php artisan orderwatch:sales-orders-sync',
                 'status' => 'active',
-                'next_run_at' => now()->addHours(2),
+                'next_run_at' => now()->addHours(2)->startOfHour(),
                 'settings' => [
-                    'lookback_hours'          => 2,   // normal runs: look back this many hours
-                    'deep_scan_hour'          => 16,  // hour (in CRON_TIMEZONE) that triggers deep scan
-                    'deep_scan_lookback_days' => 3,   // deep scan: look back this many days
+                    'lookback_days' => 7, // every automated run imports last N days
+                    // 'full' (default) or 'updates_only' — updates_only only rechecks local SOs in range
+                    'sync_mode' => 'full',
                 ],
             ],
         );
+
+        // Keep existing rows aligned with 2-hour schedule + 7-day import policy.
+        $settings = is_array($job->settings) ? $job->settings : [];
+        $settings['lookback_days'] = (int) ($settings['lookback_days'] ?? 7);
+        if ($settings['lookback_days'] < 1) {
+            $settings['lookback_days'] = 7;
+        }
+        if (! isset($settings['sync_mode']) || ! in_array((string) $settings['sync_mode'], ['full', 'updates_only', 'status_only'], true)) {
+            $settings['sync_mode'] = 'full';
+        }
+        // Scheduler uses settings.cron_expressions when set; clear stale multi-expr overrides
+        // so the single 2-hour expression below is the source of truth.
+        unset($settings['cron_expressions']);
+
+        $job->fill([
+            'name' => 'Sales Order + Backorder Sync',
+            'description' => 'Acumatica sales orders (sales_orders) every 2 hours + chained backorders. Full import of last lookback_days. Manual: php artisan orderwatch:sales-orders-sync --force',
+            'frequency_label' => 'Every 2 Hours',
+            'cron_expression' => '0 */2 * * *',
+            'command' => 'php artisan orderwatch:sales-orders-sync',
+            'trigger_type' => 'scheduler',
+            'settings' => $settings,
+        ])->save();
+
+        return $job->fresh() ?? $job;
     }
 
     public static function salesOrderStatusSync(): self
@@ -274,7 +301,7 @@ class CronJob extends Model
     public static function inventoryWarehouses(): array
     {
         $warehouses = config('inventory.warehouses', [
-            'DTC', 'FGS', 'FGS2', 'FGS2 RETURNS', 'MSA', 'EXPORT', 'PRMS', 'RMS1', 'TRMS',
+            'DTC', 'FGS', 'FGS2', 'FGS2 RETURNS', 'MSA', 'EXPORT', 'PRMS', 'RMS1', 'TRMS', 'TPFGS',
         ]);
 
         return array_values(array_filter(array_map(
@@ -433,11 +460,11 @@ class CronJob extends Model
 
     public static function backorderProcessing(): self
     {
-        return self::firstOrCreate(
+        $job = self::firstOrCreate(
             ['job_key' => 'backorders-daily-4pm'],
             [
                 'name' => 'Backorder Processing',
-                'description' => 'Daily backorder validation and processing.',
+                'description' => 'Daily backorder validation and processing. Prefer orderwatch:sales-orders-sync --force for combined SO+backorder catch-up; this job is the standalone backorder pass.',
                 'is_enabled' => true,
                 'frequency_label' => 'Daily at 00:30',
                 'cron_expression' => '30 0 * * *',
@@ -448,6 +475,13 @@ class CronJob extends Model
                 'settings' => [],
             ],
         );
+
+        $job->fill([
+            'description' => 'Daily backorder validation and processing. Prefer orderwatch:sales-orders-sync --force for combined SO+backorder catch-up; this job is the standalone backorder pass. Manual: php artisan orderwatch:backorders-process --force',
+            'command' => 'php artisan orderwatch:backorders-process',
+        ])->save();
+
+        return $job->fresh() ?? $job;
     }
 
     public static function fillRateSync(): self
@@ -513,19 +547,55 @@ class CronJob extends Model
         );
     }
 
+    /**
+     * After CCO final-approves a FOL, OrderWatch creates an Acumatica SO.
+     * This job finds FOLs still missing an SO and retries + logs failures.
+     */
+    public static function folSalesOrderRetry(): self
+    {
+        $job = self::firstOrCreate(
+            ['job_key' => 'fol-so-retry'],
+            [
+                'name' => 'FOL Sales Order Create / Retry',
+                'description' => 'Checks final-approved FOLs missing an Acumatica SO number, retries creation, and logs failures to fol_so_create_logs.',
+                'is_enabled' => true,
+                'frequency_label' => 'Every 30 Minutes',
+                'cron_expression' => '7,37 * * * *',
+                'trigger_type' => 'scheduler',
+                'command' => 'php artisan orderwatch:fol-so-retry',
+                'status' => 'active',
+                'next_run_at' => now()->addMinutes(30),
+                'settings' => [
+                    'limit' => 50,
+                ],
+            ],
+        );
+
+        $job->fill([
+            'name' => 'FOL Sales Order Create / Retry',
+            'description' => 'Checks final-approved FOLs missing an Acumatica SO number, retries creation, and logs failures to fol_so_create_logs.',
+            'frequency_label' => 'Every 30 Minutes',
+            'cron_expression' => '7,37 * * * *',
+            'command' => 'php artisan orderwatch:fol-so-retry',
+            'trigger_type' => 'scheduler',
+        ])->save();
+
+        return $job->fresh() ?? $job;
+    }
+
     public static function syncMonitor(): self
     {
-        return self::firstOrCreate(
+        $job = self::firstOrCreate(
             ['job_key' => 'sync-monitor-alerts'],
             [
                 'name' => 'Sync Monitor Alerts',
-                'description' => 'Sends email alerts when new data is synced or when sync guardrails fail.',
-                'is_enabled' => true,
+                'description' => 'Sends email alerts when new data is synced or when sync guardrails fail. Paused — only System Health + Daily Report emails are active.',
+                'is_enabled' => false,
                 'frequency_label' => 'Every Minute',
                 'cron_expression' => '* * * * *',
                 'trigger_type' => 'scheduler',
                 'command' => 'php artisan orderwatch:sync-monitor',
-                'status' => 'active',
+                'status' => 'paused',
                 'next_run_at' => now()->addMinute(),
                 'settings' => [
                     'last_seen_cron_run_log_id' => 0,
@@ -533,6 +603,17 @@ class CronJob extends Model
                 ],
             ],
         );
+
+        // Keep paused on existing installs (email volume control).
+        if ($job->is_enabled || $job->status !== 'paused') {
+            $job->fill([
+                'is_enabled' => false,
+                'status' => 'paused',
+                'description' => 'Sends email alerts when new data is synced or when sync guardrails fail. Paused — only System Health + Daily Report emails are active.',
+            ])->save();
+        }
+
+        return $job->fresh();
     }
 
     public static function otpPrune(): self
@@ -575,21 +656,32 @@ class CronJob extends Model
 
     public static function orderMatchNotificationEvaluation(): self
     {
-        return self::firstOrCreate(
+        $job = self::firstOrCreate(
             ['job_key' => 'order-match-notification-evaluation'],
             [
                 'name' => 'Order Match Notification Evaluation',
-                'description' => 'Evaluates notification rules for order-match backlog and duplicate PO alerts.',
-                'is_enabled' => true,
+                'description' => 'Evaluates notification rules for order-match backlog and duplicate PO alerts. Paused — only System Health + Daily Report emails are active.',
+                'is_enabled' => false,
                 'frequency_label' => 'Hourly',
                 'cron_expression' => '0 * * * *',
                 'trigger_type' => 'scheduler',
                 'command' => 'php artisan orderwatch:evaluate-order-match-notifications',
-                'status' => 'active',
+                'status' => 'paused',
                 'next_run_at' => now()->addHour()->startOfHour(),
                 'settings' => [],
             ],
         );
+
+        // Keep paused on existing installs (email volume control).
+        if ($job->is_enabled || $job->status !== 'paused') {
+            $job->fill([
+                'is_enabled' => false,
+                'status' => 'paused',
+                'description' => 'Evaluates notification rules for order-match backlog and duplicate PO alerts. Paused — only System Health + Daily Report emails are active.',
+            ])->save();
+        }
+
+        return $job->fresh();
     }
 
     public static function fixedDailyReport(): self

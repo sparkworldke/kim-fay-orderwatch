@@ -147,7 +147,7 @@ class OrderMatchAiMatchingService
     /** @param  Collection<int, AcumaticaSalesOrder>  $candidates */
     private function callAi(Email $email, string $po, Collection $candidates): ?array
     {
-        [$provider, $key] = $this->ai->resolveKey(['anthropic', 'openai']);
+        [$provider, $key] = $this->ai->resolveKey(['openai', 'anthropic']);
         if (! $key) {
             return null;
         }

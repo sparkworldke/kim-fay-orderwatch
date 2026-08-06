@@ -85,6 +85,7 @@ import {
   type DatePresetId,
 } from "@/lib/date-presets";
 import { cn } from "@/lib/utils";
+import { CustomerLink } from "@/components/entity-links";
 import { useCustomers } from "@/hooks/useCustomers";
 import type { CreateEmailFilterPayload, EmailFilter, EmailFilterCondition, EmailFilterType, EmailMessage, InboxCustomerGroup, MailboxAccount, MailboxFolder, SyncLog } from "@/types/mailbox";
 import { Calendar } from "@/components/ui/calendar";
@@ -92,7 +93,7 @@ import type { DateRange } from "react-day-picker";
 import { MatchReviewQueue, OrderMatchingPanel, SenderImportPanel } from "@/components/email-import/EmailImportPanels";
 
 export const Route = createFileRoute("/app/mailbox")({
-  head: () => ({ meta: [{ title: "Mailbox - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Mailbox - Kim-Fay Sight" }] }),
   validateSearch: (search: Record<string, string>) => ({
     connected: search.connected === "1" ? ("1" as const) : undefined,
     error: typeof search.error === "string" ? search.error : undefined,
@@ -198,7 +199,7 @@ function folderSyncToday() {
 }
 
 function folderSyncDefaultRange() {
-  return resolveDatePreset("last_7_days");
+  return resolveDatePreset("last_week");
 }
 
 function sortMailboxFolders(folders: MailboxFolder[]) {
@@ -223,7 +224,7 @@ function FolderSyncButton({
   const [open, setOpen] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [lastSyncRunId, setLastSyncRunId] = useState<number | null>(null);
-  const [preset, setPreset] = useState<DatePresetId>("last_7_days");
+  const [preset, setPreset] = useState<DatePresetId>("last_week");
   const defaultRange = folderSyncDefaultRange();
   const [dateFrom, setDateFrom] = useState(defaultRange.from);
   const [dateTo, setDateTo] = useState(defaultRange.to);
@@ -305,7 +306,7 @@ function FolderSyncButton({
               onClick={() => setPreset("custom")}
             >
               <CalendarDays className="mr-1 h-3 w-3" />
-              Custom
+              Date Range
             </Button>
           </div>
           {preset === "custom" ? (
@@ -358,7 +359,7 @@ function FolderSyncButton({
               {syncResults.data.emails.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">
                   {syncResults.data.sync_run.emails_stored === 0
-                    ? "Outlook returned no messages in this date range (read or unread). Try a wider range such as Last 7 days, or use Custom for exact received times."
+                    ? "Outlook returned no messages in this date range (read or unread). Try another period, or use Date Range for exact received times."
                     : "No emails were stored for this sync run."}
                 </p>
               ) : (
@@ -526,8 +527,8 @@ function InboxPanel() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [mailboxId, setMailboxId] = useState<number | undefined>();
-  const [preset, setPreset] = useState<DatePresetId>("last_7_days");
-  const initialRange = resolveDatePreset("last_7_days");
+  const [preset, setPreset] = useState<DatePresetId>("last_week");
+  const initialRange = resolveDatePreset("last_week");
   const [dateFrom, setDateFrom] = useState(initialRange.from);
   const [dateTo, setDateTo] = useState(initialRange.to);
   const [groupBy, setGroupBy] = useState<"domain" | "customer">("domain");
@@ -722,15 +723,31 @@ function InboxPanel() {
                 const open = expandedGroups.has(key);
                 return (
                   <div key={key} className="border-b last:border-b-0">
-                    <button
-                      type="button"
-                      className="flex w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-muted/30"
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="flex w-full cursor-pointer flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-muted/30"
                       onClick={() => toggleGroup(key)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleGroup(key);
+                        }
+                      }}
                     >
                       {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                       <div className="min-w-0 flex-1">
                         <div className="font-medium">
-                          {group.group_label}
+                          {group.group_type === "customer" && group.acumatica_id ? (
+                            // A real <a> nested in a <button> is invalid HTML and double-fires
+                            // click handlers — CustomerLink's own stopPropagation() keeps this
+                            // click from also toggling the row, now that the wrapper is a <div>.
+                            <CustomerLink customerId={group.acumatica_id} customerName={group.customer_name || group.group_label}>
+                              {group.group_label}
+                            </CustomerLink>
+                          ) : (
+                            group.group_label
+                          )}
                           {group.acumatica_id && (
                             <span className="ml-2 font-mono text-xs text-muted-foreground">{group.acumatica_id}</span>
                           )}
@@ -754,7 +771,7 @@ function InboxPanel() {
                           {group.needs_review_count > 0 && <span>· {group.needs_review_count} review</span>}
                         </div>
                       </div>
-                    </button>
+                    </div>
                     {open && (
                       <div className="divide-y border-t bg-muted/10">
                         {group.emails.map((email) => (
@@ -863,7 +880,7 @@ function MailboxSyncButton({
   all?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [preset, setPreset] = useState<DatePresetId>("last_7_days");
+  const [preset, setPreset] = useState<DatePresetId>("last_week");
   const defaultRange = folderSyncDefaultRange();
   const [dateFrom, setDateFrom] = useState(defaultRange.from);
   const [dateTo, setDateTo] = useState(defaultRange.to);
@@ -932,7 +949,7 @@ function MailboxSyncButton({
                 onClick={() => setPreset("custom")}
               >
                 <CalendarDays className="mr-1 h-3 w-3" />
-                Custom
+                Date Range
               </Button>
             </div>
             {preset === "custom" ? (
@@ -977,7 +994,7 @@ function FilterRulesPanel() {
   const [createOpen, setCreateOpen] = useState(false);
   const [syncedIds, setSyncedIds] = useState<number[]>([]);
   const [syncAllOpen, setSyncAllOpen] = useState(false);
-  const [syncAllPreset, setSyncAllPreset] = useState<DatePresetId>("last_7_days");
+  const [syncAllPreset, setSyncAllPreset] = useState<DatePresetId>("last_week");
   const defaultRange = folderSyncDefaultRange();
   const [syncAllDateFrom, setSyncAllDateFrom] = useState(defaultRange.from);
   const [syncAllDateTo, setSyncAllDateTo] = useState(defaultRange.to);

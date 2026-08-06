@@ -10,7 +10,8 @@ class AdminOnly
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user()?->role !== 'Administrator') {
+        $user = $request->user();
+        if (! $user?->is_super_admin && $user?->role !== 'Administrator') {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

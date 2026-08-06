@@ -50,6 +50,11 @@ class AcumaticaBackorderLine extends Model
         'order_qty',
         'shipped_qty',
         'qty_on_shipments',
+        'invoiced_qty',
+        'shortfall_kind',
+        'order_status',
+        'invoice_reconciliation_status',
+        'fulfillment_source',
         'open_qty',
         'cancelled_qty',
         'backorder_qty',
@@ -66,6 +71,8 @@ class AcumaticaBackorderLine extends Model
         'currency_id',
         'scheduled_shipment_date',
         'requested_on',
+        'first_backordered_at',
+        'first_backordered_at_is_backfilled',
         'sync_run_id',
         'synced_at',
     ];
@@ -76,6 +83,7 @@ class AcumaticaBackorderLine extends Model
             'order_qty'               => 'decimal:4',
             'shipped_qty'             => 'decimal:4',
             'qty_on_shipments'        => 'decimal:4',
+            'invoiced_qty'            => 'decimal:4',
             'open_qty'                => 'decimal:4',
             'cancelled_qty'           => 'decimal:4',
             'backorder_qty'           => 'decimal:4',
@@ -85,6 +93,8 @@ class AcumaticaBackorderLine extends Model
             'reason_updated_at'       => 'datetime',
             'scheduled_shipment_date' => 'date',
             'requested_on'            => 'date',
+            'first_backordered_at'    => 'datetime',
+            'first_backordered_at_is_backfilled' => 'boolean',
             'synced_at'               => 'datetime',
         ];
     }

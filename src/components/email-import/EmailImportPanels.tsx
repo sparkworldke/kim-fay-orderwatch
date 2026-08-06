@@ -1,7 +1,14 @@
-import { Mail, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { Eye, FileText, Mail, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,8 +26,9 @@ import {
   useSaveEmailImportConfig,
   useTestSender,
   type EmailImportConfig,
+  type MatchReviewEmail,
 } from "@/hooks/admin/useAdminSettings";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 // ─── Local primitives ─────────────────────────────────────────────────────────
 // Self-contained presentation helpers so these panels have no hard dependency on
@@ -373,12 +381,14 @@ export function MatchReviewQueue() {
                     <strong>{conflict.field}</strong>: email “{conflict.email_value}” vs Acumatica “{conflict.acumatica_value}”
                   </div>
                 ))}
-                {(email.attachments || []).map((attachment) => (
-                  <div key={attachment.id} className="mt-2 text-xs text-muted-foreground">
-                    Attachment: {attachment.name || "unnamed"} · {attachment.extraction_status}
-                    {attachment.extraction_error ? ` (${attachment.extraction_error})` : ""}
+                {(email.attachments || []).length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <div className="text-xs font-semibold uppercase text-muted-foreground">Attachments</div>
+                    {(email.attachments || []).map((attachment) => (
+                      <MailboxAttachmentPreview key={attachment.id} attachment={attachment} />
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -405,4 +415,106 @@ export function MatchReviewQueue() {
       </div>
     </Panel>
   );
+}
+
+type MailboxAtt = MatchReviewEmail["attachments"][number];
+
+/** Show mailbox attachment metadata + extracted text as a readable table when possible. */
+function MailboxAttachmentPreview({ attachment }: { attachment: MailboxAtt }) {
+  const [open, setOpen] = useState(false);
+  const text = attachment.extracted_text?.trim() ?? "";
+  const table = useMemo(() => parseExtractedAsTable(text), [text]);
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 px-2.5 py-2 text-xs">
+        <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate font-medium">{attachment.name || "unnamed"}</span>
+        <Badge variant="outline" className="text-[10px]">{attachment.extraction_status}</Badge>
+        {attachment.extraction_error && (
+          <span className="text-destructive">{attachment.extraction_error}</span>
+        )}
+        {text ? (
+          <Button type="button" size="sm" variant="outline" className="h-7" onClick={() => setOpen(true)}>
+            <Eye className="mr-1 h-3 w-3" /> View content
+          </Button>
+        ) : (
+          <span className="text-muted-foreground">No extracted preview</span>
+        )}
+      </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle className="text-base">{attachment.name || "Attachment"}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Extracted content from the mailbox attachment (read-friendly view).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-auto p-4">
+            {table ? (
+              <div className="overflow-auto rounded-md border">
+                <table className="w-full min-w-max text-xs">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      {table.headers.map((h, i) => (
+                        <th key={i} className="border-b px-2 py-1.5 text-left font-semibold whitespace-nowrap">
+                          {h || `Col ${i + 1}`}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {table.rows.map((row, ri) => (
+                      <tr key={ri}>
+                        {row.map((cell, ci) => (
+                          <td key={ci} className="max-w-[240px] truncate px-2 py-1 align-top">
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <pre className="whitespace-pre-wrap rounded-md border bg-muted/20 p-3 text-xs leading-relaxed">
+                {text}
+              </pre>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function parseExtractedAsTable(text: string): { headers: string[]; rows: string[][] } | null {
+  if (!text || text.length < 3) return null;
+  const lines = text.split(/\r\n|\n|\r/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) return null;
+
+  // Prefer pipe-separated (Excel extractor) then CSV/tab.
+  const splitLine = (line: string): string[] => {
+    if (line.includes(" | ")) return line.split(" | ").map((c) => c.trim());
+    if (line.includes("\t")) return line.split("\t").map((c) => c.trim());
+    if (line.includes(",")) {
+      // light CSV split
+      return line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+    }
+    return [line];
+  };
+
+  const matrix = lines.slice(0, 200).map(splitLine);
+  const width = Math.max(...matrix.map((r) => r.length));
+  if (width < 2) return null;
+
+  const headers = matrix[0].length >= 2 ? matrix[0] : Array.from({ length: width }, (_, i) => `Col ${i + 1}`);
+  const body = matrix[0].length >= 2 ? matrix.slice(1) : matrix;
+  const rows = body.map((r) => {
+    const cells = [...r];
+    while (cells.length < headers.length) cells.push("");
+    return cells.slice(0, headers.length);
+  });
+
+  return { headers, rows };
 }

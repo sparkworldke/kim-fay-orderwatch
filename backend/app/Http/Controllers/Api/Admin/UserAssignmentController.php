@@ -9,6 +9,7 @@ use App\Services\Team\BrandFilterService;
 use App\Services\Team\CustomerAssignmentService;
 use App\Models\AcumaticaCustomer;
 use App\Models\UserBrandAssignment;
+use App\Models\Brand;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -29,35 +30,42 @@ class UserAssignmentController extends Controller
     public function brandAssignments(User $user): JsonResponse
     {
         return response()->json(
-            $user->brandAssignments()->orderBy('brand')->get(['id', 'brand', 'created_at']),
+            $user->brandAssignments()->with('brandRecord:id,name')->orderBy('brand')->get(['id', 'brand', 'brand_id', 'created_at']),
         );
     }
 
     public function syncBrandAssignments(User $user, Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'brands' => ['required', 'array'],
+            'brand_ids' => ['nullable', 'array'],
+            'brand_ids.*' => ['integer', 'exists:brands,id'],
+            'brands' => ['nullable', 'array'],
             'brands.*' => ['string', 'max:100'],
         ]);
-
-        $brands = array_values(array_unique(array_filter(array_map(
-            fn ($b) => trim((string) $b),
-            $validated['brands'],
-        ))));
+        $records = ! empty($validated['brand_ids'])
+            ? Brand::query()->whereIn('id', $validated['brand_ids'])->get()
+            : collect(array_values(array_filter(array_map(
+                fn ($b) => trim((string) $b), $validated['brands'] ?? [],
+            ))))->map(fn (string $name) => Brand::query()->firstOrCreate(
+                ['name' => $name],
+                ['source' => 'manual', 'is_active' => true],
+            ));
 
         UserBrandAssignment::query()->where('user_id', $user->id)->delete();
 
-        foreach ($brands as $brand) {
+        foreach ($records as $brand) {
             UserBrandAssignment::create([
                 'user_id' => $user->id,
-                'brand' => $brand,
+                'brand' => $brand->name,
+                'brand_id' => $brand->id,
                 'assigned_by' => $request->user()?->id,
             ]);
         }
 
         return response()->json([
             'message' => 'Brand assignments updated.',
-            'brands' => $brands,
+            'brand_ids' => $records->pluck('id')->values(),
+            'brands' => $records->pluck('name')->values(),
         ]);
     }
 
@@ -98,12 +106,14 @@ class UserAssignmentController extends Controller
         $validated = $request->validate([
             'customer_acumatica_ids' => ['required', 'array'],
             'customer_acumatica_ids.*' => ['string', 'max:50'],
+            'assignment_type' => ['required', 'in:owner,servicing'],
         ]);
 
         $service->syncAssignments(
             $user,
             $validated['customer_acumatica_ids'],
             $request->user()?->id,
+            $validated['assignment_type'],
         );
 
         return response()->json([
@@ -186,7 +196,8 @@ class UserAssignmentController extends Controller
     {
         $this->ensureCanAssign($request->user(), true);
 
-        $batch = $service->applyBatch($batch, $request->user()?->id);
+        $validated = $request->validate(['assignment_type' => ['required', 'in:owner,servicing']]);
+        $batch = $service->applyBatch($batch, $request->user()?->id, $validated['assignment_type']);
 
         return response()->json($service->presentBatch($batch));
     }

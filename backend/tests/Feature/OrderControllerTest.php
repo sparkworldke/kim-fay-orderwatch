@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AcumaticaSalesOrder;
+use App\Models\AcumaticaSalesOrderLine;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -10,6 +11,76 @@ use Tests\TestCase;
 class OrderControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_fulfillment_fill_rate_is_quantity_weighted_instead_of_averaging_lines(): void
+    {
+        $user = User::factory()->create(['role' => 'Sales Operations']);
+        $order = $this->makeOrderWithLines('SO-WEIGHTED-FILL', [
+            ['order_qty' => 10, 'shipped_qty' => 6, 'qty_on_shipments' => 0, 'fill_rate_pct' => 60],
+            ['order_qty' => 3, 'shipped_qty' => 3, 'qty_on_shipments' => 0, 'fill_rate_pct' => 100],
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/orders?with_fulfillment=1&customer_id=CUST-FILL')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $order->id)
+            ->assertJsonPath('data.0.lines_avg_fill_rate_pct', 69.23);
+    }
+
+    public function test_fulfillment_fill_rate_uses_the_larger_shipped_source(): void
+    {
+        $user = User::factory()->create(['role' => 'Sales Operations']);
+        $this->makeOrderWithLines('SO-SHIPPED-SOURCE', [
+            ['order_qty' => 10, 'shipped_qty' => 4, 'qty_on_shipments' => 7],
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/orders?with_fulfillment=1&customer_id=CUST-FILL')
+            ->assertOk()
+            ->assertJsonPath('data.0.lines_avg_fill_rate_pct', 70);
+    }
+
+    public function test_fulfillment_fill_rate_caps_each_line_at_ordered_quantity(): void
+    {
+        $user = User::factory()->create(['role' => 'Sales Operations']);
+        $this->makeOrderWithLines('SO-CAPPED-FILL', [
+            ['order_qty' => 10, 'shipped_qty' => 12, 'qty_on_shipments' => 15],
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/orders?with_fulfillment=1&customer_id=CUST-FILL')
+            ->assertOk()
+            ->assertJsonPath('data.0.lines_avg_fill_rate_pct', 100);
+    }
+
+    public function test_fulfillment_fill_rate_excludes_non_positive_order_quantities(): void
+    {
+        $user = User::factory()->create(['role' => 'Sales Operations']);
+        $this->makeOrderWithLines('SO-IGNORED-FILL-LINES', [
+            ['order_qty' => 10, 'shipped_qty' => 5, 'qty_on_shipments' => 0],
+            ['order_qty' => 0, 'shipped_qty' => 100, 'qty_on_shipments' => 100],
+            ['order_qty' => -5, 'shipped_qty' => 100, 'qty_on_shipments' => 100],
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/orders?with_fulfillment=1&customer_id=CUST-FILL')
+            ->assertOk()
+            ->assertJsonPath('data.0.lines_avg_fill_rate_pct', 50);
+    }
+
+    public function test_fulfillment_fill_rate_is_null_without_positive_order_quantity(): void
+    {
+        $user = User::factory()->create(['role' => 'Sales Operations']);
+        $this->makeOrderWithLines('SO-NO-FILL-DENOMINATOR', [
+            ['order_qty' => 0, 'shipped_qty' => 4, 'qty_on_shipments' => 7],
+            ['order_qty' => -2, 'shipped_qty' => 1, 'qty_on_shipments' => 1],
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/orders?with_fulfillment=1&customer_id=CUST-FILL')
+            ->assertOk()
+            ->assertJsonPath('data.0.lines_avg_fill_rate_pct', null);
+    }
 
     public function test_rejected_orders_require_a_reason_code(): void
     {
@@ -208,5 +279,28 @@ class OrderControllerTest extends TestCase
             ->assertJsonPath('total', 1)
             ->assertJsonPath('open', 1)
             ->assertJsonPath('completed', 0);
+    }
+
+    /** @param array<int, array<string, int|float>> $lines */
+    private function makeOrderWithLines(string $orderNumber, array $lines): AcumaticaSalesOrder
+    {
+        $order = AcumaticaSalesOrder::create([
+            'acumatica_order_nbr' => $orderNumber,
+            'order_type' => 'SO',
+            'customer_acumatica_id' => 'CUST-FILL',
+            'status' => 'Open',
+            'order_date' => now(),
+            'synced_at' => now(),
+        ]);
+
+        foreach ($lines as $index => $line) {
+            AcumaticaSalesOrderLine::create(array_merge([
+                'sales_order_id' => $order->id,
+                'line_nbr' => $index + 1,
+                'inventory_id' => 'SKU-'.($index + 1),
+            ], $line));
+        }
+
+        return $order;
     }
 }

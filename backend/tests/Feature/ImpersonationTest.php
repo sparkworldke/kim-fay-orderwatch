@@ -81,6 +81,7 @@ class ImpersonationTest extends TestCase
     {
         $admin = User::factory()->create([
             'role' => 'Administrator',
+            'is_super_admin' => true,
             'is_active' => true,
         ]);
         User::factory()->create([

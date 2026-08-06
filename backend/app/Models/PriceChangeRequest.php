@@ -18,6 +18,9 @@ class PriceChangeRequest extends Model
         'product_description',
         'current_selling_price',
         'proposed_selling_price',
+        'revised_price',
+        'countered_at',
+        'countered_by',
         'base_price_snapshot',
         'margin_pct_snapshot',
         'margin_kes_snapshot',
@@ -44,6 +47,8 @@ class PriceChangeRequest extends Model
         return [
             'current_selling_price' => 'decimal:4',
             'proposed_selling_price' => 'decimal:4',
+            'revised_price' => 'decimal:4',
+            'countered_at' => 'datetime',
             'base_price_snapshot' => 'decimal:4',
             'margin_pct_snapshot' => 'decimal:4',
             'margin_kes_snapshot' => 'decimal:4',

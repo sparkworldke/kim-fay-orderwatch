@@ -17,9 +17,12 @@ export interface FolLine {
   line_no?: number;
   inventory_id: string;
   product_description?: string | null;
+  line_type?: "fol_item";
   qty_requested: number;
   qty_previously_issued?: number;
   date_last_issue?: string | null;
+  /** Unit sales price (ex-VAT) captured when added to cart. */
+  unit_price?: number | null;
 }
 
 export interface FolAttachment {
@@ -28,6 +31,10 @@ export interface FolAttachment {
   mime: string | null;
   size: number;
   created_at: string;
+  kind?: "image" | "pdf" | "table" | "text" | "binary" | string;
+  download_url?: string;
+  view_url?: string;
+  preview_url?: string;
 }
 
 export interface FolEvent {
@@ -49,6 +56,7 @@ export interface FolRequest {
   requestor_last_name: string;
   requestor_phone: string;
   requestor_email: string;
+  requestor_contact_id?: number | null;
   issue_types: string[];
   reason_text: string;
   installation_required: boolean;
@@ -58,14 +66,24 @@ export interface FolRequest {
   technician_assigned_at: string | null;
   assigned_technician?: FolTechnician | null;
   customer_has_submitted_po: boolean;
+  consumable_inventory_ids: string[];
   consumables_last_purchase_date: string | null;
+  consumables_sales_3m_kes: string | number;
+  consumables_volume_3m: string | number;
   consumables_sales_6m_kes: string | number;
   consumables_volume_6m: string | number;
+  consumables_evidence_json?: Record<string, FolConsumableEvidence> | null;
+  consumables_metrics_as_of?: string | null;
   consumables_metrics_source: "system_so" | "manual_override";
   consumables_override_reason: string | null;
   debt_explanation: string;
   status: FolStatus;
   current_stage_key: string | null;
+  /** Primary Acumatica SO number attached after CCO approve / manual link. */
+  so_number?: string | null;
+  acumatica_so_number?: string | null;
+  so_numbers?: string[] | null;
+  so_status?: string | null;
   linked_so_order_nbrs: string[] | null;
   linked_so_status_summary: string | null;
   submitted_at: string | null;
@@ -100,6 +118,21 @@ export interface FolInventoryItem {
   fol_category: string | null;
   default_uom: string | null;
   qty_on_hand: string | number | null;
+  sales_price?: string | number | null;
+  /** inventory = master sales_price; last_so = latest SO line unit price */
+  price_source?: "inventory" | "last_so" | null;
+}
+
+/** Kenya VAT rate applied on FOL cart totals. */
+export const FOL_VAT_RATE = 0.16;
+
+export function folLinePricing(line: Pick<FolLine, "qty_requested" | "unit_price">) {
+  const qty = Math.max(0, Number(line.qty_requested) || 0);
+  const unit = Math.max(0, Number(line.unit_price) || 0);
+  const subtotal = Math.round(qty * unit * 100) / 100;
+  const vat = Math.round(subtotal * FOL_VAT_RATE * 100) / 100;
+  const total = Math.round((subtotal + vat) * 100) / 100;
+  return { qty, unit_price: unit, subtotal, vat, total, vat_rate: FOL_VAT_RATE };
 }
 
 export interface Paginated<T> {
@@ -118,12 +151,22 @@ export interface FolInput {
   requestor_last_name: string;
   requestor_phone: string;
   requestor_email: string;
+  /** Saved CRM contact on the account (optional). */
+  requestor_contact_id?: number | null;
+  /** When true, create/update a contact on the customer from requestor fields. */
+  save_requestor_as_contact?: boolean;
+  requestor_designation_key?: string | null;
+  requestor_designation_label?: string | null;
+  requestor_is_primary?: boolean;
   issue_types: string[];
   reason_text: string;
   installation_required: boolean;
   installation_location?: string | null;
   customer_has_submitted_po: boolean;
+  consumable_inventory_ids?: string[];
   consumables_last_purchase_date?: string | null;
+  consumables_sales_3m_kes?: number;
+  consumables_volume_3m?: number;
   consumables_sales_6m_kes?: number;
   consumables_volume_6m?: number;
   consumables_metrics_source?: "system_so" | "manual_override";
@@ -160,13 +203,95 @@ export function useFolCustomers(q: string) {
   });
 }
 
-export function useFolInventory(q: string) {
+/** Search FOL-eligible inventory. Empty q returns the first eligible SKUs (browse mode). */
+export function useFolInventory(q: string, enabled = true, purpose?: "fol_item" | "consumable") {
   return useQuery({
-    queryKey: ["kp-fol-inventory", q],
-    queryFn: () => apiFetch<FolInventoryItem[]>(`kp/fol/inventory/search?q=${encodeURIComponent(q)}`),
-    enabled: q.length >= 1,
+    queryKey: ["kp-fol-inventory", q, purpose],
+    queryFn: () => apiFetch<FolInventoryItem[]>(`kp/fol/inventory/search?q=${encodeURIComponent(q)}${purpose ? `&purpose=${purpose}` : ""}`),
+    enabled,
+    staleTime: 30_000,
   });
 }
+
+export type FolRecentOrder = {
+  order_nbr: string;
+  order_date: string | null;
+  order_total: number;
+  status: string | null;
+  order_type: string | null;
+};
+
+export type FolCustomer6mSummary = {
+  months: number;
+  revenue_total: number;
+  order_count: number;
+  aov: number;
+  orders_per_month: number;
+  avg_days_between_orders: number | null;
+  frequency_label: string;
+  first_order_date: string | null;
+  last_order_date: string | null;
+};
+
+export type FolPriorSku = {
+  inventory_id: string;
+  product_description?: string | null;
+  qty: number;
+  date: string | null;
+  public_ref?: string | null;
+};
+
+export type FolPriorRecent = {
+  id: number;
+  public_ref: string;
+  status: string;
+  decided_at: string | null;
+  submitted_at: string | null;
+  total_qty: number;
+  line_count: number;
+  lines: Array<{ inventory_id: string; product_description: string | null; qty: number }>;
+};
+
+export type FolPriorSummary = {
+  request_count: number;
+  total_qty_issued: number;
+  last_issue_date: string | null;
+  last_public_ref: string | null;
+  last_status: string | null;
+  recent: FolPriorRecent[];
+  by_sku: Record<string, FolPriorSku>;
+};
+
+export type FolMetrics = {
+  last_purchase_date: string | null;
+  last_purchase_order_nbr: string | null;
+  sales_3m_kes: number;
+  volume_3m: number;
+  sales_6m_kes: number;
+  volume_6m: number;
+  lookback_months: number;
+  scope: string;
+  line_last_purchases: Record<
+    string,
+    FolConsumableEvidence
+  >;
+  metrics_as_of?: string;
+  /** Last SOs for the customer — not FOL-SKU filtered. */
+  recent_orders?: FolRecentOrder[];
+  /** Full SO book 6M summary — not FOL-SKU filtered. */
+  customer_6m?: FolCustomer6mSummary;
+  /** Previous Free-On-Loan issues from OrderWatch FOL (not SO lines). */
+  prior_fol?: FolPriorSummary;
+};
+
+export type FolConsumableEvidence = {
+  date: string | null;
+  order_nbr: string | null;
+  qty: number;
+  value: number;
+  qty_3m: number;
+  value_3m: number;
+};
 
 export function useFolMetrics(customerId: string, inventoryIds: string[]) {
   const qs = new URLSearchParams();
@@ -176,8 +301,9 @@ export function useFolMetrics(customerId: string, inventoryIds: string[]) {
   return useQuery({
     queryKey: ["kp-fol-metrics", customerId, inventoryIds],
     queryFn: () => apiFetch<{
-      metrics: { last_purchase_date: string | null; sales_6m_kes: number; volume_6m: number };
-      prior_issued: Record<string, { qty: number; date: string | null }>;
+      metrics: FolMetrics;
+      prior_issued: Record<string, { qty: number; date: string | null; public_ref?: string | null; product_description?: string | null }>;
+      prior_fol?: FolPriorSummary | null;
     }>(`kp/fol/metrics?${qs}`),
     enabled: !!customerId,
   });
@@ -202,6 +328,21 @@ export function useCreateFol() {
   });
 }
 
+export function useUpdateFol(id: number | string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: FolInput) => apiFetch<FolRequest>(`kp/fol/${id}`, { method: "PUT", body }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["kp-fol"] });
+      qc.setQueryData(["kp-fol", data.id], data);
+    },
+  });
+}
+
+export function updateFolDraft(id: number | string, body: FolInput) {
+  return apiFetch<FolRequest>(`kp/fol/${id}`, { method: "PUT", body });
+}
+
 export function useSubmitFol(id: number | string) {
   const qc = useQueryClient();
   return useMutation({
@@ -215,6 +356,10 @@ export function useSubmitFol(id: number | string) {
 
 export function submitFolRequest(id: number | string) {
   return apiFetch<FolRequest>(`kp/fol/${id}/submit`, { method: "POST" });
+}
+
+export async function deleteFolAttachment(attachmentId: number | string) {
+  return apiFetch<FolRequest>(`kp/fol/attachments/${attachmentId}`, { method: "DELETE" });
 }
 
 export function useFolDecision(id: number | string) {

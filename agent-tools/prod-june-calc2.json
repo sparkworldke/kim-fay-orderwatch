@@ -1,0 +1,154 @@
+﻿{
+    "backorders_analytics_keys":  [
+                                      "summary",
+                                      "excel_summary",
+                                      "filters",
+                                      "charts"
+                                  ],
+    "excel_summary_keys":  [
+                               "totals",
+                               "by_reason",
+                               "by_department",
+                               "by_customer_group",
+                               "top_customers",
+                               "top_products",
+                               "by_business_category"
+                           ],
+    "excel_totals":  {
+                         "back_order_qty":  12529.5,
+                         "back_order_value":  8901363.35,
+                         "line_count":  850,
+                         "order_count":  77
+                     },
+    "excel_top_products_count":  412,
+    "excel_top_products_sum":  8901363.35,
+    "backorder_lines_fetched":  850,
+    "backorder_lines_value_sum":  8901363.35,
+    "backorder_inventory_id_count":  412,
+    "top10_inventory_value_sum":  2759474.21,
+    "top10":  [
+                  {
+                      "inventory_id":  "FAYCL0009",
+                      "value":  466998.73,
+                      "qty":  584,
+                      "lines":  10
+                  },
+                  {
+                      "inventory_id":  "FAYTP0008",
+                      "value":  348239.09,
+                      "qty":  207,
+                      "lines":  3
+                  },
+                  {
+                      "inventory_id":  "COSTP0024",
+                      "value":  303836.21,
+                      "qty":  475,
+                      "lines":  3
+                  },
+                  {
+                      "inventory_id":  "FAYFL0003",
+                      "value":  299240,
+                      "qty":  65,
+                      "lines":  4
+                  },
+                  {
+                      "inventory_id":  "SIFTP0011",
+                      "value":  281455.17,
+                      "qty":  300,
+                      "lines":  3
+                  },
+                  {
+                      "inventory_id":  "FAYFL0009",
+                      "value":  273088.43,
+                      "qty":  218,
+                      "lines":  3
+                  },
+                  {
+                      "inventory_id":  "FAYMU0004",
+                      "value":  261882.64,
+                      "qty":  422,
+                      "lines":  12
+                  },
+                  {
+                      "inventory_id":  "FAYFL0008",
+                      "value":  218624.73,
+                      "qty":  306,
+                      "lines":  3
+                  },
+                  {
+                      "inventory_id":  "SIFTP0006",
+                      "value":  153785.76,
+                      "qty":  154,
+                      "lines":  4
+                  },
+                  {
+                      "inventory_id":  "TISTP0001",
+                      "value":  152323.45,
+                      "qty":  200,
+                      "lines":  1
+                  }
+              ],
+    "fill_rate_page_meta":  {
+                                "total":  1042,
+                                "last_page":  209,
+                                "first_order":  {
+                                                    "order":  "SO357814",
+                                                    "fill":  null,
+                                                    "rev":  "0.00",
+                                                    "status":  "na",
+                                                    "ordered":  "0.0000"
+                                                }
+                            },
+    "excel_top5":  [
+                       {
+                           "inventory_id":  "FAYCL0009",
+                           "product_name":  "Fay Cling Film Catering 30cmx300m GP",
+                           "line_count":  10,
+                           "back_order_qty":  584,
+                           "back_order_value":  466998.73,
+                           "contribution_pct":  5.2
+                       },
+                       {
+                           "inventory_id":  "FAYTP0008",
+                           "product_name":  "Fay TP Emb. Unwrap. 4x10s White",
+                           "line_count":  3,
+                           "back_order_qty":  207,
+                           "back_order_value":  348239.09,
+                           "contribution_pct":  3.9
+                       },
+                       {
+                           "inventory_id":  "COSTP0024",
+                           "product_name":  "Cosy Poa TP Emb. Wrap. 4x10s Pink 150 Sheets",
+                           "line_count":  3,
+                           "back_order_qty":  475,
+                           "back_order_value":  303836.21,
+                           "contribution_pct":  3.4
+                       },
+                       {
+                           "inventory_id":  "FAYFL0003",
+                           "product_name":  "Fay Aluminium Foil 45cmx5m (36Rolls)",
+                           "line_count":  4,
+                           "back_order_qty":  65,
+                           "back_order_value":  299240,
+                           "contribution_pct":  3.4
+                       },
+                       {
+                           "inventory_id":  "SIFTP0011",
+                           "product_name":  "Sifa TP Emb. WRAP. 4x10s White",
+                           "line_count":  3,
+                           "back_order_qty":  300,
+                           "back_order_value":  281455.17,
+                           "contribution_pct":  3.2
+                       }
+                   ],
+    "chart_keys":  [
+                       "trend",
+                       "lead_time_correlation",
+                       "category_distribution",
+                       "reason_distribution",
+                       "customer_group_distribution",
+                       "department_distribution",
+                       "customer_distribution",
+                       "product_distribution"
+                   ]
+}

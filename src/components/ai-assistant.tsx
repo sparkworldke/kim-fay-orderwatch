@@ -69,7 +69,7 @@ function resolvePageLabel(pathname: string): string {
   for (const [prefix, label] of Object.entries(PAGE_LABELS)) {
     if (pathname.startsWith(prefix + "/")) return label;
   }
-  return "OrderWatch";
+  return "Sight";
 }
 
 // ── Card components ──────────────────────────────────────────────────────────
@@ -434,10 +434,10 @@ export function AiAssistant() {
       {/* Floating trigger */}
       <button
         type="button"
-        aria-label="Open AI assistant"
+        aria-label="Ask Genius"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all duration-200",
+          "fixed bottom-20 right-3 z-50 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all duration-200 md:bottom-5 md:right-5",
           "bg-primary text-primary-foreground hover:bg-primary/90",
           open && "rotate-90 opacity-0 pointer-events-none",
         )}
@@ -448,7 +448,7 @@ export function AiAssistant() {
       {/* Panel */}
       <div
         className={cn(
-          "fixed bottom-5 right-5 z-50 flex flex-col rounded-xl border bg-background shadow-2xl transition-all duration-200",
+          "fixed bottom-20 right-3 z-50 flex flex-col rounded-xl border bg-background shadow-2xl transition-all duration-200 md:bottom-5 md:right-5",
           "w-[380px] sm:w-[420px]",
           open
             ? "translate-y-0 opacity-100 pointer-events-auto"
@@ -462,8 +462,10 @@ export function AiAssistant() {
             <Bot className="h-4 w-4 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold leading-tight">AI Assistant</p>
-            <p className="text-[10px] text-muted-foreground truncate">{pageLabel}</p>
+            <p className="text-sm font-semibold leading-tight">Kim-Fay Genius</p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              Ask Genius · {pageLabel}
+            </p>
           </div>
           <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={reset} title="Clear conversation">
             <RotateCcw className="h-3.5 w-3.5" />
@@ -479,7 +481,7 @@ export function AiAssistant() {
             <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-8">
               <Sparkles className="h-8 w-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
-                Ask about your orders, customers, emails, or how this system works.
+                Ask Genius for reports, risks, explanations, and recommendations.
               </p>
               <p className="text-[11px] text-muted-foreground/80">
                 Tip: type <span className="font-mono">/</span> or <span className="font-mono">@</span> for date &amp; report shortcuts

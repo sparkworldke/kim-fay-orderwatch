@@ -46,6 +46,9 @@ class FolSettingsService
             'consumables_months' => $this->consumablesMonths(),
             'require_attachment' => $this->requireAttachment(),
             'allow_admin_on_all_stages' => $this->allowAdminOnAllStages(),
+            // Read-only visibility of env/config testing redirect (not editable in UI yet).
+            'mail_testing_mode' => $this->mailTestingMode(),
+            'mail_testing_recipient' => $this->mailTestingRecipient(),
             'stages' => $this->stages()->map(fn (FolApprovalStage $s) => $this->presentStage($s))->values()->all(),
             'available_roles' => [
                 'Administrator',
@@ -68,6 +71,9 @@ class FolSettingsService
                     'Customer Service Agent',
                     'Sales Operations',
                 ]),
+                'cc_watcher_emails' => config('fol.cc_watcher_emails', ['commercialtechlead@kimfay.com']),
+                'mail_testing_mode' => (bool) config('fol.mail_testing_mode', true),
+                'mail_testing_recipient' => config('fol.mail_testing_recipient', 'commercialtechlead@kimfay.com'),
             ],
         ];
     }
@@ -128,18 +134,31 @@ class FolSettingsService
     public function ccWatcherEmails(): array
     {
         $raw = SystemSetting::valueFor(self::CC_WATCHER_EMAILS);
-        if (! $raw) {
-            return array_values(array_map('strval', config('fol.cc_watcher_emails', [])));
-        }
-        $decoded = json_decode($raw, true);
-        if (! is_array($decoded)) {
-            return [];
+        if ($raw) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded) && $decoded !== []) {
+                return array_values(array_filter(array_map(
+                    fn ($e) => strtolower(trim((string) $e)),
+                    $decoded,
+                )));
+            }
         }
 
+        // Empty / unset DB value → config default (admin always on steps in testing).
         return array_values(array_filter(array_map(
-            fn ($e) => strtolower(trim((string) $e)),
-            $decoded,
+            static fn ($e) => strtolower(trim((string) $e)),
+            config('fol.cc_watcher_emails', ['commercialtechlead@kimfay.com']),
         )));
+    }
+
+    public function mailTestingMode(): bool
+    {
+        return (bool) config('fol.mail_testing_mode', true);
+    }
+
+    public function mailTestingRecipient(): string
+    {
+        return strtolower(trim((string) config('fol.mail_testing_recipient', 'commercialtechlead@kimfay.com')));
     }
 
     public function duplicatePolicy(): string
@@ -155,14 +174,14 @@ class FolSettingsService
     {
         $v = SystemSetting::valueFor(self::CONSUMABLES_MONTHS);
 
-        return $v !== null ? max(1, min(24, (int) $v)) : (int) config('fol.consumables_months', 6);
+        return $v !== null ? max(1, min(24, (int) $v)) : (int) config('fol.consumables_months', 3);
     }
 
     public function requireAttachment(): bool
     {
         $v = SystemSetting::valueFor(self::REQUIRE_ATTACHMENT);
         if ($v === null) {
-            return (bool) config('fol.require_attachment', true);
+            return (bool) config('fol.require_attachment', false);
         }
 
         return filter_var($v, FILTER_VALIDATE_BOOLEAN);

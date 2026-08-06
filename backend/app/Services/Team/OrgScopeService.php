@@ -3,18 +3,21 @@
 namespace App\Services\Team;
 
 use App\Models\AcumaticaCustomer;
-use App\Models\AcumaticaSalesOrder;
+use App\Models\CustomerData;
 use App\Models\CustomerDepartmentOverride;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\UserCustomerAssignment;
-use App\Support\SalesConsultantScope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class OrgScopeService
 {
     public function __construct(
         private readonly OrgTreeService $orgTree,
+        private readonly CustomerAttributionService $attribution,
+        private readonly AccessTierService $accessTier,
+        private readonly KpReportingHierarchyService $kpHierarchy,
     ) {}
 
     public function hasOrgWideAccess(?User $user): bool
@@ -23,33 +26,8 @@ class OrgScopeService
             return false;
         }
 
-        if ($user->is_super_admin) {
-            return true;
-        }
-
-        if (in_array((string) $user->role, config('departments.executive_roles', []), true)) {
-            return true;
-        }
-
-        if ($user->data_scope_mode === 'org_wide') {
-            return true;
-        }
-
-        if (in_array((string) $user->org_level, config('departments.org_wide_org_levels', []), true)) {
-            return true;
-        }
-
-        if ($user->department_role === 'executive') {
-            return true;
-        }
-
-        if ($user->department_id === null) {
-            return true;
-        }
-
-        $department = Department::query()->find($user->department_id);
-
-        return $department === null || ! $department->is_customer_facing;
+        return $this->accessTier->hasUnrestrictedBusinessAccess($user)
+            || $this->accessTier->hasCrossChannelBrandAccess($user);
     }
 
     public function appliesTo(?User $user): bool
@@ -58,22 +36,53 @@ class OrgScopeService
             return false;
         }
 
-        if ($user->data_scope_mode === 'deny_all' || $user->org_level === 'gap') {
-            return true;
-        }
-
-        return $user->department_id !== null
-            || $user->sectorScopes()->exists()
-            || $user->customerAssignments()->exists()
-            || SalesConsultantScope::appliesTo($user);
+        // Every non-unrestricted account is scoped. Users without a valid
+        // department/sector/portfolio fall through to a deny-all clause.
+        return true;
     }
 
     /**
-     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
-     * @return Builder<\Illuminate\Database\Eloquent\Model>
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
      */
     public function applyCustomerScope(Builder $query, ?User $user, string $idColumn = 'acumatica_id'): Builder
     {
+        if ($user === null) {
+            return $query;
+        }
+
+        // An explicitly attached portfolio is the strongest visibility gate for
+        // every non-super-admin role. Managers receive the de-duplicated union of
+        // their own and their reportees' attached outlets; an org_wide legacy flag
+        // must never broaden that set.
+        $attached = $this->attachedPortfolioCustomerIds($user);
+        if ($attached !== null) {
+            return $attached === []
+                ? $query->whereRaw('1 = 0')
+                : $query->whereIn($idColumn, $attached);
+        }
+
+        // Susan keeps her existing broad non-KP access. Only the KP slice is
+        // narrowed to the de-duplicated union of her own and her reportees' books.
+        if ($this->kpHierarchy->requiresPrivilegedKpOverlay($user)) {
+            return $this->kpHierarchy->applyPrivilegedKpOverlay($query, $user, $idColumn);
+        }
+
+        // §7.3 precedence: the mapped-only gate takes priority over any broad
+        // access implied by an ordinary secondary role. A mapped-only consultant
+        // always sees exactly their effective mapped customer set.
+        if ($this->hasOrgWideAccess($user)
+            && ! $this->kpHierarchy->requiresPrivilegedKpOverlay($user)) {
+            return $query;
+        }
+
+        $mapped = $this->mappedOnlyCustomerIds($user);
+        if ($mapped !== null) {
+            return $mapped === []
+                ? $query->whereRaw('1 = 0')
+                : $query->whereIn($idColumn, $mapped);
+        }
+
         if (! $this->appliesTo($user)) {
             return $query;
         }
@@ -106,12 +115,17 @@ class OrgScopeService
     }
 
     /**
-     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
-     * @return Builder<\Illuminate\Database\Eloquent\Model>
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
      */
     public function applyOrderScope(Builder $query, ?User $user, string $customerColumn = 'customer_acumatica_id'): Builder
     {
-        if (! $this->appliesTo($user)) {
+        if ($user === null) {
+            return $query;
+        }
+
+        if ($this->hasOrgWideAccess($user)
+            && ! $this->kpHierarchy->requiresPrivilegedKpOverlay($user)) {
             return $query;
         }
 
@@ -127,6 +141,33 @@ class OrgScopeService
 
     public function customerAccessible(?User $user, string $customerId, ?string $customerClass = null): bool
     {
+        if ($user === null) {
+            return true;
+        }
+
+        $attached = $this->attachedPortfolioCustomerIds($user);
+        if ($attached !== null) {
+            return in_array($customerId, $attached, true);
+        }
+
+        if ($this->kpHierarchy->requiresPrivilegedKpOverlay($user)) {
+            $isKp = CustomerData::query()
+                ->where('customer_acumatica_id', $customerId)
+                ->where('customer_group', 'Kim-Fay Professional')
+                ->exists();
+
+            return ! $isKp || in_array($customerId, $this->kpHierarchy->visibleKpCustomerIds($user), true);
+        }
+
+        if ($this->hasOrgWideAccess($user)) {
+            return true;
+        }
+
+        $mapped = $this->mappedOnlyCustomerIds($user);
+        if ($mapped !== null) {
+            return in_array($customerId, $mapped, true);
+        }
+
         if (! $this->appliesTo($user)) {
             return true;
         }
@@ -159,40 +200,84 @@ class OrgScopeService
     }
 
     /**
-     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
+     * Exact outlet portfolio attached to this viewer's reporting subtree.
+     * Null means no attachment gate is configured and normal department scope
+     * should be used. True super-admins retain their emergency org-wide view.
+     *
+     * @return list<string>|null
+     */
+    public function attachedPortfolioCustomerIds(User $user): ?array
+    {
+        if ($this->accessTier->hasUnrestrictedBusinessAccess($user)) {
+            return null;
+        }
+
+        $userIds = $this->orgTree->descendantIds($user->id, true);
+        $hasAttachments = UserCustomerAssignment::query()
+            ->whereIn('user_id', $userIds)
+            ->where(function (Builder $query) {
+                $query->where('is_manual_override', true)
+                    ->orWhereIn('assignment_type', [
+                        UserCustomerAssignment::TYPE_SERVICING,
+                        UserCustomerAssignment::TYPE_LEGACY_PRIMARY,
+                    ]);
+            })
+            ->exists();
+
+        return $hasAttachments
+            ? $this->attribution->visibleCustomerIds($user->id)
+            : null;
+    }
+
+    /**
+     * §7.3 gate result for a viewer: null when the gate does not apply (the
+     * viewer keeps their normal scope), otherwise the exact mapped customer IDs.
+     *
+     * @return list<string>|null
+     */
+    private function mappedOnlyCustomerIds(User $user): ?array
+    {
+        if (! $this->attribution->isMappedOnlyConsultant($user)) {
+            return null;
+        }
+
+        return $this->attribution->directCustomerIds($user->id);
+    }
+
+    /** A user subject to the mapped-only consultant scoping path (canonical role or legacy flag). */
+    private function isConsultant(User $user): bool
+    {
+        return $user->hasRole((string) config('attribution.sales_consultant_role'))
+            || (bool) $user->is_consultant;
+    }
+
+    /**
+     * @param  Builder<Model>  $query
      */
     private function applySingleUserCustomerScope(Builder $query, User $user, string $idColumn): void
     {
-        $assignedIds = $user->customerAssignments()->pluck('customer_acumatica_id');
+        // §7.3 mapped-only gate (applied per node, including descendants during a
+        // manager rollup): a Sales Consultant is scoped to exactly their effective
+        // mapped customer set. Historical SO rep-code matches are NEVER unioned in;
+        // an unmapped rep alias is a reconciliation exception, not visible data.
+        if ($this->isConsultant($user)) {
+            $mappedIds = $this->attribution->directCustomerIds($user->id);
 
-        if ($assignedIds->isNotEmpty()) {
-            $query->whereIn($idColumn, $assignedIds);
-
-            return;
-        }
-
-        if (SalesConsultantScope::appliesTo($user) || $user->is_consultant) {
-            $repCode = strtoupper(trim((string) ($user->rep_code ?? '')));
-            if ($repCode === '') {
-                $repCode = $user->acumaticaRepMappings()
-                    ->where('is_primary', true)
-                    ->value('acumatica_rep_code');
-                $repCode = $repCode ? strtoupper(trim($repCode)) : '';
-            }
-
-            if ($repCode !== '') {
-                $query->whereIn($idColumn, function ($sub) use ($repCode) {
-                    $sub->select('customer_acumatica_id')
-                        ->from('acumatica_sales_orders')
-                        ->where('sales_consultant_rep_code', $repCode)
-                        ->whereNotNull('customer_acumatica_id')
-                        ->distinct();
-                });
+            if ($mappedIds === []) {
+                $query->whereRaw('1 = 0');
 
                 return;
             }
 
-            $query->whereRaw('1 = 0');
+            $query->whereIn($idColumn, $mappedIds);
+
+            return;
+        }
+
+        $assignedIds = $user->customerAssignments()->pluck('customer_acumatica_id');
+
+        if ($assignedIds->isNotEmpty()) {
+            $query->whereIn($idColumn, $assignedIds);
 
             return;
         }
@@ -223,7 +308,7 @@ class OrgScopeService
             }
 
             foreach ($prefixes as $prefix) {
-                $scoped->orWhere('customer_class', 'like', $prefix . '%');
+                $scoped->orWhere('customer_class', 'like', $prefix.'%');
             }
 
             if ($overrideIds->isEmpty() && $prefixes === []) {

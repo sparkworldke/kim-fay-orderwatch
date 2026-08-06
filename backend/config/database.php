@@ -64,6 +64,19 @@ return [
             ]) : [],
         ],
 
+        'historical' => [
+            'driver' => 'mysql',
+            'host' => env('HISTORICAL_DB_HOST', '127.0.0.1'),
+            'port' => env('HISTORICAL_DB_PORT', '3306'),
+            'database' => env('HISTORICAL_DB_DATABASE', 'kimfay_orderwatch_historical'),
+            'username' => env('HISTORICAL_DB_USERNAME', 'readonly'),
+            'password' => env('HISTORICAL_DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

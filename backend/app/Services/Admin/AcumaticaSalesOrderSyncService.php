@@ -9,8 +9,11 @@ use App\Models\AcumaticaFillRateSnapshot;
 use App\Models\AcumaticaSalesOrder;
 use App\Models\AcumaticaSalesOrderLine;
 use App\Models\AcumaticaSyncLog;
+use App\Jobs\RefreshProductionSummariesJob;
 use App\Services\Admin\Concerns\InteractsWithAcumaticaSyncRun;
 use App\Services\Operations\SalesOrderReasonCatalog;
+use App\Services\Operations\FulfillmentHistoryService;
+use App\Services\Cache\DomainCache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -31,12 +34,92 @@ class AcumaticaSalesOrderSyncService
     public function __construct(
         private readonly AcumaticaClient $client,
         private readonly SalesOrderReasonCatalog $reasonCatalog,
+        private readonly ?FulfillmentHistoryService $fulfillmentHistory = null,
     ) {
     }
 
     // -------------------------------------------------------------------------
     // Date-range sync
     // -------------------------------------------------------------------------
+
+    /**
+     * Re-fetch and upsert specific sales orders by OrderNbr (full Details expand).
+     *
+     * @param  list<string>  $orderNbrs
+     */
+    public function syncByOrderNumbers(array $orderNbrs, ?int $triggeredByUserId = null, string $triggerType = 'manual'): AcumaticaSyncLog
+    {
+        $orderNbrs = array_values(array_unique(array_filter(array_map(
+            static fn ($n) => is_string($n) ? strtoupper(trim($n)) : '',
+            $orderNbrs,
+        ), static fn (string $n) => $n !== '')));
+
+        $this->assertNoActiveSync(
+            ['sales_orders', 'customer_orders', 'credit_notes_and_more', 'sales_order_status_updates', 'sales_order_prune_missing'],
+            'An order sync is already running. Wait for it to finish or stop it first.',
+        );
+
+        $run = $this->createSyncRun([
+            'sync_type'            => 'sales_orders',
+            'started_at'           => now(),
+            'status'               => 'running',
+            'record_count'         => 0,
+            'success_count'        => 0,
+            'failed_count'         => 0,
+            'trigger_type'         => $triggerType,
+            'triggered_by_user_id' => $triggeredByUserId,
+            'filters'              => ['order_nbrs' => $orderNbrs],
+        ]);
+
+        StructuredLogger::write('info', 'acumatica', 'sales_order_sync_by_numbers_started', [
+            'sync_run_id' => $run->id,
+            'order_nbrs'  => $orderNbrs,
+        ]);
+
+        try {
+            if ($orderNbrs === []) {
+                $run->update([
+                    'ended_at'      => now(),
+                    'heartbeat_at'  => now(),
+                    'status'        => 'failed',
+                    'error_message' => 'No order numbers provided.',
+                ]);
+
+                return $run->fresh();
+            }
+
+            $orders = $this->client->fetchSalesOrdersByNumbers($orderNbrs, fn () => $this->touchSyncRun($run));
+            $run    = $this->processOrders($orders, $run);
+
+            $found = $this->orderNumbersFromPayload($orders);
+            $missing = array_values(array_diff($orderNbrs, $found));
+            if ($missing !== []) {
+                $run->update([
+                    'filters' => array_merge($run->filters ?? [], [
+                        'not_found_in_acumatica' => $missing,
+                    ]),
+                    'error_message' => $run->error_message
+                        ?: ('Not found in Acumatica: '.implode(', ', $missing)),
+                ]);
+            }
+        } catch (AcumaticaSyncStoppedException $e) {
+            $run = $this->stopSyncRun($run, $e->getMessage());
+        } catch (Throwable $e) {
+            $run->update([
+                'ended_at'      => now(),
+                'heartbeat_at'  => now(),
+                'status'        => 'failed',
+                'error_message' => $e->getMessage(),
+            ]);
+
+            StructuredLogger::write('error', 'acumatica', 'sales_order_sync_by_numbers_failed', [
+                'sync_run_id' => $run->id,
+                'error'       => $e->getMessage(),
+            ]);
+        }
+
+        return $run->fresh();
+    }
 
     public function syncDateRange(string $dateFrom, string $dateTo, ?int $triggeredByUserId = null, string $triggerType = 'manual', ?int $cronRunLogId = null): AcumaticaSyncLog
     {
@@ -514,7 +597,12 @@ class AcumaticaSalesOrderSyncService
     // Selective customer sync
     // -------------------------------------------------------------------------
 
-    public function syncForCustomers(array $customerAcumaticaIds, ?int $triggeredByUserId = null): AcumaticaSyncLog
+    public function syncForCustomers(
+        array $customerAcumaticaIds,
+        ?int $triggeredByUserId = null,
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
+    ): AcumaticaSyncLog
     {
         $this->assertNoActiveSync(
             ['sales_orders', 'customer_orders', 'credit_notes_and_more'],
@@ -530,7 +618,11 @@ class AcumaticaSalesOrderSyncService
             'failed_count'         => 0,
             'trigger_type'         => 'manual',
             'triggered_by_user_id' => $triggeredByUserId,
-            'filters'              => ['customer_ids' => $customerAcumaticaIds],
+            'filters'              => array_filter([
+                'customer_ids' => $customerAcumaticaIds,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+            ]),
         ]);
 
         StructuredLogger::write('info', 'acumatica', 'customer_order_sync_started', [
@@ -542,7 +634,9 @@ class AcumaticaSalesOrderSyncService
             $orders = [];
             foreach ($customerAcumaticaIds as $customerId) {
                 $this->touchSyncRun($run);
-                $customerOrders = $this->client->fetchAllSalesOrdersForCustomer($customerId, fn () => $this->touchSyncRun($run));
+                $customerOrders = $dateFrom && $dateTo
+                    ? $this->client->fetchAllSalesOrdersForCustomerByDateRange($customerId, $dateFrom, $dateTo, fn () => $this->touchSyncRun($run))
+                    : $this->client->fetchAllSalesOrdersForCustomer($customerId, fn () => $this->touchSyncRun($run));
                 $orders         = array_merge($orders, $customerOrders);
             }
 
@@ -553,7 +647,9 @@ class AcumaticaSalesOrderSyncService
                 $run,
                 fn (Builder $query) => $query
                     ->where('order_type', 'SO')
-                    ->whereIn('customer_acumatica_id', $customerAcumaticaIds),
+                    ->whereIn('customer_acumatica_id', $customerAcumaticaIds)
+                    ->when($dateFrom && $dateTo, fn (Builder $query) => $query
+                        ->whereBetween('order_date', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59'])),
                 $this->orderNumbersFromPayload($orders),
                 'missing_from_acumatica_customer_order_sync',
             );
@@ -651,6 +747,26 @@ class AcumaticaSalesOrderSyncService
             'reason_validation' => $this->reasonValidationSummary,
         ]);
 
+        if ($run->status === 'completed') {
+            app(DomainCache::class)->bump(
+                DomainCache::ORDERS,
+                DomainCache::BACKORDERS,
+                DomainCache::FILL_RATE,
+                DomainCache::BUSINESS_OPTIMIZATION,
+                DomainCache::NOT_DELIVERED,
+                DomainCache::CUSTOMER_ANALYTICS,
+                DomainCache::SALES_PORTFOLIO,
+                DomainCache::SALES_INTELLIGENCE,
+                DomainCache::KP_CRM,
+                DomainCache::KP_OPERATIONS,
+            );
+            $filters = $run->filters ?? [];
+            RefreshProductionSummariesJob::dispatch(
+                $filters['date_from'] ?? now()->subDays(7)->toDateString(),
+                $filters['date_to'] ?? now()->toDateString(),
+                false,
+            );
+        }
         return $run;
     }
 
@@ -976,6 +1092,10 @@ class AcumaticaSalesOrderSyncService
 
         $orderData = array_merge($orderData, $this->workflowReasonAttributes($workflow));
 
+        $existingOrder = AcumaticaSalesOrder::where('acumatica_order_nbr', $orderNbr)->first();
+        $shouldCaptureHistory = $existingOrder === null
+            || (strtolower(trim((string) $existingOrder->status)) !== 'completed' && strtolower(trim($status)) === 'completed');
+
         $order = AcumaticaSalesOrder::updateOrCreate(
             ['acumatica_order_nbr' => $orderNbr],
             $orderData,
@@ -1023,6 +1143,10 @@ class AcumaticaSalesOrderSyncService
                 'discount_amount'    => $mapped['discount_amount'],
                 'discount_code'      => $mapped['discount_code'],
             ]);
+        }
+
+        if ($shouldCaptureHistory) {
+            ($this->fulfillmentHistory ?? app(FulfillmentHistoryService::class))->captureFirstCompleted($order, $raw, 'sales_order_sync', $runId);
         }
     }
 

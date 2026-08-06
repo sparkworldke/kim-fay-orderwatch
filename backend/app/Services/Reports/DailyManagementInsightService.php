@@ -77,55 +77,127 @@ class DailyManagementInsightService
     /** @param  array<string, mixed>  $payload */
     private function fallbackInsights(array $payload, string $status): array
     {
-        $y = $payload['yesterday'];
-        $cmp = $payload['comparison']['orders_received'] ?? null;
-        $direction = $cmp && $cmp['direction'] === 'up' ? 'increased' : ($cmp && $cmp['direction'] === 'down' ? 'decreased' : 'held steady');
+        // Runner uses DailyExecutiveReportService (orders.yesterday). Older management
+        // payload used top-level yesterday — support both so fallback never crashes.
+        $y = $this->resolveYesterdayMetrics($payload);
+        $fill = $payload['fill_rate'] ?? [];
+        $backorders = $payload['backorders'] ?? [];
+        $revenue = $payload['revenue_split'] ?? [];
+        $week = $payload['orders']['week_totals'] ?? [];
+        $reportLabel = (string) ($payload['report_date_label'] ?? 'yesterday');
 
-        $summary = sprintf(
-            'Yesterday OrderWatch recorded %d orders worth KES %s. Volume %s versus the day before. Completion rate was %.1f%% with KES %s still at risk across %d outstanding orders.',
-            $y['orders_received'],
-            number_format($y['total_order_value'], 0),
-            $direction,
-            $y['completion_rate'],
-            number_format($y['revenue_at_risk'], 0),
-            $y['outstanding_orders'],
-        );
+        $totalOrders = (int) ($y['total_orders'] ?? $y['orders_received'] ?? 0);
+        $completed = (int) ($y['completed_orders'] ?? $y['orders_captured'] ?? 0);
+        $pending = (int) ($y['pending_approval'] ?? 0);
+        $shipping = (int) ($y['in_shipping'] ?? 0);
+        $completionRate = isset($y['completion_rate'])
+            ? (float) $y['completion_rate']
+            : ($totalOrders > 0 ? round(($completed / $totalOrders) * 100, 1) : 0.0);
+        $revenueAtRisk = (float) ($backorders['revenue_at_risk']
+            ?? $y['revenue_at_risk']
+            ?? $fill['revenue_not_shipped']
+            ?? 0);
+        $fillRate = $fill['fill_rate_pct'] ?? null;
+        $revenueTotal = (float) ($revenue['total'] ?? $y['total_order_value'] ?? 0);
+
+        $cmp = $payload['comparison']['orders_received'] ?? null;
+        $direction = $cmp && ($cmp['direction'] ?? null) === 'up'
+            ? 'increased'
+            : ($cmp && ($cmp['direction'] ?? null) === 'down' ? 'decreased' : 'held steady');
+
+        if (($payload['report_type'] ?? '') === 'daily_executive_email' || isset($payload['orders']['yesterday'])) {
+            $summary = sprintf(
+                'On %s OrderWatch recorded %d orders (%d completed, %d pending approval, %d in shipping). Fill rate was %s with KES %s backorder revenue at risk. Revenue split total: KES %s.',
+                $reportLabel,
+                $totalOrders,
+                $completed,
+                $pending,
+                $shipping,
+                $fillRate === null || $fillRate === '' ? 'N/A' : number_format((float) $fillRate, 1).'%',
+                number_format($revenueAtRisk, 0),
+                number_format($revenueTotal, 0),
+            );
+            $commentary = sprintf(
+                'Week to date: %d orders received, %d completed, %d pending approval, %d in shipping.',
+                (int) ($week['total_orders'] ?? 0),
+                (int) ($week['completed_orders'] ?? 0),
+                (int) ($week['pending_approval'] ?? 0),
+                (int) ($week['in_shipping'] ?? 0),
+            );
+        } else {
+            $summary = sprintf(
+                'Yesterday OrderWatch recorded %d orders worth KES %s. Volume %s versus the day before. Completion rate was %.1f%% with KES %s still at risk across %d outstanding orders.',
+                $totalOrders,
+                number_format($revenueTotal, 0),
+                $direction,
+                $completionRate,
+                number_format($revenueAtRisk, 0),
+                (int) ($y['outstanding_orders'] ?? 0),
+            );
+            $commentary = sprintf(
+                'MTD completion rate is %.1f%% with %d orders received month-to-date.',
+                (float) ($payload['mtd']['completion_rate'] ?? 0),
+                (int) ($payload['mtd']['orders_received'] ?? 0),
+            );
+        }
 
         $improvements = [];
-        if ($y['completion_rate'] < 85) {
-            $improvements[] = sprintf('Recover completion rate above 85%% (currently %.1f%%)', $y['completion_rate']);
+        if ($pending > 0) {
+            $improvements[] = sprintf('Clear %d orders still pending approval from %s', $pending, $reportLabel);
         }
-        if ($y['outstanding_orders'] > 0) {
-            $improvements[] = sprintf('Clear %d outstanding orders worth KES %s', $y['outstanding_orders'], number_format($y['revenue_at_risk'], 0));
+        if ($shipping > 0) {
+            $improvements[] = sprintf('Chase %d orders stuck in shipping', $shipping);
+        }
+        if ($completionRate < 85 && $totalOrders > 0) {
+            $improvements[] = sprintf('Recover completion rate above 85%% (currently %.1f%%)', $completionRate);
+        }
+        if ($revenueAtRisk > 0) {
+            $improvements[] = sprintf('Reduce backorder revenue at risk (KES %s)', number_format($revenueAtRisk, 0));
         }
         if (($payload['risk']['needs_review_emails'] ?? 0) > 0) {
-            $improvements[] = sprintf('Resolve %d email/order matching issues awaiting review', $payload['risk']['needs_review_emails']);
+            $improvements[] = sprintf('Resolve %d email/order matching issues awaiting review', (int) $payload['risk']['needs_review_emails']);
         }
         if ($improvements === []) {
-            $improvements[] = 'Maintain current capture performance and monitor MTD trend.';
+            $improvements[] = 'Maintain current capture performance and monitor week-to-date exceptions.';
         }
 
         $topPositive = $payload['customer_highlights']['top_positive']['customer_name'] ?? null;
         $topRisk = $payload['customer_highlights']['top_risk']['customer_name'] ?? null;
+        $topReason = $backorders['top_reasons'][0]['reason_label']
+            ?? $backorders['top_reasons'][0]['reason_code']
+            ?? null;
 
         return [
             'executive_summary' => $summary,
-            'performance_commentary' => sprintf(
-                'MTD completion rate is %.1f%% with %d orders received month-to-date.',
-                $payload['mtd']['completion_rate'] ?? 0,
-                $payload['mtd']['orders_received'] ?? 0,
-            ),
+            'performance_commentary' => $commentary,
             'improvements' => $improvements,
             'top_positive' => $topPositive,
-            'top_negative' => $topRisk,
+            'top_negative' => $topRisk ?? ($topReason !== null ? (string) $topReason : null),
             'ai_status' => $status,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function resolveYesterdayMetrics(array $payload): array
+    {
+        if (isset($payload['orders']['yesterday']) && is_array($payload['orders']['yesterday'])) {
+            return $payload['orders']['yesterday'];
+        }
+
+        if (isset($payload['yesterday']) && is_array($payload['yesterday'])) {
+            return $payload['yesterday'];
+        }
+
+        return [];
     }
 
     private function buildSystemPrompt(): string
     {
         return <<<'PROMPT'
-You are a management reporting assistant for Kim-Fay OrderWatch. You receive structured KPI JSON for yesterday, day-before-yesterday, MTD, comparisons, risk metrics, and customer highlights.
+You are a management reporting assistant for Kim-Fay OrderWatch. You receive structured KPI JSON for the daily executive exceptions email (orders for yesterday + week-to-date, fill rate, backorders, revenue split KP/CS). Older management payloads may also include MTD comparisons and risk metrics.
 
 Return ONLY valid JSON with this exact shape:
 {

@@ -101,7 +101,7 @@ export function PwaInstallPrompt() {
           <img src="/kim-fay-logo.png" alt="" className="h-7 w-auto object-contain" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">Install OrderWatch</p>
+          <p className="text-sm font-semibold text-foreground">Install Sight</p>
           {showIosHint && !deferredPrompt ? (
             <p className="mt-1 text-xs text-muted-foreground">
               Tap <Share className="inline h-3.5 w-3.5" /> Share, then &quot;Add to Home Screen&quot; to install on

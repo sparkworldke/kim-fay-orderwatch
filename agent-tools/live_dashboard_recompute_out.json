@@ -1,0 +1,197 @@
+{
+  "date_window": [
+    "2026-07-22",
+    "2026-07-25"
+  ],
+  "orders_fetched": 1245,
+  "dashboard_isBackorderLine": {
+    "open_lines": 3479,
+    "skus": 543,
+    "open_orders": 378,
+    "totals_value_summary_formula": {
+      "order_value": 39239207.71,
+      "invoiced_value": 22168401.82,
+      "backorder_value": 16596131.45
+    },
+    "totals_pure_open_qty_x_price": {
+      "order_value": 39239207.71,
+      "invoiced_value": 22168401.82,
+      "backorder_value": 38553694.23
+    },
+    "totals_backorder_qty_x_price": {
+      "order_value": 39239207.71,
+      "invoiced_value": 22168401.82,
+      "backorder_value": 38556952.14
+    },
+    "by_product_dash": {
+      "manufactured": {
+        "order_value": 15206346.79,
+        "invoiced_value": 10947544.47,
+        "backorder_value": 4132838.54
+      },
+      "trading": {
+        "order_value": 24032860.92,
+        "invoiced_value": 11220857.36,
+        "backorder_value": 12463292.91
+      }
+    },
+    "by_product_pure": {
+      "manufactured": {
+        "order_value": 15206346.79,
+        "invoiced_value": 10947544.47,
+        "backorder_value": 14778356.74
+      },
+      "trading": {
+        "order_value": 24032860.92,
+        "invoiced_value": 11220857.36,
+        "backorder_value": 23775337.49
+      }
+    },
+    "identity_gap_order_minus_inv_minus_bo": 474674.43,
+    "so_status_line_counts": {
+      "On Hold": 30,
+      "Rejected": 346,
+      "Shipping": 2973,
+      "Back Order": 106,
+      "Pending Approval": 24
+    },
+    "so_status_order_counts": {
+      "On Hold": 7,
+      "Rejected": 25,
+      "Shipping": 298,
+      "Back Order": 40,
+      "Pending Approval": 8
+    },
+    "fulfillment_counts": {
+      "Backorders Imported": 1015,
+      "Partially Shipped \u2014 Backorder Pending": 2459,
+      "Pending Shipment": 5
+    },
+    "double_subtraction_suspect_lines": 39,
+    "double_subtraction_value_deflated": 1006811.29,
+    "sample_double_sub": [
+      {
+        "order": "SO366783",
+        "inv": "FAYSE0093",
+        "order_qty": 5.0,
+        "shipped": 1.0,
+        "qty_on_shipments": 1.0,
+        "open_qty": 4.0,
+        "bo_qty_dash": 3.0,
+        "pure_open_value": 19600.0,
+        "dash_bo_value": 14700.0
+      },
+      {
+        "order": "SO366916",
+        "inv": "COWGT0001",
+        "order_qty": 6.0,
+        "shipped": 3.0,
+        "qty_on_shipments": 3.0,
+        "open_qty": 3.0,
+        "bo_qty_dash": 0.0,
+        "pure_open_value": 3328.45,
+        "dash_bo_value": 0.0
+      },
+      {
+        "order": "SO366975",
+        "inv": "COSSE0012",
+        "order_qty": 30.0,
+        "shipped": 14.0,
+        "qty_on_shipments": 14.0,
+        "open_qty": 30.0,
+        "bo_qty_dash": 2.0,
+        "pure_open_value": 30979.61,
+        "dash_bo_value": 2065.31
+      },
+      {
+        "order": "SO366975",
+        "inv": "COSTP0008",
+        "order_qty": 30.0,
+        "shipped": 25.0,
+        "qty_on_shipments": 25.0,
+        "open_qty": 30.0,
+        "bo_qty_dash": 0.0,
+        "pure_open_value": 38743.14,
+        "dash_bo_value": 0.0
+      },
+      {
+        "order": "SO366975",
+        "inv": "DOVBW0026",
+        "order_qty": 12.0,
+        "shipped": 4.0,
+        "qty_on_shipments": 4.0,
+        "open_qty": 12.0,
+        "bo_qty_dash": 4.0,
+        "pure_open_value": 12143.72,
+        "dash_bo_value": 4047.91
+      },
+      {
+        "order": "SO366975",
+        "inv": "DOVDO0034",
+        "order_qty": 96.0,
+        "shipped": 74.0,
+        "qty_on_shipments": 74.0,
+        "open_qty": 96.0,
+        "bo_qty_dash": 0.0,
+        "pure_open_value": 45467.38,
+        "dash_bo_value": 0.0
+      },
+      {
+        "order": "SO366975",
+        "inv": "DOVRO0012",
+        "order_qty": 96.0,
+        "shipped": 8.0,
+        "qty_on_shipments": 8.0,
+        "open_qty": 96.0,
+        "bo_qty_dash": 80.0,
+        "pure_open_value": 28166.07,
+        "dash_bo_value": 23471.72
+      },
+      {
+        "order": "SO366975",
+        "inv": "FAYCL0017",
+        "order_qty": 2.0,
+        "shipped": 1.0,
+        "qty_on_shipments": 1.0,
+        "open_qty": 2.0,
+        "bo_qty_dash": 0.0,
+        "pure_open_value": 7492.31,
+        "dash_bo_value": 0.0
+      }
+    ]
+  },
+  "all_lines_open_qty_gt_0": {
+    "lines": 3474,
+    "open_value": 38553694.23
+  },
+  "header_status_back_order_open_lines": {
+    "lines": 106,
+    "orders": 40,
+    "open_value": 2828510.37
+  },
+  "target_dashboard": {
+    "backorder_value": 13776253.71,
+    "invoiced_value": 16976781.52,
+    "order_value": 31131528.36,
+    "manufactured_bo": 5866073.68,
+    "trading_bo": 7910180.03,
+    "open_lines": 3000,
+    "skus": 290,
+    "open_orders": 344,
+    "current_outstanding": 30772084.15
+  },
+  "deltas_vs_target": {
+    "dash_bo": 2819877.74,
+    "dash_inv": 5191620.3,
+    "dash_ord": 8107679.35,
+    "pure_bo": 24777440.52,
+    "pure_vs_outstanding": 7781610.08,
+    "lines": 479,
+    "orders": 34,
+    "skus": 253,
+    "mfg_dash": -1733235.14,
+    "trd_dash": 4553112.88,
+    "mfg_pure": 8912283.06,
+    "trd_pure": 15865157.46
+  }
+}

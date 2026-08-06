@@ -70,4 +70,4 @@ Allowed origins (configured in `config/cors.php`):
 - `http://localhost:5173` (Vite dev server)
 - `http://localhost:3000`
 - `http://localhost`
-- `https://orderwatch.fayshop.co.ke`
+- `https://sight.fayshop.co.ke` (legacy `orderwatch.fayshop.co.ke` redirects here)

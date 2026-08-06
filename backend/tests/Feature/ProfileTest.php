@@ -9,9 +9,11 @@ use App\Models\PasswordChangeLog;
 use App\Models\SignInLog;
 use App\Models\User;
 use App\Services\OtpService;
+use App\Services\WhatsAppOtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Mockery;
 use Tests\TestCase;
 
 /**
@@ -181,17 +183,17 @@ class ProfileTest extends TestCase
         $user = $this->makeUser(['email' => 'secure@example.com']);
 
         $this->actingAs($user, 'sanctum')
-            ->postJson('/api/profile/password/otp')
+            ->postJson('/api/profile/password/otp', ['channel' => 'email'])
             ->assertOk();
 
         for ($i = 0; $i < 3; $i++) {
             $this->actingAs($user, 'sanctum')
-                ->postJson('/api/profile/password/otp')
+                ->postJson('/api/profile/password/otp', ['channel' => 'email'])
                 ->assertOk();
         }
 
         $this->actingAs($user, 'sanctum')
-            ->postJson('/api/profile/password/otp')
+            ->postJson('/api/profile/password/otp', ['channel' => 'email'])
             ->assertStatus(429)
             ->assertJsonFragment(['code' => 'too_many_resends']);
 
@@ -202,6 +204,57 @@ class ProfileTest extends TestCase
         $this->assertNotNull($otpRecord);
         $this->assertSame(3, $otpRecord->resend_attempts);
         Mail::assertSent(OtpMail::class, 4);
+    }
+
+    /** @test */
+    public function test_password_update_otp_can_be_sent_via_whatsapp_or_both(): void
+    {
+        Mail::fake();
+        $whatsApp = Mockery::mock(WhatsAppOtpService::class);
+        $whatsApp->shouldReceive('isConfigured')->andReturn(true);
+        $whatsApp->shouldReceive('sendOtp')
+            ->twice()
+            ->with('+254712345678', self::KNOWN_OTP, 'password-update')
+            ->andReturnNull();
+        $this->app->instance(WhatsAppOtpService::class, $whatsApp);
+
+        $user = $this->makeUser([
+            'email' => 'wa-user@example.com',
+            'whatsapp_number' => '+254712345678',
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/profile/password/otp', ['channel' => 'whatsapp'])
+            ->assertOk()
+            ->assertJsonPath('delivered', ['whatsapp'])
+            ->assertJsonFragment(['message' => 'Verification code sent to your WhatsApp.']);
+
+        Mail::assertNothingSent();
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/profile/password/otp', ['channel' => 'both'])
+            ->assertOk()
+            ->assertJsonPath('delivered', ['email', 'whatsapp'])
+            ->assertJsonFragment(['message' => 'Verification code sent to your email and WhatsApp.']);
+
+        Mail::assertSent(OtpMail::class, 1);
+    }
+
+    /** @test */
+    public function test_password_update_otp_whatsapp_requires_number_on_profile(): void
+    {
+        Mail::fake();
+        $user = $this->makeUser([
+            'email' => 'no-wa@example.com',
+            'whatsapp_number' => null,
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/profile/password/otp', ['channel' => 'whatsapp'])
+            ->assertStatus(422)
+            ->assertJsonFragment(['code' => 'whatsapp_number_missing']);
+
+        Mail::assertNothingSent();
     }
 
     /** @test */
@@ -314,7 +367,7 @@ class ProfileTest extends TestCase
     /** @test */
     public function test_admin_can_access_any_users_logs(): void
     {
-        $admin      = $this->makeUser(['role' => 'Administrator', 'email' => 'admin@example.com']);
+        $admin      = $this->makeUser(['role' => 'Administrator', 'is_super_admin' => true, 'email' => 'admin@example.com']);
         $targetUser = $this->makeUser(['role' => 'User',          'email' => 'target@example.com']);
 
         $this->makeLog($targetUser);

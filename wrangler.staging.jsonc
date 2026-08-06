@@ -1,0 +1,20 @@
+{
+  // Staging Worker — Kim-Fay Sight
+  // Deploy: npm run deploy:staging
+  // First deploy creates Worker "sight-staging" and attaches the custom domain.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sight-staging",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "dist/server/server.js",
+  "routes": [
+    {
+      "pattern": "staging.sight.fayshop.co.ke",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "dist/client"
+  }
+}

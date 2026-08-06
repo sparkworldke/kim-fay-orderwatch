@@ -1,0 +1,267 @@
+﻿{
+    "backorders_summary_june":  {
+                                    "open_lines":  7283,
+                                    "open_orders":  1006,
+                                    "revenue_at_risk":  85254139.39,
+                                    "total_open_qty":  150827.2,
+                                    "last_synced_at":  "2026-07-06 21:35:46"
+                                },
+    "backorders_summary_open_all":  {
+                                        "open_lines":  7283,
+                                        "open_orders":  1006,
+                                        "revenue_at_risk":  85254139.39,
+                                        "total_open_qty":  150827.2,
+                                        "last_synced_at":  "2026-07-06 21:35:46"
+                                    },
+    "backorders_analytics":  {
+                                 "product_sku_count":  0,
+                                 "category_total":  0,
+                                 "keys":  [
+                                              "summary",
+                                              "excel_summary",
+                                              "filters",
+                                              "charts"
+                                          ],
+                                 "top5_products":  [
+
+                                                   ],
+                                 "product_value_sum":  0,
+                                 "reason_total":  0
+                             },
+    "fill_rate_summary_oos_on":  {
+                                     "by_business_category":  [
+                                                                  {
+                                                                      "business_category":  "manufactured",
+                                                                      "label":  "Manufactured",
+                                                                      "line_count":  3805,
+                                                                      "order_count":  689,
+                                                                      "ordered_qty":  72786,
+                                                                      "shipped_qty":  63264,
+                                                                      "undershipped_value":  13357166.52,
+                                                                      "fill_rate_pct":  86.9
+                                                                  },
+                                                                  {
+                                                                      "business_category":  "trading",
+                                                                      "label":  "Trading (Partners)",
+                                                                      "line_count":  6663,
+                                                                      "order_count":  681,
+                                                                      "ordered_qty":  153730.3,
+                                                                      "shipped_qty":  56166.52,
+                                                                      "undershipped_value":  33767418.77,
+                                                                      "fill_rate_pct":  36.5
+                                                                  }
+                                                              ],
+                                     "order_count":  1042,
+                                     "revenue_not_shipped":  0,
+                                     "top_products_count":  726,
+                                     "top_products_value_sum":  47124585.27,
+                                     "critical":  0,
+                                     "excel_totals":  {
+                                                          "actual_qty":  0,
+                                                          "ordered_qty":  0,
+                                                          "undershipped_qty":  0,
+                                                          "undershipped_value":  0,
+                                                          "fill_rate_pct":  null,
+                                                          "order_count":  1042
+                                                      },
+                                     "overall_fill_rate":  null,
+                                     "at_risk":  0,
+                                     "healthy":  0,
+                                     "by_reason":  [
+                                                       {
+                                                           "reason":  "inventory_shortage",
+                                                           "line_count":  2759,
+                                                           "undershipped_value":  35183671.16,
+                                                           "contribution_pct":  74.7
+                                                       },
+                                                       {
+                                                           "reason":  "Unassigned",
+                                                           "line_count":  7695,
+                                                           "undershipped_value":  11841334.29,
+                                                           "contribution_pct":  25.1
+                                                       },
+                                                       {
+                                                           "reason":  "price_difference",
+                                                           "line_count":  8,
+                                                           "undershipped_value":  91342.35,
+                                                           "contribution_pct":  0.2
+                                                       },
+                                                       {
+                                                           "reason":  "lost_by_driver",
+                                                           "line_count":  5,
+                                                           "undershipped_value":  8119.74,
+                                                           "contribution_pct":  0
+                                                       },
+                                                       {
+                                                           "reason":  "damaged_at_client",
+                                                           "line_count":  1,
+                                                           "undershipped_value":  117.75,
+                                                           "contribution_pct":  0
+                                                       }
+                                                   ],
+                                     "top5":  [
+                                                  {
+                                                      "inventory_id":  "REXDS0014",
+                                                      "product_name":  "Rexona Deo Spray Invisible Aqua 200Ml",
+                                                      "value":  3041974.33,
+                                                      "lines":  1,
+                                                      "pct":  6.5
+                                                  },
+                                                  {
+                                                      "inventory_id":  "LUXBA0003",
+                                                      "product_name":  "LUX BAR CREAMY PERFECTIONPW 2N1UI 48X85G",
+                                                      "value":  1779396.05,
+                                                      "lines":  22,
+                                                      "pct":  3.8
+                                                  },
+                                                  {
+                                                      "inventory_id":  "APTML0004",
+                                                      "product_name":  "Aptamil Infant 800g",
+                                                      "value":  1723704.05,
+                                                      "lines":  77,
+                                                      "pct":  3.7
+                                                  },
+                                                  {
+                                                      "inventory_id":  "COWGT0001",
+                                                      "product_name":  "Cow \u0026 Gate First 400g",
+                                                      "value":  1710282.54,
+                                                      "lines":  109,
+                                                      "pct":  3.6
+                                                  },
+                                                  {
+                                                      "inventory_id":  "DOVST0010",
+                                                      "product_name":  "Dove Stick Pear \u0026 Aloe Vera Farit 1x40g",
+                                                      "value":  1248276.79,
+                                                      "lines":  12,
+                                                      "pct":  2.6
+                                                  }
+                                              ]
+                                 },
+    "fill_rate_summary_oos_off":  {
+                                      "excel_totals":  {
+                                                           "actual_qty":  0,
+                                                           "ordered_qty":  0,
+                                                           "undershipped_qty":  0,
+                                                           "undershipped_value":  0,
+                                                           "fill_rate_pct":  null,
+                                                           "order_count":  1042
+                                                       },
+                                      "order_count":  1042,
+                                      "top_products_value_sum":  47124585.27,
+                                      "revenue_not_shipped":  0,
+                                      "overall_fill_rate":  null,
+                                      "top_products_count":  726
+                                  },
+    "bo_sku_manufactured":  {
+                                "line_count":  286,
+                                "sku_count":  125,
+                                "order_count":  47,
+                                "fill_rate_pct":  null,
+                                "top3":  [
+                                             {
+                                                 "id":  "FAYCL0009",
+                                                 "name":  "Fay Cling Film Catering 30cmx300m GP",
+                                                 "value":  466998.73,
+                                                 "qty":  null
+                                             },
+                                             {
+                                                 "id":  "FAYTP0008",
+                                                 "name":  "Fay TP Emb. Unwrap. 4x10s White",
+                                                 "value":  348239.09,
+                                                 "qty":  null
+                                             },
+                                             {
+                                                 "id":  "COSTP0024",
+                                                 "name":  "Cosy Poa TP Emb. Wrap. 4x10s Pink 150 Sheets",
+                                                 "value":  303836.21,
+                                                 "qty":  null
+                                             }
+                                         ],
+                                "reported_value":  5791906.34,
+                                "skus_value_sum":  5791906.34
+                            },
+    "bo_sku_trading":  {
+                           "line_count":  564,
+                           "sku_count":  287,
+                           "order_count":  55,
+                           "fill_rate_pct":  null,
+                           "top3":  [
+                                        {
+                                            "id":  "AIROM0003",
+                                            "name":  "Airoma Air Freshener Cotton Breeze 300ml",
+                                            "value":  121875,
+                                            "qty":  null
+                                        },
+                                        {
+                                            "id":  "CONPA0002",
+                                            "name":  "Confidence Ultrathin NORMAL 8\u0027s",
+                                            "value":  114348,
+                                            "qty":  null
+                                        },
+                                        {
+                                            "id":  "ULTLC0010",
+                                            "name":  "Ultra Clean Multipurpose Liquid Cleaner 20L- Scented Hanse",
+                                            "value":  78250,
+                                            "qty":  null
+                                        }
+                                    ],
+                           "reported_value":  3109457.01,
+                           "skus_value_sum":  3109457.01
+                       },
+    "fr_sku_manufactured":  {
+                                "line_count":  1072,
+                                "sku_count":  173,
+                                "order_count":  342,
+                                "fill_rate_pct":  15.4,
+                                "top3":  [
+                                             {
+                                                 "id":  "FAYCL0017",
+                                                 "name":  "Fay Cling Film 45cm x 15m GP (36 Rolls)",
+                                                 "value":  1047418.15,
+                                                 "qty":  279
+                                             },
+                                             {
+                                                 "id":  "FAYMU0004",
+                                                 "name":  "Fay Multifold H/Towels Advanced 1ply 12X240shts",
+                                                 "value":  998888.33,
+                                                 "qty":  463
+                                             },
+                                             {
+                                                 "id":  "FAYTP0011",
+                                                 "name":  "Fay TP Emb. Wrap. 4x10s White Expo",
+                                                 "value":  644670,
+                                                 "qty":  450
+                                             }
+                                         ],
+                                "reported_value":  13357166.52,
+                                "skus_value_sum":  13357166.53
+                            },
+    "fr_sku_trading":  {
+                           "line_count":  2291,
+                           "sku_count":  380,
+                           "order_count":  507,
+                           "fill_rate_pct":  0.4,
+                           "top3":  [
+                                        {
+                                            "id":  "REXDS0014",
+                                            "name":  "Rexona Deo Spray Invisible Aqua 200Ml",
+                                            "value":  3041974.33,
+                                            "qty":  6919
+                                        },
+                                        {
+                                            "id":  "LUXBA0003",
+                                            "name":  "LUX BAR CREAMY PERFECTIONPW 2N1UI 48X85G",
+                                            "value":  1779396.05,
+                                            "qty":  32376
+                                        },
+                                        {
+                                            "id":  "APTML0004",
+                                            "name":  "Aptamil Infant 800g",
+                                            "value":  1723704.05,
+                                            "qty":  646
+                                        }
+                                    ],
+                           "reported_value":  33767418.77,
+                           "skus_value_sum":  33767418.74
+                       }
+}

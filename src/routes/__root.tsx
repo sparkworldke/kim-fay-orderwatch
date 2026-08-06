@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import {
   Outlet,
   Link,
@@ -14,6 +15,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { productionQueryPersister } from "../lib/production-query-persister";
 
 function NotFoundComponent() {
   return (
@@ -85,13 +87,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Kim-Fay OrderWatch" },
-      { name: "description", content: "Internal order monitoring, reconciliation and revenue protection dashboard for Kim-Fay." },
+      { title: "Kim-Fay Sight" },
+      {
+        name: "description",
+        content:
+          "Kim-Fay Sight — see the business clearly. Sees every business procedure: orders, inventory, fulfilment, and risk.",
+      },
       { name: "robots", content: "noindex,nofollow" },
       { name: "theme-color", content: "#1a4480" },
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-title", content: "OrderWatch" },
+      { name: "apple-mobile-web-app-title", content: "Sight" },
       { name: "apple-mobile-web-app-status-bar-style", content: "default" },
     ],
     links: [
@@ -131,11 +137,23 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: productionQueryPersister,
+        maxAge: 24 * 60 * 60 * 1000,
+        dehydrateOptions: {
+          shouldDehydrateQuery: (query) => {
+            const root = String(query.queryKey[0] ?? "");
+            return root.startsWith("production-");
+          },
+        },
+      }}
+    >
       <ScrollToTop />
       <Outlet />
       <PwaInstallPrompt />
       <Toaster richColors position="top-right" />
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 }

@@ -2,7 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { CustomerLink } from "@/components/entity-links";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown,
   Building2, RefreshCw, Search, Users,
@@ -34,7 +34,11 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import type { AcumaticaCustomer, PaginatedResponse } from "@/types/admin";
 
 export const Route = createFileRoute("/app/customers")({
-  head: () => ({ meta: [{ title: "Customers — Kim-Fay OrderWatch" }] }),
+  validateSearch: (search: Record<string, unknown>): { channel?: string } => {
+    const channel = typeof search.channel === "string" ? search.channel : undefined;
+    return channel ? { channel } : {};
+  },
+  head: () => ({ meta: [{ title: "Customers — Kim-Fay Sight" }] }),
   component: CustomersPage,
 });
 
@@ -88,15 +92,25 @@ function useCategoryCustomers(cls: string | null) {
 // -------------------------------------------------------------------------
 
 function CustomersPage() {
+  const routeSearch = Route.useSearch();
+  const initialChannel = normalizeChannelFilter(routeSearch.channel);
   const [selectedClass, setSelectedClass]       = useState<string | null>(null);
   const [statFilter, setStatFilter]             = useState<StatCardFilter | null>(null);
   const [search, setSearch]                     = useState("");
   const [globalSearch, setGlobalSearch]         = useState("");
-  const [categoryQuickFilter, setCategoryQuickFilter] = useState<"all" | "KP" | "CS">("all");
+  const [categoryQuickFilter, setCategoryQuickFilter] =
+    useState<CategoryQuickFilter>(initialChannel);
   const [selectedCustomer, setSelectedCustomer] = useState<AcumaticaCustomer | null>(null);
 
   const categories = useCategories();
   const detail     = useCategoryCustomers(selectedClass);
+
+  useEffect(() => {
+    setCategoryQuickFilter(initialChannel);
+    setGlobalSearch("");
+    setSelectedClass(null);
+    setStatFilter(null);
+  }, [initialChannel]);
 
   function goBack() {
     setSelectedClass(null);
@@ -1131,7 +1145,14 @@ function CustomerDetailSheet({ customer }: { customer: CustomerWithBranches }) {
 // Shown on the home view (no stat card active, no category selected)
 // -------------------------------------------------------------------------
 
-type CategoryQuickFilter = "all" | "KP" | "CS";
+type CategoryQuickFilter = "all" | "MT1" | "MT2" | "GT" | "DTC" | "ECOMMERCE" | "KP" | "CS";
+
+function normalizeChannelFilter(value: string | undefined): CategoryQuickFilter {
+  const normalized = value?.trim().toUpperCase();
+  return normalized && ["MT1", "MT2", "GT", "DTC", "ECOMMERCE", "KP", "CS"].includes(normalized)
+    ? (normalized as CategoryQuickFilter)
+    : "all";
+}
 
 function GlobalCustomerSearch({
   search,
@@ -1150,10 +1171,7 @@ function GlobalCustomerSearch({
   const [perPage, setPerPage] = useState(50);
 
   // Derive the class prefix to pass to the API
-  const classPrefix: string | undefined =
-    categoryFilter === "KP" ? "KP" :
-    categoryFilter === "CS" ? "CS" :
-    undefined;
+  const classPrefix = categoryFilter === "all" ? undefined : categoryFilter;
 
   const { data, isLoading, isError, refetch } = useCustomers({
     q:            search || undefined,
@@ -1166,6 +1184,11 @@ function GlobalCustomerSearch({
   const showResults = search.trim() !== "" || categoryFilter !== "all";
 
   const QUICK_FILTERS: { key: CategoryQuickFilter; label: string; description: string }[] = [
+    { key: "MT1", label: "MT1", description: "Modern Trade Tier 1 accounts" },
+    { key: "MT2", label: "MT2", description: "Modern Trade Tier 2 accounts" },
+    { key: "GT", label: "GT", description: "General Trade accounts" },
+    { key: "DTC", label: "DTC / DTB", description: "Direct channel accounts" },
+    { key: "ECOMMERCE", label: "E-commerce", description: "E-commerce accounts" },
     { key: "KP",  label: "KP",             description: "Kimfay Professional accounts" },
     { key: "CS",  label: "Consumer Sales",  description: "Consumer Sales accounts" },
   ];

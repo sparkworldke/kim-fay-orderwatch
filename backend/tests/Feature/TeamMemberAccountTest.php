@@ -299,7 +299,7 @@ class TeamMemberAccountTest extends TestCase
         Mail::assertNothingSent();
     }
 
-    public function test_customer_service_manager_can_create_sales_consultant_with_rep_code(): void
+    public function test_customer_service_manager_cannot_create_sales_consultant(): void
     {
         Mail::fake();
 
@@ -316,17 +316,13 @@ class TeamMemberAccountTest extends TestCase
                 'rep_code' => 'p505',
             ]);
 
-        $response->assertCreated()
-            ->assertJsonPath('role', 'Sales Consultant')
-            ->assertJsonPath('rep_code', 'P505');
+        $response->assertForbidden();
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseMissing('users', [
             'email' => 'shirleen.consultant@kimfay.test',
-            'role' => 'Sales Consultant',
-            'rep_code' => 'P505',
         ]);
 
-        Mail::assertSent(TeamMemberAccountMail::class);
+        Mail::assertNothingSent();
     }
 
     public function test_customer_service_manager_cannot_create_non_consultant_roles(): void

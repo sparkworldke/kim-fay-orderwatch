@@ -1,0 +1,1158 @@
+{
+  "excel": {
+    "exported_rows": 44,
+    "distinct_orders": 40,
+    "sum_unbilled_distinct_order": 2828510.37,
+    "date_range": [
+      "2026-07-22",
+      "2026-07-25"
+    ]
+  },
+  "windows": {
+    "2026-07-22..2026-07-25": {
+      "live_bo_count": 40,
+      "live_open_unbilled_sum": 2828510.36,
+      "intersection_count": 40,
+      "unbilled_match_count": 40,
+      "live_sum_intersection": 2828510.36,
+      "excel_sum_intersection": 2828510.37,
+      "only_excel": [],
+      "only_live": [],
+      "value_diffs": [],
+      "orders": [
+        {
+          "order": "SO366586",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST101493",
+          "open_unbilled": 124200.0,
+          "excel_unbilled": 124200.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366778",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST102566",
+          "open_unbilled": 37260.0,
+          "excel_unbilled": 37260.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366783",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST102570",
+          "open_unbilled": 19600.0,
+          "excel_unbilled": 19600.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366916",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101215",
+          "open_unbilled": 3328.45,
+          "excel_unbilled": 3328.45,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366925",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101208",
+          "open_unbilled": 1448.28,
+          "excel_unbilled": 1448.28,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366953",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102599",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367055",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST100803",
+          "open_unbilled": 69711.21,
+          "excel_unbilled": 69711.21,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367081",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102453",
+          "open_unbilled": 14681.03,
+          "excel_unbilled": 14681.03,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367093",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST103095",
+          "open_unbilled": 28945.17,
+          "excel_unbilled": 28945.17,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367113",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102972",
+          "open_unbilled": 44871.21,
+          "excel_unbilled": 44871.21,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367231",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101220",
+          "open_unbilled": 21684.06,
+          "excel_unbilled": 21684.05,
+          "open_line_count": 8
+        },
+        {
+          "order": "SO367244",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 30240.18,
+          "excel_unbilled": 30240.19,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367245",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 16648.28,
+          "excel_unbilled": 16648.28,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367246",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 17944.57,
+          "excel_unbilled": 17944.56,
+          "open_line_count": 7
+        },
+        {
+          "order": "SO367372",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102500",
+          "open_unbilled": 19168.06,
+          "excel_unbilled": 19168.06,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367381",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102962",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367391",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101511",
+          "open_unbilled": 21904.91,
+          "excel_unbilled": 21904.91,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367395",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103056",
+          "open_unbilled": 8568.0,
+          "excel_unbilled": 8567.99,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367405",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103398",
+          "open_unbilled": 22586.21,
+          "excel_unbilled": 22586.21,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367416",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102824",
+          "open_unbilled": 3582.62,
+          "excel_unbilled": 3582.62,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367425",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101504",
+          "open_unbilled": 9590.5,
+          "excel_unbilled": 9590.5,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367433",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103028",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367447",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST100955",
+          "open_unbilled": 1929230.76,
+          "excel_unbilled": 1929230.76,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367469",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101376",
+          "open_unbilled": 10.0,
+          "excel_unbilled": 10.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367480",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103096",
+          "open_unbilled": 20918.97,
+          "excel_unbilled": 20918.97,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367481",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST100798",
+          "open_unbilled": 3563.38,
+          "excel_unbilled": 3563.38,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367508",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102815",
+          "open_unbilled": 14534.98,
+          "excel_unbilled": 14534.99,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367513",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102537",
+          "open_unbilled": 25163.74,
+          "excel_unbilled": 25163.75,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367528",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102883",
+          "open_unbilled": 123758.62,
+          "excel_unbilled": 123758.62,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367529",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102542",
+          "open_unbilled": 9029.32,
+          "excel_unbilled": 9029.32,
+          "open_line_count": 2
+        },
+        {
+          "order": "SO367530",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102553",
+          "open_unbilled": 12699.76,
+          "excel_unbilled": 12699.76,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367532",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102555",
+          "open_unbilled": 18721.58,
+          "excel_unbilled": 18721.58,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367537",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102554",
+          "open_unbilled": 13431.43,
+          "excel_unbilled": 13431.44,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367541",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102556",
+          "open_unbilled": 22284.15,
+          "excel_unbilled": 22284.15,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367568",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 7200.0,
+          "excel_unbilled": 7200.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367573",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 28800.0,
+          "excel_unbilled": 28800.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367580",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102648",
+          "open_unbilled": 16938.45,
+          "excel_unbilled": 16938.45,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367583",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102545",
+          "open_unbilled": 11978.57,
+          "excel_unbilled": 11978.57,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367588",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102544",
+          "open_unbilled": 13523.91,
+          "excel_unbilled": 13523.91,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367750",
+          "date": "2026-07-25T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 3500.0,
+          "excel_unbilled": 3500.0,
+          "open_line_count": 1
+        }
+      ]
+    },
+    "2026-07-20..2026-07-26": {
+      "live_bo_count": 43,
+      "live_open_unbilled_sum": 2845653.47,
+      "intersection_count": 40,
+      "unbilled_match_count": 40,
+      "live_sum_intersection": 2828510.36,
+      "excel_sum_intersection": 2828510.37,
+      "only_excel": [],
+      "only_live": [
+        "SO366172",
+        "SO366187",
+        "SO366396"
+      ],
+      "value_diffs": [],
+      "orders": [
+        {
+          "order": "SO366172",
+          "date": "2026-07-21T00:00:00+00:00",
+          "customer": "CUST102471",
+          "open_unbilled": 13965.51,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366187",
+          "date": "2026-07-21T00:00:00+00:00",
+          "customer": "CUST102861",
+          "open_unbilled": 3175.0,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366396",
+          "date": "2026-07-21T00:00:00+00:00",
+          "customer": "CUST101671",
+          "open_unbilled": 2.6,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366586",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST101493",
+          "open_unbilled": 124200.0,
+          "excel_unbilled": 124200.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366778",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST102566",
+          "open_unbilled": 37260.0,
+          "excel_unbilled": 37260.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366783",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST102570",
+          "open_unbilled": 19600.0,
+          "excel_unbilled": 19600.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366916",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101215",
+          "open_unbilled": 3328.45,
+          "excel_unbilled": 3328.45,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366925",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101208",
+          "open_unbilled": 1448.28,
+          "excel_unbilled": 1448.28,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366953",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102599",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367055",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST100803",
+          "open_unbilled": 69711.21,
+          "excel_unbilled": 69711.21,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367081",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102453",
+          "open_unbilled": 14681.03,
+          "excel_unbilled": 14681.03,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367093",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST103095",
+          "open_unbilled": 28945.17,
+          "excel_unbilled": 28945.17,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367113",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102972",
+          "open_unbilled": 44871.21,
+          "excel_unbilled": 44871.21,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367231",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101220",
+          "open_unbilled": 21684.06,
+          "excel_unbilled": 21684.05,
+          "open_line_count": 8
+        },
+        {
+          "order": "SO367244",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 30240.18,
+          "excel_unbilled": 30240.19,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367245",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 16648.28,
+          "excel_unbilled": 16648.28,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367246",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 17944.57,
+          "excel_unbilled": 17944.56,
+          "open_line_count": 7
+        },
+        {
+          "order": "SO367372",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102500",
+          "open_unbilled": 19168.06,
+          "excel_unbilled": 19168.06,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367381",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102962",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367391",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101511",
+          "open_unbilled": 21904.91,
+          "excel_unbilled": 21904.91,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367395",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103056",
+          "open_unbilled": 8568.0,
+          "excel_unbilled": 8567.99,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367405",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103398",
+          "open_unbilled": 22586.21,
+          "excel_unbilled": 22586.21,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367416",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102824",
+          "open_unbilled": 3582.62,
+          "excel_unbilled": 3582.62,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367425",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101504",
+          "open_unbilled": 9590.5,
+          "excel_unbilled": 9590.5,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367433",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103028",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367447",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST100955",
+          "open_unbilled": 1929230.76,
+          "excel_unbilled": 1929230.76,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367469",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101376",
+          "open_unbilled": 10.0,
+          "excel_unbilled": 10.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367480",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103096",
+          "open_unbilled": 20918.97,
+          "excel_unbilled": 20918.97,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367481",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST100798",
+          "open_unbilled": 3563.38,
+          "excel_unbilled": 3563.38,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367508",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102815",
+          "open_unbilled": 14534.98,
+          "excel_unbilled": 14534.99,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367513",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102537",
+          "open_unbilled": 25163.74,
+          "excel_unbilled": 25163.75,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367528",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102883",
+          "open_unbilled": 123758.62,
+          "excel_unbilled": 123758.62,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367529",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102542",
+          "open_unbilled": 9029.32,
+          "excel_unbilled": 9029.32,
+          "open_line_count": 2
+        },
+        {
+          "order": "SO367530",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102553",
+          "open_unbilled": 12699.76,
+          "excel_unbilled": 12699.76,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367532",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102555",
+          "open_unbilled": 18721.58,
+          "excel_unbilled": 18721.58,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367537",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102554",
+          "open_unbilled": 13431.43,
+          "excel_unbilled": 13431.44,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367541",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102556",
+          "open_unbilled": 22284.15,
+          "excel_unbilled": 22284.15,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367568",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 7200.0,
+          "excel_unbilled": 7200.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367573",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 28800.0,
+          "excel_unbilled": 28800.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367580",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102648",
+          "open_unbilled": 16938.45,
+          "excel_unbilled": 16938.45,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367583",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102545",
+          "open_unbilled": 11978.57,
+          "excel_unbilled": 11978.57,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367588",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102544",
+          "open_unbilled": 13523.91,
+          "excel_unbilled": 13523.91,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367750",
+          "date": "2026-07-25T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 3500.0,
+          "excel_unbilled": 3500.0,
+          "open_line_count": 1
+        }
+      ]
+    },
+    "2026-07-01..2026-07-26": {
+      "live_bo_count": 53,
+      "live_open_unbilled_sum": 3048859.62,
+      "intersection_count": 40,
+      "unbilled_match_count": 40,
+      "live_sum_intersection": 2828510.36,
+      "excel_sum_intersection": 2828510.37,
+      "only_excel": [],
+      "only_live": [
+        "SO361051",
+        "SO362544",
+        "SO364948",
+        "SO364955",
+        "SO364962",
+        "SO364971",
+        "SO365028",
+        "SO365419",
+        "SO365556",
+        "SO365875",
+        "SO366172",
+        "SO366187",
+        "SO366396"
+      ],
+      "value_diffs": [],
+      "orders": [
+        {
+          "order": "SO361051",
+          "date": "2026-07-01T00:00:00+00:00",
+          "customer": "CUST100658",
+          "open_unbilled": 3.6,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO362544",
+          "date": "2026-07-07T00:00:00+00:00",
+          "customer": "CUST102861",
+          "open_unbilled": 6350.0,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO364948",
+          "date": "2026-07-15T00:00:00+00:00",
+          "customer": "CUST101334",
+          "open_unbilled": 16541.38,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO364955",
+          "date": "2026-07-15T00:00:00+00:00",
+          "customer": "CUST101333",
+          "open_unbilled": 16541.38,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO364962",
+          "date": "2026-07-16T00:00:00+00:00",
+          "customer": "CUST103309",
+          "open_unbilled": 30510.31,
+          "excel_unbilled": null,
+          "open_line_count": 2
+        },
+        {
+          "order": "SO364971",
+          "date": "2026-07-16T00:00:00+00:00",
+          "customer": "CUST102357",
+          "open_unbilled": 24812.07,
+          "excel_unbilled": null,
+          "open_line_count": 2
+        },
+        {
+          "order": "SO365028",
+          "date": "2026-07-16T00:00:00+00:00",
+          "customer": "CUST103441",
+          "open_unbilled": 33082.76,
+          "excel_unbilled": null,
+          "open_line_count": 2
+        },
+        {
+          "order": "SO365419",
+          "date": "2026-07-17T00:00:00+00:00",
+          "customer": "CUST102865",
+          "open_unbilled": 69227.58,
+          "excel_unbilled": null,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO365556",
+          "date": "2026-07-17T00:00:00+00:00",
+          "customer": "CUST100273",
+          "open_unbilled": 4655.28,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO365875",
+          "date": "2026-07-18T00:00:00+00:00",
+          "customer": "CUST102365",
+          "open_unbilled": 1481.79,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366172",
+          "date": "2026-07-21T00:00:00+00:00",
+          "customer": "CUST102471",
+          "open_unbilled": 13965.51,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366187",
+          "date": "2026-07-21T00:00:00+00:00",
+          "customer": "CUST102861",
+          "open_unbilled": 3175.0,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366396",
+          "date": "2026-07-21T00:00:00+00:00",
+          "customer": "CUST101671",
+          "open_unbilled": 2.6,
+          "excel_unbilled": null,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366586",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST101493",
+          "open_unbilled": 124200.0,
+          "excel_unbilled": 124200.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366778",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST102566",
+          "open_unbilled": 37260.0,
+          "excel_unbilled": 37260.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366783",
+          "date": "2026-07-22T00:00:00+00:00",
+          "customer": "CUST102570",
+          "open_unbilled": 19600.0,
+          "excel_unbilled": 19600.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366916",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101215",
+          "open_unbilled": 3328.45,
+          "excel_unbilled": 3328.45,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366925",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101208",
+          "open_unbilled": 1448.28,
+          "excel_unbilled": 1448.28,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO366953",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102599",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367055",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST100803",
+          "open_unbilled": 69711.21,
+          "excel_unbilled": 69711.21,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367081",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102453",
+          "open_unbilled": 14681.03,
+          "excel_unbilled": 14681.03,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367093",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST103095",
+          "open_unbilled": 28945.17,
+          "excel_unbilled": 28945.17,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367113",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102972",
+          "open_unbilled": 44871.21,
+          "excel_unbilled": 44871.21,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367231",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST101220",
+          "open_unbilled": 21684.06,
+          "excel_unbilled": 21684.05,
+          "open_line_count": 8
+        },
+        {
+          "order": "SO367244",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 30240.18,
+          "excel_unbilled": 30240.19,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367245",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 16648.28,
+          "excel_unbilled": 16648.28,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367246",
+          "date": "2026-07-23T00:00:00+00:00",
+          "customer": "CUST102410",
+          "open_unbilled": 17944.57,
+          "excel_unbilled": 17944.56,
+          "open_line_count": 7
+        },
+        {
+          "order": "SO367372",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102500",
+          "open_unbilled": 19168.06,
+          "excel_unbilled": 19168.06,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367381",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102962",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367391",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101511",
+          "open_unbilled": 21904.91,
+          "excel_unbilled": 21904.91,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367395",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103056",
+          "open_unbilled": 8568.0,
+          "excel_unbilled": 8567.99,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367405",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103398",
+          "open_unbilled": 22586.21,
+          "excel_unbilled": 22586.21,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367416",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102824",
+          "open_unbilled": 3582.62,
+          "excel_unbilled": 3582.62,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367425",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101504",
+          "open_unbilled": 9590.5,
+          "excel_unbilled": 9590.5,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367433",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103028",
+          "open_unbilled": 12420.0,
+          "excel_unbilled": 12420.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367447",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST100955",
+          "open_unbilled": 1929230.76,
+          "excel_unbilled": 1929230.76,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367469",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101376",
+          "open_unbilled": 10.0,
+          "excel_unbilled": 10.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367480",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST103096",
+          "open_unbilled": 20918.97,
+          "excel_unbilled": 20918.97,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367481",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST100798",
+          "open_unbilled": 3563.38,
+          "excel_unbilled": 3563.38,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367508",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102815",
+          "open_unbilled": 14534.98,
+          "excel_unbilled": 14534.99,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367513",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102537",
+          "open_unbilled": 25163.74,
+          "excel_unbilled": 25163.75,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367528",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102883",
+          "open_unbilled": 123758.62,
+          "excel_unbilled": 123758.62,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367529",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102542",
+          "open_unbilled": 9029.32,
+          "excel_unbilled": 9029.32,
+          "open_line_count": 2
+        },
+        {
+          "order": "SO367530",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102553",
+          "open_unbilled": 12699.76,
+          "excel_unbilled": 12699.76,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367532",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102555",
+          "open_unbilled": 18721.58,
+          "excel_unbilled": 18721.58,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367537",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102554",
+          "open_unbilled": 13431.43,
+          "excel_unbilled": 13431.44,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367541",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102556",
+          "open_unbilled": 22284.15,
+          "excel_unbilled": 22284.15,
+          "open_line_count": 5
+        },
+        {
+          "order": "SO367568",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 7200.0,
+          "excel_unbilled": 7200.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367573",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 28800.0,
+          "excel_unbilled": 28800.0,
+          "open_line_count": 1
+        },
+        {
+          "order": "SO367580",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102648",
+          "open_unbilled": 16938.45,
+          "excel_unbilled": 16938.45,
+          "open_line_count": 4
+        },
+        {
+          "order": "SO367583",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102545",
+          "open_unbilled": 11978.57,
+          "excel_unbilled": 11978.57,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367588",
+          "date": "2026-07-24T00:00:00+00:00",
+          "customer": "CUST102544",
+          "open_unbilled": 13523.91,
+          "excel_unbilled": 13523.91,
+          "open_line_count": 3
+        },
+        {
+          "order": "SO367750",
+          "date": "2026-07-25T00:00:00+00:00",
+          "customer": "CUST101447",
+          "open_unbilled": 3500.0,
+          "excel_unbilled": 3500.0,
+          "open_line_count": 1
+        }
+      ]
+    }
+  }
+}

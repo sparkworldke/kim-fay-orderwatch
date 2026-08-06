@@ -52,8 +52,8 @@ export function CustomerLink({
     >
       {children ?? (
         <>
-          {customerName && <span className="font-medium">{customerName}</span>}
-          {showId && (
+          <span className="font-medium">{customerName || customerId}</span>
+          {showId && customerName && (
             <span className="ml-1 font-mono text-[10px] text-muted-foreground">{customerId}</span>
           )}
         </>

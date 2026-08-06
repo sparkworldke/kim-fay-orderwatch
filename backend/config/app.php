@@ -59,7 +59,7 @@ return [
     | Frontend URL
     |--------------------------------------------------------------------------
     |
-    | Public URL of the OrderWatch web app (emails, OAuth redirects). Keep
+    | Public URL of the Sight web app (emails, OAuth redirects). Keep
     | APP_URL pointed at the Laravel API host; use FRONTEND_URL for dashboard
     | links in mail templates and browser redirects after OAuth.
     |

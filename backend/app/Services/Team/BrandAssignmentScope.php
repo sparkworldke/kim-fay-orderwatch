@@ -3,18 +3,30 @@
 namespace App\Services\Team;
 
 use App\Models\AcumaticaInventoryItem;
+use App\Models\Brand;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class BrandAssignmentScope
 {
     public function __construct(
-        private readonly OrgScopeService $orgScope,
+        private readonly AccessTierService $accessTier,
     ) {}
 
     public function appliesTo(?User $user): bool
     {
         if ($user === null) {
+            return false;
+        }
+
+        // Partner Brands has cross-channel customer visibility, but product data
+        // must still be capped to assigned trading brands. Only true platform
+        // executives/administrators bypass that product ceiling.
+        if ($user->is_super_admin
+            || $user->role === 'Administrator'
+            || $user->role === 'Executive'
+            || in_array((string) $user->org_level, ['executive', 'c_suite'], true)) {
             return false;
         }
 
@@ -26,8 +38,7 @@ class BrandAssignmentScope
             return true;
         }
 
-        return in_array((string) $user->org_level, ['hod'], true)
-            && $user->product_type_scope === 'trading';
+        return $this->accessTier->hasCrossChannelBrandAccess($user);
     }
 
     /** @return list<string>|null Null = no enforced brand ceiling */
@@ -37,14 +48,35 @@ class BrandAssignmentScope
             return null;
         }
 
+        if ($user->department_role === 'hod' && $this->accessTier->hasCrossChannelBrandAccess($user)) {
+            return Brand::query()
+                ->where('ownership', 'partner')
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->pluck('name')
+                ->all();
+        }
+
         $assigned = $user->brandAssignments()->pluck('brand')->all();
 
-        return $assigned !== [] ? $assigned : null;
+        // Partner Brands is customer/open-channel access plus a dynamic product
+        // brand layer. Until a member receives an explicit allocation, keep the
+        // partner-brand layer open instead of tying visibility to customer books.
+        if ($assigned === [] && $this->accessTier->hasCrossChannelBrandAccess($user)) {
+            return Brand::query()
+                ->where('ownership', 'partner')
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->pluck('name')
+                ->all();
+        }
+
+        return $assigned;
     }
 
     /**
-     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
-     * @return Builder<\Illuminate\Database\Eloquent\Model>
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
      */
     public function applyInventoryScope(Builder $query, ?User $user, string $brandColumn = 'brand'): Builder
     {
@@ -59,7 +91,9 @@ class BrandAssignmentScope
         }
 
         $brands = $this->allowedBrands($user);
-        if ($brands !== null) {
+        if ($brands === []) {
+            $query->whereRaw('1 = 0');
+        } elseif ($brands !== null) {
             $query->whereIn($brandColumn, $brands);
         }
 

@@ -7,7 +7,7 @@ import { TREND, ORDERS } from "@/lib/demo-data";
 import { formatKES, formatNumber } from "@/lib/format";
 
 export const Route = createFileRoute("/app/reports")({
-  head: () => ({ meta: [{ title: "Reports — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Reports — Kim-Fay Sight" }] }),
   component: ReportsPage,
 });
 

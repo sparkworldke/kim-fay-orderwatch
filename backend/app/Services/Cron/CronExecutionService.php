@@ -36,26 +36,61 @@ class CronExecutionService
         ?int $userId = null,
         ?int $minIntervalSeconds = null,
         int $lockTtlSeconds = 3300,
+        bool $force = false,
     ): CronRunLog {
         if (! $job->is_enabled || $job->status === 'paused') {
-            return $this->skippedRun($job, $triggerSource, $userId, 'Cron job is disabled.');
+            return $this->skippedRun($job, $triggerSource, $userId, 'Cron job is disabled or paused (is_enabled=false or status=paused).');
         }
 
-        if ($minIntervalSeconds !== null && $job->last_success_at !== null && $triggerSource !== 'manual') {
+        // Minimum-interval guard is for scheduler anti-spam only.
+        // Manual / CLI / force runs must always be allowed (ops re-imports, date backfills).
+        $bypassInterval = $force
+            || in_array(strtolower(trim($triggerSource)), ['manual', 'cli', 'artisan', 'console'], true);
+
+        if ($minIntervalSeconds !== null && $job->last_success_at !== null && ! $bypassInterval) {
             if ($job->last_success_at->isAfter(now()->subSeconds($minIntervalSeconds))) {
                 return $this->skippedRun(
                     $job,
                     $triggerSource,
                     $userId,
-                    'Cron job skipped due to minimum interval guard.',
+                    'Cron job skipped due to minimum interval guard. Re-run with --source=manual or --force for an intentional ops run.',
                 );
             }
         }
 
+        $lockName = 'cron-job:'.$job->job_key;
+
         /** @var Lock $lock */
-        $lock = Cache::lock('cron-job:' . $job->job_key, $lockTtlSeconds);
+        $lock = Cache::lock($lockName, $lockTtlSeconds);
+
+        // Manual recovery after Ctrl+C / killed process: stale locks otherwise block for full TTL.
+        if ($force) {
+            $this->forceReleaseLock($lockName, $lockTtlSeconds);
+            $lock = Cache::lock($lockName, $lockTtlSeconds);
+        }
+
         if (! $lock->get()) {
-            return $this->skippedRun($job, $triggerSource, $userId, 'A previous run is still active.');
+            // Automatic stale-lock recovery. A process that dies hard (OOM, aborted
+            // deploy, kill -9) never reaches the `finally` that releases this lock, so
+            // without this every subsequent scheduled run is skipped as "previous run
+            // still active" — which is exactly why heavy jobs (full Sales Order import,
+            // Backorder processing) silently stopped syncing while light jobs kept going.
+            // If nothing is genuinely running, or the running log predates the lock
+            // window, reclaim the orphaned lock instead of skipping.
+            if ($this->lockIsStale($job, $lockTtlSeconds)) {
+                $this->reclaimStaleRun($job);
+                $this->forceReleaseLock($lockName, $lockTtlSeconds);
+                $lock = Cache::lock($lockName, $lockTtlSeconds);
+            }
+
+            if (! $lock->get()) {
+                return $this->skippedRun(
+                    $job,
+                    $triggerSource,
+                    $userId,
+                    "A previous run is still active (lock: {$lockName}). Wait for TTL or re-run with --force after confirming no other process is syncing.",
+                );
+            }
         }
 
         $run = CronRunLog::create([
@@ -150,6 +185,59 @@ class CronExecutionService
         }
 
         $job->update($updates);
+    }
+
+    /**
+     * Force-release a cache lock, tolerating drivers that do not support forceRelease().
+     */
+    private function forceReleaseLock(string $lockName, int $lockTtlSeconds): void
+    {
+        try {
+            Cache::lock($lockName, $lockTtlSeconds)->forceRelease();
+        } catch (Throwable) {
+            // Some cache drivers may not support forceRelease(); nothing else to try.
+        }
+    }
+
+    /**
+     * Determine whether a held lock is orphaned (the owning process died without
+     * releasing it). True when no run is actually in progress, or the in-progress
+     * run started before the lock TTL window elapsed.
+     */
+    private function lockIsStale(CronJob $job, int $lockTtlSeconds): bool
+    {
+        $running = CronRunLog::query()
+            ->where('cron_job_id', $job->id)
+            ->where('status', 'running')
+            ->latest('id')
+            ->first();
+
+        // No in-progress run recorded at all → any held lock is orphaned.
+        if (! $running || $running->started_at === null) {
+            return true;
+        }
+
+        // The running log predates the lock window → the process is presumed dead.
+        return $running->started_at->isBefore(now()->subSeconds($lockTtlSeconds));
+    }
+
+    /**
+     * Close out orphaned "running" logs left behind by a process that died, so the
+     * run history reflects reality instead of perpetually showing "running".
+     */
+    private function reclaimStaleRun(CronJob $job): void
+    {
+        CronRunLog::query()
+            ->where('cron_job_id', $job->id)
+            ->where('status', 'running')
+            ->update([
+                'status' => 'failed',
+                'ended_at' => now(),
+                'duration_ms' => 0,
+                'error_count' => 1,
+                'error_summary' => 'Reclaimed by stale-lock recovery: process died without releasing the lock.',
+                'output' => 'Reclaimed by stale-lock recovery: process died without releasing the lock.',
+            ]);
     }
 
     private function sanitize(string $message): string

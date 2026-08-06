@@ -155,7 +155,18 @@ class DailyReportRunnerService
                     'error_summary' => $delivery['errors'] !== [] ? implode("\n", $delivery['errors']) : null,
                 ]);
 
-                return $run->fresh('deliveryLogs');
+                $fresh = $run->fresh('deliveryLogs');
+                Log::info('daily_report_run_finished', [
+                    'run_id' => $fresh?->id,
+                    'report_date' => $reportDateKey,
+                    'trigger' => $trigger,
+                    'status' => $fresh?->status,
+                    'delivery_status' => $fresh?->delivery_status,
+                    'recipient_count' => $fresh?->recipient_count,
+                    'error_summary' => $fresh?->error_summary,
+                ]);
+
+                return $fresh;
             } catch (Throwable $e) {
                 $duration = (int) ((hrtime(true) - $started) / 1_000_000);
                 $run->update([
@@ -165,6 +176,13 @@ class DailyReportRunnerService
                     'delivery_status' => 'failed',
                     'duration_ms' => $duration,
                     'error_summary' => $e->getMessage(),
+                ]);
+
+                Log::error('daily_report_run_failed', [
+                    'run_id' => $run->id,
+                    'report_date' => $reportDateKey,
+                    'trigger' => $trigger,
+                    'error' => $e->getMessage(),
                 ]);
 
                 return $run->fresh('deliveryLogs');

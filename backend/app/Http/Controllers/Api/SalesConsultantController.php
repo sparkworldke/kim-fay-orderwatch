@@ -12,20 +12,11 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 use Illuminate\Support\Facades\DB;
+use App\Services\Team\CustomerAttributionService;
+use App\Services\Team\OrgTreeService;
 
 class SalesConsultantController extends Controller
 {
-    private const FULL_ACCESS_ROLES = [
-        'Administrator',
-        'Customer Service Manager',
-        'Executive',
-    ];
-
-    private const OWN_PROFILE_ROLES = [
-        'Sales Operations',
-        'Sales Consultant',
-    ];
-
     public function __construct(private readonly SalesConsultantImportService $importService)
     {
     }
@@ -33,37 +24,34 @@ class SalesConsultantController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $role = (string) ($user?->role ?? '');
-
-        if (! in_array($role, self::FULL_ACCESS_ROLES, true)
-            && ! in_array($role, self::OWN_PROFILE_ROLES, true)) {
+        if (! $user?->is_active) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
         $repCode = strtoupper(trim((string) ($user?->rep_code ?? '')));
-        $scope = in_array($role, self::FULL_ACCESS_ROLES, true) ? 'all' : 'own';
-
-        if ($scope === 'own' && $repCode === '') {
-            return response()->json([
-                'scope' => 'own',
-                'rep_code' => null,
-                'items' => [],
-                'message' => 'No Rep Code is assigned to your profile.',
-            ]);
-        }
+        $hasReportees = $user->reportees()->where('is_active', true)->exists();
+        // Team visibility follows reports-to relationships, independently from
+        // broad business-data access. This prevents My Team becoming a global directory.
+        $scope = $hasReportees ? 'team' : 'own';
+        $teamIds = $scope === 'team'
+            ? app(OrgTreeService::class)->descendantIds($user->id)
+            : [];
 
         $search = trim((string) $request->input('q', ''));
 
+        // Default view is month-to-date, not all-time — matches the consultant detail page's default.
+        $tz = 'Africa/Nairobi';
+        $today = Carbon::now($tz);
+        $from = $request->filled('date_from')
+            ? Carbon::parse((string) $request->input('date_from'), $tz)->startOfDay()
+            : $today->copy()->startOfMonth();
+        $to = $request->filled('date_to')
+            ? Carbon::parse((string) $request->input('date_to'), $tz)->endOfDay()
+            : $today->copy()->endOfDay();
+
         $rows = User::query()
-            ->where(function ($q) {
-                $q->where('users.is_consultant', true)
-                    ->orWhere('users.role', 'Sales Consultant');
-            })
-            ->where(function ($q) {
-                $q->whereNotNull('users.rep_code')
-                    ->orWhere('users.is_consultant', true);
-            })
-            ->when($scope === 'own', fn ($query) => $query->where('users.rep_code', $repCode))
+            ->when($scope === 'own', fn ($query) => $query->whereKey($user->id))
+            ->when($scope === 'team', fn ($query) => $query->whereIn('users.id', $teamIds ?: [0]))
             ->when($search !== '', function ($query) use ($search) {
                 $like = '%' . $search . '%';
                 $query->where(function ($q) use ($like, $search) {
@@ -72,7 +60,11 @@ class SalesConsultantController extends Controller
                       ->orWhere('users.employee_number', 'like', $like);
                 });
             })
-            ->leftJoin('acumatica_sales_orders as so', 'users.rep_code', '=', 'so.sales_consultant_rep_code')
+            ->leftJoin('acumatica_sales_orders as so', function ($join) use ($from, $to) {
+                $join->on('users.rep_code', '=', 'so.sales_consultant_rep_code')
+                    ->where('so.order_type', 'SO')
+                    ->whereBetween('so.order_date', [$from->toDateString(), $to->toDateString()]);
+            })
             ->select([
                 'users.id',
                 'users.name',
@@ -81,23 +73,63 @@ class SalesConsultantController extends Controller
                 'users.rep_code',
                 'users.employee_number',
                 'users.is_active',
+                'users.department_id',
+                'users.department_role',
+                'users.org_level',
+                'users.reports_to_user_id',
                 DB::raw('COUNT(so.id) as assigned_orders'),
                 DB::raw("SUM(CASE WHEN so.id IS NOT NULL AND so.completed_at IS NULL THEN 1 ELSE 0 END) as active_orders"),
                 DB::raw("SUM(CASE WHEN so.id IS NOT NULL AND so.completed_at IS NOT NULL THEN 1 ELSE 0 END) as completed_orders"),
                 DB::raw('COALESCE(SUM(so.order_total), 0) as assigned_revenue'),
-                DB::raw('MAX(so.order_date) as last_order_date'),
+                // Last order ever (not bound to the period) — a dormancy signal independent of the selected window.
+                DB::raw("(SELECT MAX(so2.order_date) FROM acumatica_sales_orders so2 WHERE so2.sales_consultant_rep_code = users.rep_code AND so2.order_type = 'SO') as last_order_date"),
             ])
-            ->groupBy('users.id', 'users.name', 'users.email', 'users.role', 'users.rep_code', 'users.employee_number', 'users.is_active')
+            ->groupBy('users.id', 'users.name', 'users.email', 'users.role', 'users.rep_code', 'users.employee_number', 'users.is_active', 'users.department_id', 'users.department_role', 'users.org_level', 'users.reports_to_user_id')
             ->orderBy('users.name')
             ->get();
 
-        if ($scope === 'own' && $rows->isEmpty()) {
-            $rows = collect([$this->ownProfileFallback($user, $repCode)]);
+        if ($scope === 'own' && $search === '' && $rows->isEmpty()) {
+            $rows = collect([$this->ownProfileFallback($user, $repCode, $from, $to)]);
         }
+
+        $attribution = app(CustomerAttributionService::class);
+        $rows = $rows->map(function ($row) use ($attribution) {
+            $customerIds = $attribution->directCustomerIds((int) $row->id);
+            $portfolio = DB::table('acumatica_customers')
+                ->whereIn('acumatica_id', $customerIds ?: ['__none__']);
+            $channels = (clone $portfolio)->whereNotNull('sales_channel_code')->distinct()->orderBy('sales_channel_code')->pluck('sales_channel_code')->all();
+            $regions = (clone $portfolio)->whereNotNull('sales_region')->where('sales_region', '!=', '')->distinct()->orderBy('sales_region')->pluck('sales_region')->all();
+            $outlets = (clone $portfolio)
+                ->orderBy('name')
+                ->get(['acumatica_id', 'name', 'sales_region'])
+                ->map(fn ($outlet) => [
+                    'id' => (string) $outlet->acumatica_id,
+                    'name' => trim((string) $outlet->name) ?: (string) $outlet->acumatica_id,
+                    'region' => $outlet->sales_region ? (string) $outlet->sales_region : null,
+                ])
+                ->values()
+                ->all();
+            $row->outlet_count = count(array_unique($customerIds));
+            $row->channels = $channels;
+            $row->regions = $regions;
+            $row->outlets = $outlets;
+            $row->department_name = ($row->department_id ?? null)
+                ? DB::table('departments')->where('id', $row->department_id)->value('name')
+                : null;
+            return $row;
+        });
 
         return response()->json([
             'scope' => $scope,
             'rep_code' => $scope === 'own' ? $repCode : null,
+            'period' => [
+                'from' => $from->toDateString(),
+                'to' => $to->toDateString(),
+                'label' => $from->isSameDay($today->copy()->startOfMonth())
+                    ? $today->format('F Y').' (month to date)'
+                    : $from->format('M j, Y').' – '.$to->format('M j, Y'),
+                'timezone' => $tz,
+            ],
             'items' => $rows->map(fn ($row) => [
                 'id' => $row->id,
                 'name' => $row->name,
@@ -111,6 +143,14 @@ class SalesConsultantController extends Controller
                 'completed_orders' => (int) $row->completed_orders,
                 'assigned_revenue' => round((float) $row->assigned_revenue, 2),
                 'last_order_date' => $row->last_order_date,
+                'outlet_count' => (int) $row->outlet_count,
+                'channels' => $row->channels,
+                'regions' => $row->regions,
+                'outlets' => $row->outlets,
+                'department' => $row->department_name,
+                'department_role' => $row->department_role ?? null,
+                'org_level' => $row->org_level ?? null,
+                'reports_to_user_id' => $row->reports_to_user_id ?? null,
             ])->values(),
         ]);
     }
@@ -149,25 +189,14 @@ class SalesConsultantController extends Controller
         }
 
         $user = $request->user();
-        $role = (string) ($user?->role ?? '');
-
-        if ($denied = $this->authorizeRepCodeAccess($user, $role, $normalizedRepCode)) {
+        if ($denied = $this->authorizeRepCodeAccess($user, $normalizedRepCode)) {
             return $denied;
         }
 
-        $isFullAccess = in_array($role, self::FULL_ACCESS_ROLES, true);
-        $consultant = null;
-
-        if (! $isFullAccess && strtoupper(trim((string) ($user?->rep_code ?? ''))) === $normalizedRepCode) {
-            $consultant = $user;
-        }
-
-        $consultant ??= User::query()
+        $consultant = User::query()
+            ->whereIn('users.id', $this->accessibleProfileUserIds($user))
             ->where('users.rep_code', $normalizedRepCode)
-            ->where(function ($query) {
-                $query->where('users.is_consultant', true)
-                    ->orWhere('users.role', 'Sales Consultant');
-            })
+            ->orderByRaw('CASE WHEN users.id = ? THEN 0 ELSE 1 END', [$user->id])
             ->first();
 
         if (! $consultant) {
@@ -286,14 +315,13 @@ class SalesConsultantController extends Controller
     public function customers(Request $request, string $repCode): JsonResponse
     {
         $user = $request->user();
-        $role = (string) ($user?->role ?? '');
         $normalizedRepCode = strtoupper(trim($repCode));
 
         if ($normalizedRepCode === '') {
             return response()->json(['message' => 'Rep Code is required.'], 422);
         }
 
-        if ($denied = $this->authorizeRepCodeAccess($user, $role, $normalizedRepCode)) {
+        if ($denied = $this->authorizeRepCodeAccess($user, $normalizedRepCode)) {
             return $denied;
         }
 
@@ -405,6 +433,11 @@ class SalesConsultantController extends Controller
                 $row->first_order_date,
                 $row->last_order_date,
             ),
+            'predicted_next_order_date' => $this->predictedNextOrderDate(
+                (int) $row->order_count,
+                $row->first_order_date,
+                $row->last_order_date,
+            ),
         ]);
 
         // Apply sorting
@@ -418,6 +451,7 @@ class SalesConsultantController extends Controller
             'fill_rate_pct' => 'fill_rate_pct',
             'revenue_lost' => 'revenue_lost',
             'last_order_date' => 'last_order_date',
+            'predicted_next_order_date' => 'predicted_next_order_date',
         ];
         $sortKey = $sortMap[$sort] ?? 'total_order_value';
         $sorted = $mapped->values()->all();
@@ -460,10 +494,7 @@ class SalesConsultantController extends Controller
     private function resolveConsultant(Request $request, int $id): User|JsonResponse
     {
         $user = $request->user();
-        $role = (string) ($user?->role ?? '');
-
-        if (! in_array($role, self::FULL_ACCESS_ROLES, true)
-            && ! in_array($role, self::OWN_PROFILE_ROLES, true)) {
+        if (! $user?->is_active) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -473,60 +504,58 @@ class SalesConsultantController extends Controller
             return response()->json(['message' => 'Sales consultant not found.'], 404);
         }
 
-        $repCode = strtoupper(trim((string) ($consultant->rep_code ?? '')));
-        $isListedConsultant = (bool) $consultant->is_consultant || $consultant->role === 'Sales Consultant';
-
-        // Own-profile roles may only open their own card (or matching rep code).
-        if (in_array($role, self::OWN_PROFILE_ROLES, true)
-            && ! in_array($role, self::FULL_ACCESS_ROLES, true)) {
-            $ownId = (int) ($user?->id ?? 0);
-            $ownRep = strtoupper(trim((string) ($user?->rep_code ?? '')));
-            $sameUser = $ownId === $id;
-            $sameRep = $ownRep !== '' && $repCode !== '' && $ownRep === $repCode;
-
-            if (! $sameUser && ! $sameRep) {
-                return response()->json(['message' => 'Forbidden.'], 403);
-            }
-
-            return $consultant;
+        if (! in_array($id, $this->accessibleProfileUserIds($user), true)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
         }
-
-        // Full-access viewers may open directory-listed consultant records.
-        if (! $isListedConsultant) {
-            return response()->json(['message' => 'Sales consultant not found.'], 404);
-        }
-
-        // Empty rep_code is allowed for profile view; order metrics will be empty.
 
         return $consultant;
     }
 
-    private function authorizeRepCodeAccess(?User $user, string $role, string $normalizedRepCode): ?JsonResponse
+    private function authorizeRepCodeAccess(?User $user, string $normalizedRepCode): ?JsonResponse
     {
-        $isFullAccess = in_array($role, self::FULL_ACCESS_ROLES, true);
-        $isOwnProfile = in_array($role, self::OWN_PROFILE_ROLES, true);
-
-        if (! $isFullAccess && ! $isOwnProfile) {
+        if (! $user?->is_active) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        if (! $isFullAccess) {
-            $ownRepCode = strtoupper(trim((string) ($user?->rep_code ?? '')));
-            if ($ownRepCode === '' || $ownRepCode !== $normalizedRepCode) {
-                return response()->json(['message' => 'Forbidden.'], 403);
-            }
+        $hasAccessibleProfile = User::query()
+            ->whereIn('id', $this->accessibleProfileUserIds($user))
+            ->whereRaw('UPPER(TRIM(rep_code)) = ?', [$normalizedRepCode])
+            ->exists();
+
+        if (! $hasAccessibleProfile) {
+            return response()->json(['message' => 'Forbidden.'], 403);
         }
 
         return null;
     }
 
+    /** @return list<int> */
+    private function accessibleProfileUserIds(?User $user): array
+    {
+        if (! $user?->is_active) {
+            return [];
+        }
+
+        return app(OrgTreeService::class)->descendantIds($user->id, includeSelf: true);
+    }
+
     /** @return \Illuminate\Database\Eloquent\Builder<AcumaticaSalesOrder> */
     private function ordersBaseQuery(string $repCode, Request $request)
     {
+        $rep = strtoupper(trim($repCode));
+        // Fair portfolio: SO rep-code OR customers assigned to users with this rep (owner/servicing).
+        $portfolioIds = app(\App\Services\Sales\SalesPortfolioService::class)
+            ->portfolioCustomerIdsForRepCode($rep);
+
         $base = AcumaticaSalesOrder::query()
             ->salesOrdersOnly()
-            ->where('sales_consultant_rep_code', strtoupper(trim($repCode)))
-            ->whereNotNull('customer_acumatica_id');
+            ->whereNotNull('customer_acumatica_id')
+            ->where(function ($q) use ($rep, $portfolioIds) {
+                $q->where('sales_consultant_rep_code', $rep);
+                if ($portfolioIds !== []) {
+                    $q->orWhereIn('customer_acumatica_id', $portfolioIds);
+                }
+            });
 
         if ($request->filled('date_from')) {
             $base->whereDate('order_date', '>=', $request->input('date_from'));
@@ -608,18 +637,48 @@ class SalesConsultantController extends Controller
         return round($orderCount / $months, 2);
     }
 
-    private function ownProfileFallback(User $user, string $repCode): object
+    /**
+     * Naive cadence prediction: average the gap between orders in the selected
+     * period and project it forward from the last order. Needs at least two
+     * orders to establish a cadence — a single order has no interval to go on.
+     */
+    private function predictedNextOrderDate(int $orderCount, ?string $firstOrderDate, ?string $lastOrderDate): ?string
+    {
+        if ($orderCount < 2 || ! $firstOrderDate || ! $lastOrderDate) {
+            return null;
+        }
+
+        $first = Carbon::parse($firstOrderDate);
+        $last = Carbon::parse($lastOrderDate);
+        $spanDays = $first->diffInDays($last);
+
+        if ($spanDays <= 0) {
+            return null;
+        }
+
+        $avgIntervalDays = $spanDays / max(1, $orderCount - 1);
+
+        return $last->copy()->addDays((int) round($avgIntervalDays))->toDateString();
+    }
+
+    private function ownProfileFallback(User $user, string $repCode, ?Carbon $from = null, ?Carbon $to = null): object
     {
         $metrics = AcumaticaSalesOrder::query()
             ->where('sales_consultant_rep_code', $repCode)
+            ->where('order_type', 'SO')
+            ->when($from !== null && $to !== null, fn ($q) => $q->whereBetween('order_date', [$from->toDateString(), $to->toDateString()]))
             ->select([
                 DB::raw('COUNT(*) as assigned_orders'),
                 DB::raw("SUM(CASE WHEN completed_at IS NULL THEN 1 ELSE 0 END) as active_orders"),
                 DB::raw("SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) as completed_orders"),
                 DB::raw('COALESCE(SUM(order_total), 0) as assigned_revenue'),
-                DB::raw('MAX(order_date) as last_order_date'),
             ])
             ->first();
+
+        $lastOrderDate = AcumaticaSalesOrder::query()
+            ->where('sales_consultant_rep_code', $repCode)
+            ->where('order_type', 'SO')
+            ->max('order_date');
 
         return (object) [
             'id' => $user->id,
@@ -633,7 +692,7 @@ class SalesConsultantController extends Controller
             'active_orders' => (int) ($metrics?->active_orders ?? 0),
             'completed_orders' => (int) ($metrics?->completed_orders ?? 0),
             'assigned_revenue' => (float) ($metrics?->assigned_revenue ?? 0),
-            'last_order_date' => $metrics?->last_order_date,
+            'last_order_date' => $lastOrderDate,
         ];
     }
 }

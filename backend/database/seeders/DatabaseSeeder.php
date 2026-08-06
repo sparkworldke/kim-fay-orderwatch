@@ -16,6 +16,14 @@ class DatabaseSeeder extends Seeder
             RouteSeeder::class,
             UserRepCodeSeeder::class,
             CustomerSeeder::class,
+            // Optional, after the employee roster exists:
+            // PartnerBrandsTeam202608Seeder::class,
+            // Optional: apply Products-With Brands.csv → inventory brand/product_type
+            // InventoryBrandSeeder::class,
+            // Optional team seats (safe updateOrCreate by email / payroll code):
+            // BrandOperationsPricillahSeeder::class,
+            // Optional: MSI / safety / buffer / machines from stocks-production Excel:
+            // ProductionPlanningStocksSeeder::class,
         ]);
     }
 }

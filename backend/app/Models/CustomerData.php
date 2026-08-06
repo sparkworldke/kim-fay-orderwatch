@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CustomerData extends Model
 {
     use HasFactory;
+
     protected $table = 'customer_data';
 
     protected $fillable = [
@@ -22,6 +23,8 @@ class CustomerData extends Model
         'price_class_id',
         'price_class_name',
         'main_ac_owner',
+        'rep_code',
+        'sales_rep',
         'category',
         'customer_region',
         'sage_code',
@@ -47,8 +50,8 @@ class CustomerData extends Model
     {
         return [
             'credit_limit' => 'decimal:2',
-            'created_on'   => 'datetime',
-            'synced_at'    => 'datetime',
+            'created_on' => 'datetime',
+            'synced_at' => 'datetime',
         ];
     }
 

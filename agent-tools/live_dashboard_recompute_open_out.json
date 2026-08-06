@@ -1,0 +1,262 @@
+[
+  {
+    "label": "open-filter (no Completed/Cancelled/Rejected)",
+    "open_lines": 3133,
+    "skus": 518,
+    "open_orders": 353,
+    "totals_dash": {
+      "order_value": 34762979.01,
+      "invoiced_value": 22168401.82,
+      "backorder_value": 12119902.75
+    },
+    "totals_pure_open": {
+      "order_value": 34762979.01,
+      "invoiced_value": 22168401.82,
+      "backorder_value": 34077465.53
+    },
+    "by_product_dash": {
+      "manufactured": {
+        "order_value": 12815266.91,
+        "invoiced_value": 10947544.47,
+        "backorder_value": 1741758.66
+      },
+      "trading": {
+        "order_value": 21947712.1,
+        "invoiced_value": 11220857.36,
+        "backorder_value": 10378144.1
+      }
+    },
+    "by_product_pure": {
+      "manufactured": {
+        "order_value": 12815266.91,
+        "invoiced_value": 10947544.47,
+        "backorder_value": 12387276.86
+      },
+      "trading": {
+        "order_value": 21947712.1,
+        "invoiced_value": 11220857.36,
+        "backorder_value": 21690188.68
+      }
+    },
+    "identity_gap": 474674.43,
+    "so_status_lines": {
+      "On Hold": 30,
+      "Shipping": 2973,
+      "Back Order": 106,
+      "Pending Approval": 24
+    },
+    "so_status_orders": {
+      "On Hold": 7,
+      "Shipping": 298,
+      "Back Order": 40,
+      "Pending Approval": 8
+    },
+    "double_sub_lines": 39,
+    "double_sub_value": 1006811.29,
+    "delta": {
+      "bo_dash": -1656350.96,
+      "inv_dash": 5191620.3,
+      "ord_dash": 3631450.65,
+      "bo_pure": 20301211.82,
+      "bo_pure_vs_outstanding": 3305381.38,
+      "lines": 133,
+      "orders": 9,
+      "skus": 228,
+      "mfg_dash": -4124315.02,
+      "trd_dash": 2467964.07,
+      "mfg_pure": 6521203.18,
+      "trd_pure": 13780008.65
+    }
+  },
+  {
+    "label": "Shipping + Back Order only",
+    "open_lines": 3079,
+    "skus": 505,
+    "open_orders": 338,
+    "totals_dash": {
+      "order_value": 33276658.46,
+      "invoiced_value": 22168401.82,
+      "backorder_value": 10633582.21
+    },
+    "totals_pure_open": {
+      "order_value": 33276658.46,
+      "invoiced_value": 22168401.82,
+      "backorder_value": 32594402.89
+    },
+    "by_product_dash": {
+      "manufactured": {
+        "order_value": 11691699.35,
+        "invoiced_value": 10947544.47,
+        "backorder_value": 618191.1
+      },
+      "trading": {
+        "order_value": 21584959.12,
+        "invoiced_value": 11220857.36,
+        "backorder_value": 10015391.11
+      }
+    },
+    "by_product_pure": {
+      "manufactured": {
+        "order_value": 11691699.35,
+        "invoiced_value": 10947544.47,
+        "backorder_value": 11263709.29
+      },
+      "trading": {
+        "order_value": 21584959.12,
+        "invoiced_value": 11220857.36,
+        "backorder_value": 21330693.6
+      }
+    },
+    "identity_gap": 474674.43,
+    "so_status_lines": {
+      "Shipping": 2973,
+      "Back Order": 106
+    },
+    "so_status_orders": {
+      "Shipping": 298,
+      "Back Order": 40
+    },
+    "double_sub_lines": 39,
+    "double_sub_value": 1006811.29,
+    "delta": {
+      "bo_dash": -3142671.5,
+      "inv_dash": 5191620.3,
+      "ord_dash": 2145130.1,
+      "bo_pure": 18818149.18,
+      "bo_pure_vs_outstanding": 1822318.74,
+      "lines": 79,
+      "orders": -6,
+      "skus": 215,
+      "mfg_dash": -5247882.58,
+      "trd_dash": 2105211.08,
+      "mfg_pure": 5397635.61,
+      "trd_pure": 13420513.57
+    }
+  },
+  {
+    "label": "Back Order header only",
+    "open_lines": 106,
+    "skus": 43,
+    "open_orders": 40,
+    "totals_dash": {
+      "order_value": 2947921.23,
+      "invoiced_value": 119410.87,
+      "backorder_value": 2781118.54
+    },
+    "totals_pure_open": {
+      "order_value": 2947921.23,
+      "invoiced_value": 119410.87,
+      "backorder_value": 2828510.37
+    },
+    "by_product_dash": {
+      "manufactured": {
+        "order_value": 447823.05,
+        "invoiced_value": 116082.42,
+        "backorder_value": 287677.25
+      },
+      "trading": {
+        "order_value": 2500098.19,
+        "invoiced_value": 3328.45,
+        "backorder_value": 2493441.29
+      }
+    },
+    "by_product_pure": {
+      "manufactured": {
+        "order_value": 447823.05,
+        "invoiced_value": 116082.42,
+        "backorder_value": 331740.63
+      },
+      "trading": {
+        "order_value": 2500098.19,
+        "invoiced_value": 3328.45,
+        "backorder_value": 2496769.74
+      }
+    },
+    "identity_gap": 47391.83,
+    "so_status_lines": {
+      "Back Order": 106
+    },
+    "so_status_orders": {
+      "Back Order": 40
+    },
+    "double_sub_lines": 5,
+    "double_sub_value": 47391.83,
+    "delta": {
+      "bo_dash": -10995135.17,
+      "inv_dash": -16857370.65,
+      "ord_dash": -28183607.13,
+      "bo_pure": -10947743.34,
+      "bo_pure_vs_outstanding": -27943573.78,
+      "lines": -2894,
+      "orders": -304,
+      "skus": -247,
+      "mfg_dash": -5578396.43,
+      "trd_dash": -5416738.74,
+      "mfg_pure": -5534333.05,
+      "trd_pure": -5413410.29
+    }
+  },
+  {
+    "label": "Shipping only",
+    "open_lines": 2973,
+    "skus": 499,
+    "open_orders": 298,
+    "totals_dash": {
+      "order_value": 30328737.23,
+      "invoiced_value": 22048990.96,
+      "backorder_value": 7852463.67
+    },
+    "totals_pure_open": {
+      "order_value": 30328737.23,
+      "invoiced_value": 22048990.96,
+      "backorder_value": 29765892.53
+    },
+    "by_product_dash": {
+      "manufactured": {
+        "order_value": 11243876.3,
+        "invoiced_value": 10831462.05,
+        "backorder_value": 330513.85
+      },
+      "trading": {
+        "order_value": 19084860.93,
+        "invoiced_value": 11217528.91,
+        "backorder_value": 7521949.82
+      }
+    },
+    "by_product_pure": {
+      "manufactured": {
+        "order_value": 11243876.3,
+        "invoiced_value": 10831462.05,
+        "backorder_value": 10931968.66
+      },
+      "trading": {
+        "order_value": 19084860.93,
+        "invoiced_value": 11217528.91,
+        "backorder_value": 18833923.86
+      }
+    },
+    "identity_gap": 427282.61,
+    "so_status_lines": {
+      "Shipping": 2973
+    },
+    "so_status_orders": {
+      "Shipping": 298
+    },
+    "double_sub_lines": 34,
+    "double_sub_value": 959419.46,
+    "delta": {
+      "bo_dash": -5923790.04,
+      "inv_dash": 5072209.44,
+      "ord_dash": -802791.13,
+      "bo_pure": 15989638.82,
+      "bo_pure_vs_outstanding": -1006191.62,
+      "lines": -27,
+      "orders": -46,
+      "skus": 209,
+      "mfg_dash": -5535559.83,
+      "trd_dash": -388230.21,
+      "mfg_pure": 5065894.98,
+      "trd_pure": 10923743.83
+    }
+  }
+]

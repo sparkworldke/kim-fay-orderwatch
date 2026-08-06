@@ -5,7 +5,7 @@ import { SuggestedOrdersCard } from "@/components/customer-orders-shared";
 import { useSuggestedOrders } from "@/hooks/useCustomers";
 
 export const Route = createFileRoute("/app/customer-orders/$customerId/suggested")({
-  head: () => ({ meta: [{ title: "Whitespot - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Items not ordered - Kim-Fay Sight" }] }),
   component: SuggestedOrdersPage,
 });
 
@@ -22,7 +22,7 @@ function SuggestedOrdersPage() {
             Customer documents
           </Link>
         </Button>
-        <h1 className="text-2xl font-semibold tracking-tight">Whitespot</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Items not ordered</h1>
         <p className="font-mono text-xs text-muted-foreground">{suggested.data?.customer_name ?? customerId}</p>
       </div>
 

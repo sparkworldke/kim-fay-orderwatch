@@ -12,6 +12,7 @@ class FolRequestLine extends Model
         'line_no',
         'inventory_id',
         'product_description',
+        'line_type',
         'qty_requested',
         'qty_previously_issued',
         'date_last_issue',

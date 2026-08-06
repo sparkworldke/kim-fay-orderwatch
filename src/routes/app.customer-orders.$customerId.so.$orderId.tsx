@@ -3,6 +3,8 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  BackorderCard,
+  FulfillmentHistoryCard,
   ErrorBlock,
   OrderDetailBody,
   SkeletonRows,
@@ -10,17 +12,20 @@ import {
 import { useOrder } from "@/hooks/useOrders";
 
 export const Route = createFileRoute("/app/customer-orders/$customerId/so/$orderId")({
-  head: () => ({ meta: [{ title: "Customer Document - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Customer Document - Kim-Fay Sight" }] }),
   component: CustomerDocumentDetailPage,
 });
 
 function CustomerDocumentDetailPage() {
-  const { customerId, orderId } = useParams({ from: "/app/customer-orders/$customerId/so/$orderId" });
+  const { customerId, orderId } = useParams({
+    from: "/app/customer-orders/$customerId/so/$orderId",
+  });
   const order = useOrder(orderId);
   const lines = order.data?.lines ?? [];
   const actualCustomerId = order.data?.customer_acumatica_id ?? null;
   const actualParentId = order.data?.customer?.parent_acumatica_id ?? null;
-  const mismatched = order.data !== undefined && actualCustomerId !== null && actualCustomerId !== customerId;
+  const mismatched =
+    order.data !== undefined && actualCustomerId !== null && actualCustomerId !== customerId;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -34,7 +39,9 @@ function CustomerDocumentDetailPage() {
         <h1 className="text-2xl font-semibold tracking-tight">{orderId}</h1>
         <p className="text-sm text-muted-foreground">
           {order.data?.customer_name ?? customerId}
-          {order.data?.order_type && <span className="ml-2 font-mono">{order.data.order_type}</span>}
+          {order.data?.order_type && (
+            <span className="ml-2 font-mono">{order.data.order_type}</span>
+          )}
         </p>
       </div>
 
@@ -44,8 +51,8 @@ function CustomerDocumentDetailPage() {
             This order is attached to <span className="font-mono">{actualCustomerId}</span>, not{" "}
             <span className="font-mono">{customerId}</span>.
           </p>
-          {actualCustomerId && (
-            actualParentId ? (
+          {actualCustomerId &&
+            (actualParentId ? (
               <Button asChild size="sm" variant="outline" className="mt-2">
                 <Link
                   to="/app/customer-orders/$customerId/branch/$branchId/so/$orderId"
@@ -56,21 +63,32 @@ function CustomerDocumentDetailPage() {
               </Button>
             ) : (
               <Button asChild size="sm" variant="outline" className="mt-2">
-                <Link to="/app/customer-orders/$customerId/so/$orderId" params={{ customerId: actualCustomerId, orderId }}>
+                <Link
+                  to="/app/customer-orders/$customerId/so/$orderId"
+                  params={{ customerId: actualCustomerId, orderId }}
+                >
                   Go to the correct document →
                 </Link>
               </Button>
-            )
-          )}
+            ))}
         </div>
       )}
 
       {order.isLoading ? (
         <SkeletonRows />
       ) : order.isError ? (
-        <ErrorBlock message={order.error instanceof Error ? order.error.message : "Document could not be loaded."} onRetry={() => order.refetch()} />
+        <ErrorBlock
+          message={
+            order.error instanceof Error ? order.error.message : "Document could not be loaded."
+          }
+          onRetry={() => order.refetch()}
+        />
       ) : order.data ? (
         <>
+          {/* Backorder first — unit price × qty before account / line details */}
+          <BackorderCard lines={lines} orderStatus={order.data.status} />
+          <FulfillmentHistoryCard order={order.data} />
+
           <Card className="rounded-lg shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Attached To</CardTitle>
@@ -82,15 +100,22 @@ function CustomerDocumentDetailPage() {
                 className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2.5 text-sm hover:bg-muted/40"
               >
                 <div>
-                  <div className="font-medium">{order.data.customer?.name ?? order.data.customer_name ?? actualCustomerId ?? customerId}</div>
-                  <div className="font-mono text-[11px] text-muted-foreground">{actualCustomerId ?? customerId}</div>
+                  <div className="font-medium">
+                    {order.data.customer?.name ??
+                      order.data.customer_name ??
+                      actualCustomerId ??
+                      customerId}
+                  </div>
+                  <div className="font-mono text-[11px] text-muted-foreground">
+                    {actualCustomerId ?? customerId}
+                  </div>
                 </div>
                 <span className="text-xs text-muted-foreground">View account →</span>
               </Link>
             </CardContent>
           </Card>
 
-          <OrderDetailBody order={order.data} lines={lines} />
+          <OrderDetailBody order={order.data} lines={lines} includeBackorderCard={false} />
         </>
       ) : null}
     </div>

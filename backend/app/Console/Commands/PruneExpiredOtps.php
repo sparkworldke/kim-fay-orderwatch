@@ -13,7 +13,8 @@ class PruneExpiredOtps extends Command
      *
      * @var string
      */
-    protected $signature = 'otp:prune';
+    // --source is accepted for scheduler/cron_jobs compatibility (console.php appends it).
+    protected $signature = 'otp:prune {--source= : Run source label (scheduler|manual|api)}';
 
     /**
      * The console command description.
@@ -29,7 +30,11 @@ class PruneExpiredOtps extends Command
     {
         $deleted = Otp::where('expires_at', '<', now())->delete();
 
-        Log::info('otp:prune', ['deleted' => $deleted, 'at' => now()->toIso8601String()]);
+        Log::info('otp:prune', [
+            'deleted' => $deleted,
+            'source' => $this->option('source') ?: 'manual',
+            'at' => now()->toIso8601String(),
+        ]);
 
         $this->info("Pruned {$deleted} expired OTP record(s).");
 

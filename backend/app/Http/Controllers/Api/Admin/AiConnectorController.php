@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AiApiKey;
 use App\Services\Admin\AiConnectorService;
 use App\Services\Admin\AuditLogger;
+use App\Services\AI\LlmClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,7 @@ class AiConnectorController extends Controller
     public function __construct(
         private readonly AiConnectorService $ai,
         private readonly AuditLogger $audit,
+        private readonly LlmClient $llm,
     ) {
     }
 
@@ -26,8 +28,8 @@ class AiConnectorController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'provider' => ['required', Rule::in(['openai', 'anthropic'])],
-            'key' => ['required', 'string', 'min:20'],
+            'provider' => ['required', Rule::in(AiConnectorService::PROVIDERS)],
+            'key' => ['required', 'string', 'min:10'],
         ]);
 
         $record = $this->ai->store($validated['provider'], $validated['key'], $request->user()?->id);
@@ -38,6 +40,22 @@ class AiConnectorController extends Controller
         ], $request->user()?->id, $request->ip());
 
         return response()->json($this->ai->status($validated['provider']), 201);
+    }
+
+    public function health(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'provider' => ['required', Rule::in(AiConnectorService::PROVIDERS)],
+        ]);
+
+        $result = $this->llm->healthCheck($validated['provider']);
+        $this->ai->touchHealth(
+            $validated['provider'],
+            $result['ok'] ? 'healthy' : 'unhealthy',
+            $result['error'],
+        );
+
+        return response()->json($result, $result['ok'] ? 200 : 502);
     }
 
     public function destroy(int $id, Request $request): JsonResponse

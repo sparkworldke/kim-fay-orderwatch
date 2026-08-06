@@ -21,6 +21,7 @@ class FolRequest extends Model
         'requestor_last_name',
         'requestor_phone',
         'requestor_email',
+        'requestor_contact_id',
         'issue_types',
         'reason_text',
         'installation_required',
@@ -29,9 +30,14 @@ class FolRequest extends Model
         'technician_assigned_by',
         'technician_assigned_at',
         'customer_has_submitted_po',
+        'consumable_inventory_ids',
         'consumables_last_purchase_date',
+        'consumables_sales_3m_kes',
+        'consumables_volume_3m',
         'consumables_sales_6m_kes',
         'consumables_volume_6m',
+        'consumables_evidence_json',
+        'consumables_metrics_as_of',
         'consumables_metrics_source',
         'consumables_override_reason',
         'debt_explanation',
@@ -52,15 +58,25 @@ class FolRequest extends Model
             'issue_types' => 'array',
             'installation_required' => 'boolean',
             'customer_has_submitted_po' => 'boolean',
+            'consumable_inventory_ids' => 'array',
             'consumables_last_purchase_date' => 'date',
+            'consumables_sales_3m_kes' => 'decimal:2',
+            'consumables_volume_3m' => 'decimal:4',
             'consumables_sales_6m_kes' => 'decimal:2',
             'consumables_volume_6m' => 'decimal:4',
+            'consumables_evidence_json' => 'array',
+            'consumables_metrics_as_of' => 'datetime',
             'linked_so_order_nbrs' => 'array',
             'form_json' => 'array',
             'submitted_at' => 'datetime',
             'decided_at' => 'datetime',
             'technician_assigned_at' => 'datetime',
         ];
+    }
+
+    public function requestorContact(): BelongsTo
+    {
+        return $this->belongsTo(CustomerContact::class, 'requestor_contact_id');
     }
 
     public function lines(): HasMany

@@ -33,7 +33,7 @@ import { FOL_STATUS_CLASS, FOL_STATUS_LABEL, formatFolDate } from "@/lib/fol";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/kp/fol/calendar")({
-  head: () => ({ meta: [{ title: "Technician Calendar - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Technician Calendar - Kim-Fay Sight" }] }),
   component: FolTechnicianCalendarPage,
 });
 

@@ -30,7 +30,7 @@ use Throwable;
  *   7.  Lost Sales Analysis    – SKU-grouped with subtotals + grand total
  *   8.  Reason Summary         – root-cause contribution (unchanged)
  *   9.  Customer Summary       – top customers (unchanged)
- *  10.  Product Summary        – top products (unchanged)
+ *  10.  Product Summary        – products grouped by InventoryID
  *  11.  SOs Not Fully Delivered – incomplete orders with quantities and values
  *  12.  Missing Price Values   – items with missing unit price flagged explicitly
  */
@@ -116,7 +116,7 @@ class FillRateExcelExporter
             // Sheet 7: Lost Sales Analysis (SKU-grouped)
             $this->writeLostSalesSheet($spreadsheet, $productRows);
 
-            // Sheets 8-10: Contribution summaries (unchanged)
+            // Sheets 8-10: Contribution summaries
             $this->writeContributionSheet($spreadsheet, 'Reason Summary', $reasonRows, [
                 'reason' => 'Reason',
                 'line_count' => 'Line Count',
@@ -1082,7 +1082,7 @@ class FillRateExcelExporter
             ['   Top customers by undershipped value.', ''],
             ['', ''],
             ['10. Product Summary', 'bold'],
-            ['   Top SKUs by undershipped value across all orders.', ''],
+            ['   All SKUs grouped by InventoryID, sorted by undershipped value.', ''],
             ['', ''],
             ['11. SOs Not Fully Delivered', 'bold'],
             ['   Lists every sales order whose fill rate is below 100% (incomplete delivery).', ''],

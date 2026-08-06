@@ -36,4 +36,21 @@ class InventoryWarehouseCronScheduleTest extends TestCase
         $this->assertSame('inventory-sync-fgs2-returns', CronJob::inventoryWarehouseJobKey('FGS2 RETURNS'));
         $this->assertSame('FGS2 Returns', CronJob::inventoryWarehouseLabel('FGS2 RETURNS'));
     }
+
+    public function test_tpfgs_is_configured_for_stock_sync_and_manual_import(): void
+    {
+        $warehouses = CronJob::inventoryWarehouses();
+        $this->assertContains('TPFGS', $warehouses);
+
+        $index = array_search('TPFGS', $warehouses, true);
+        $this->assertIsInt($index);
+
+        // Appended after TRMS so existing warehouse slots stay stable.
+        $this->assertSame(
+            ['13:00', '16:30'],
+            CronJob::warehouseStockSyncTimeLabels($index),
+        );
+        $this->assertSame('inventory-sync-tpfgs', CronJob::inventoryWarehouseJobKey('TPFGS'));
+        $this->assertSame('TPFGS (Tatu Park FG)', CronJob::inventoryWarehouseLabel('TPFGS'));
+    }
 }

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/accordion";
 import {
   CommonProductsCard,
+  CustomerBackorderCard,
   DocumentsTable,
   EmptyBlock,
   ErrorBlock,
@@ -31,7 +32,7 @@ import type { AcumaticaCustomer } from "@/types/admin";
 import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/app/customer-orders/$customerId/branch/$branchId")({
-  head: () => ({ meta: [{ title: "Branch Documents - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Branch Documents - Kim-Fay Sight" }] }),
   component: BranchDocumentsPage,
 });
 
@@ -40,6 +41,23 @@ type SortOption = NonNullable<OrderFilters["sort"]>;
 const WHITESPOT_PAGE_SIZE = 8;
 const DOCUMENTS_PAGE_SIZE = 15;
 const COMMON_PRODUCTS_PAGE_SIZE = 20;
+
+/** Local (non-UTC) date string in YYYY-MM-DD, matching <input type="date">. */
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Default filter range: first of the current month through today. */
+function monthToDateRange() {
+  const now = new Date();
+  return {
+    from: toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: toDateInputValue(now),
+  };
+}
 
 function BranchDocumentsPage() {
   const { customerId, branchId } = useParams({ from: "/app/customer-orders/$customerId/branch/$branchId" });
@@ -53,8 +71,8 @@ function BranchDocumentsPage() {
 }
 
 function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; branchId: string }) {
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateFrom, setDateFrom] = useState(() => monthToDateRange().from);
+  const [dateTo, setDateTo] = useState(() => monthToDateRange().to);
   const [sort, setSort] = useState<SortOption>("latest");
   const [docsPage, setDocsPage] = useState(1);
 
@@ -138,6 +156,7 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
       <Card className="rounded-lg shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Filters</CardTitle>
+          <p className="text-sm text-muted-foreground">Defaults to the current month to date.</p>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div className="grid gap-1.5">
@@ -162,6 +181,8 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
           </div>
         </CardContent>
       </Card>
+
+      <CustomerBackorderCard customerId={branchId} dateFrom={dateFrom || undefined} dateTo={dateTo || undefined} />
 
       <Card className="rounded-lg shadow-sm">
         <CardContent className="p-4">
@@ -204,7 +225,7 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
               <AccordionTrigger>
                 <div className="flex items-center gap-2">
                   <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-base font-semibold">Whitespot</span>
+                  <span className="text-base font-semibold">Items not ordered</span>
                   <Badge variant="secondary" className="ml-2">{whitespotCount}</Badge>
                 </div>
               </AccordionTrigger>

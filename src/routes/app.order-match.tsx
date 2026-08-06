@@ -20,7 +20,7 @@ import {
 } from "@/hooks/useOrderMatch";
 
 export const Route = createFileRoute("/app/order-match")({
-  head: () => ({ meta: [{ title: "Order Match — Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "Order Match — Kim-Fay Sight" }] }),
   component: OrderMatchPage,
 });
 

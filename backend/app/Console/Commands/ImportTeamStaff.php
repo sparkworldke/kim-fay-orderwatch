@@ -55,6 +55,8 @@ class ImportTeamStaff extends Command
                 ['Updated', $stats['updated']],
                 ['Skipped (manual)', $stats['skipped']],
                 ['Gaps recorded', $stats['gaps']],
+                ['Rep codes backfilled', $stats['rep_code_backfilled']],
+                ['Rep-code conflicts', $stats['rep_code_conflicts']],
             ],
         );
 

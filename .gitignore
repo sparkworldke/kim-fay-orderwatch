@@ -24,8 +24,14 @@ dist-ssr
 .env
 .env.*
 !.env.example
+# Committed deploy templates (public API hosts only — no secrets)
+!.env.production
+!.env.staging
 backend/.env
 backend/.env.*
+!backend/.env.example
+!backend/.env.staging.example
+!backend/.env.production.example
 cred.credentials
 .credentials
 

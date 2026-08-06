@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 
-export type PcrStatus = "submitted" | "in_approval" | "rejected" | "pending_erp_apply" | "applied_erp";
+export type PcrStatus = "submitted" | "in_approval" | "countered" | "withdrawn" | "rejected" | "pending_erp_apply" | "applied_erp";
 
 export interface PcrEvent {
   id: number;
@@ -9,6 +9,12 @@ export interface PcrEvent {
   comment: string | null;
   payload_json: Record<string, unknown> | null;
   created_at: string;
+}
+
+export interface PcrLowestPrice {
+  customer_acumatica_id: string;
+  customer_name: string | null;
+  selling_price: string | number;
 }
 
 export interface PriceChangeRequest {
@@ -25,6 +31,10 @@ export interface PriceChangeRequest {
   base_price_snapshot?: string | number | null;
   margin_pct_snapshot?: string | number | null;
   margin_kes_snapshot?: string | number | null;
+  discount_pct?: number | null;
+  lowest_prices?: PcrLowestPrice[];
+  revised_price?: string | number | null;
+  countered_at?: string | null;
   currency_id: string;
   justification: string;
   status: PcrStatus;
@@ -36,6 +46,7 @@ export interface PriceChangeRequest {
   can_actor_approve: boolean;
   can_actor_apply_erp: boolean;
   can_actor_ack_duplicate: boolean;
+  can_actor_respond_counter: boolean;
   current_stage?: { key: string; name: string } | null;
   events?: PcrEvent[];
   approval_actions?: Array<{ id: number; stage_key: string; decision: string; comment: string | null; decided_at: string | null }>;
@@ -45,6 +56,8 @@ export interface PcrCustomer {
   acumatica_id: string;
   name: string | null;
   customer_class: string | null;
+  price_class_id?: string | null;
+  price_class_name?: string | null;
   payment_terms: string | null;
   status: string | null;
 }
@@ -142,8 +155,20 @@ export function useCreatePcr() {
 export function usePcrDecision(id: number | string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { decision: "approved" | "rejected"; comment: string }) =>
+    mutationFn: (body: { decision: "approved" | "rejected" | "countered"; comment: string; revised_price?: number }) =>
       apiFetch<PriceChangeRequest>(`operations/price-change-requests/${id}/decisions`, { method: "POST", body }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["price-change-requests"] });
+      qc.setQueryData(["price-change-requests", id], data);
+    },
+  });
+}
+
+export function usePcrRespondCounter(id: number | string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { action: "accept" | "withdraw" }) =>
+      apiFetch<PriceChangeRequest>(`operations/price-change-requests/${id}/counter-response`, { method: "POST", body }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["price-change-requests"] });
       qc.setQueryData(["price-change-requests", id], data);

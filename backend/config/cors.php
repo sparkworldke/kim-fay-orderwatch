@@ -26,11 +26,20 @@ return [
         'http://localhost',
         'http://kim-fay-orderwatch.test',
         'http://kim-fay-orderwatch.test:8080',
-        'https://orderwatch.fayshop.co.ke',
-        'https://kim-fay-orderwatch.tools',
+        // Production frontend
+        'https://sight.fayshop.co.ke',
+        'https://orderwatch.fayshop.co.ke', // legacy — redirects to sight
+        // Staging frontend
+        'https://staging.sight.fayshop.co.ke',
+        // Cloudflare workers.dev fallbacks
         'https://orderwatchkimfay.nairobidental.workers.dev',
-        'https://dating.sparkworld.co.ke',
         'https://orderwatchkimfay.sharedsys.workers.dev',
+        'https://sight-staging.nairobidental.workers.dev',
+        'https://sight-staging.sharedsys.workers.dev',
+        // API host (if browser ever hits it directly)
+        'https://datacontroller.fayshop.co.ke',
+        // Dev / other
+        'https://kim-fay-orderwatch.tools',
     ],
 
     'allowed_origins_patterns' => [],

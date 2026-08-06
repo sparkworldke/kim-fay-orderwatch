@@ -98,6 +98,35 @@ class DailyManagementReportTest extends TestCase
         });
     }
 
+    public function test_force_run_with_ai_insights_does_not_fail_on_executive_payload(): void
+    {
+        Mail::fake();
+
+        $yesterday = now('Africa/Nairobi')->subDay();
+        $this->createOrder($yesterday, 'Completed', 1200);
+        $this->createOrder($yesterday, 'Pending Approval', 400);
+
+        DailyReportConfig::singleton()->update([
+            'is_enabled' => true,
+            'reply_to_json' => ['ops@kimfay.test'],
+            'recipients_json' => ['ops@kimfay.test'],
+            'include_ai_insights' => true,
+        ]);
+
+        $run = app(DailyReportRunnerService::class)->run(
+            DailyReportConfig::singleton(),
+            'manual_test_ai',
+            true,
+        );
+
+        $this->assertNotSame('failed', $run->status, (string) $run->error_summary);
+        $this->assertNull($run->error_summary);
+        $this->assertSame('sent', $run->delivery_status);
+        $this->assertArrayHasKey('insights', $run->payload_json ?? []);
+        $this->assertArrayHasKey('executive_summary', $run->payload_json['insights'] ?? []);
+        $this->assertStringNotContainsString('Undefined array key', (string) ($run->payload_json['insights']['executive_summary'] ?? ''));
+    }
+
     public function test_admin_can_manage_daily_report_config_and_test_send(): void
     {
         Mail::fake();
@@ -128,6 +157,31 @@ class DailyManagementReportTest extends TestCase
             ->assertOk();
 
         $this->assertSame(1, DailyReportRun::count());
+        Mail::assertSent(DailyManagementReportMail::class);
+    }
+
+    public function test_admin_can_send_report_for_selected_date(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->create(['role' => 'Administrator', 'is_super_admin' => true, 'is_active' => true]);
+
+        DailyReportConfig::singleton()->update([
+            'reply_to_json' => ['customercare@kimfay.test'],
+            'recipients_json' => ['customercare@kimfay.test', 'director@kimfay.test'],
+            'timezone' => 'Africa/Nairobi',
+        ]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/admin/daily-reports/send', [
+                'report_date' => '2026-07-16',
+                'force' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('run.report_date', '2026-07-16')
+            ->assertJsonPath('run.status', 'completed');
+
+        $this->assertSame(1, DailyReportRun::whereDate('report_date', '2026-07-16')->count());
         Mail::assertSent(DailyManagementReportMail::class);
     }
 

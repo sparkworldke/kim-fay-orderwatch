@@ -6,6 +6,8 @@ use App\Models\Department;
 use App\Models\OrgChartAudit;
 use App\Models\StaffImportGap;
 use App\Models\User;
+use App\Models\UserAcumaticaRepMapping;
+use App\Models\UserRepCodeHistory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -17,7 +19,7 @@ class StaffImportService
         private readonly SharedMailboxPolicy $sharedMailboxPolicy,
     ) {}
 
-    /** @return array{created: int, updated: int, skipped: int, gaps: int, errors: list<string>} */
+    /** @return array{created: int, updated: int, skipped: int, gaps: int, rep_code_backfilled: int, rep_code_conflicts: int, errors: list<string>} */
     public function import(
         string $path,
         bool $dryRun = false,
@@ -25,12 +27,20 @@ class StaffImportService
         string $minConfidence = 'high',
     ): array {
         $rows = $this->loadRows($path);
-        $stats = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'gaps' => 0, 'errors' => []];
+        $stats = [
+            'created' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+            'gaps' => 0,
+            'rep_code_backfilled' => 0,
+            'rep_code_conflicts' => 0,
+            'errors' => [],
+        ];
 
         if (! $dryRun) {
             StaffImportGap::query()
                 ->where('resolution_status', 'open')
-                ->whereIn('gap_reason', ['no_staff_match', 'low_confidence'])
+                ->whereIn('gap_reason', ['no_staff_match', 'low_confidence', 'rep_code_employee_number_mismatch'])
                 ->delete();
         }
 
@@ -55,7 +65,10 @@ class StaffImportService
                 continue;
             }
 
-            $departmentId = $this->resolveDepartmentId((string) ($row['function_slug'] ?? 'gap'));
+            $departmentId = $this->resolveDepartmentId(
+                (string) ($row['function_slug'] ?? 'gap'),
+                (string) ($row['department'] ?? ''),
+            );
             $orgLevel = (string) ($row['org_level'] ?? 'sales');
             $departmentRole = $this->mapDepartmentRole($orgLevel);
             $productType = $this->mapProductType((string) ($row['function_slug'] ?? ''));
@@ -64,6 +77,8 @@ class StaffImportService
             $payload = [
                 'name' => trim((string) ($row['display_name'] ?? $row['staff_name'] ?? $email)),
                 'employee_number' => $row['employee_number'] ?? null,
+                'designation' => $row['designation'] ?? null,
+                'division' => $row['division'] ?? null,
                 'department_id' => $departmentId,
                 'department_ids' => $departmentId ? [$departmentId] : [],
                 'department_role' => $departmentRole,
@@ -75,17 +90,22 @@ class StaffImportService
 
             if ($dryRun) {
                 $existing === null ? $stats['created']++ : $stats['updated']++;
+                if ($existing !== null) {
+                    $this->previewRepCodeReconciliation($existing, $payload, $stats);
+                }
                 continue;
             }
 
             try {
-                DB::transaction(function () use ($existing, $email, $payload, &$stats) {
+                DB::transaction(function () use ($existing, $email, $payload, $row, &$stats) {
                     if ($existing === null) {
                         $user = User::create([
                             'name' => $payload['name'],
                             'email' => $email,
                             'role' => $this->inferAppRole($payload['org_level']),
                             'employee_number' => $payload['employee_number'],
+                            'designation' => $payload['designation'],
+                            'division' => $payload['division'],
                             'department_id' => $payload['department_id'],
                             'department_role' => $payload['department_role'],
                             'org_level' => $payload['org_level'],
@@ -102,6 +122,8 @@ class StaffImportService
                         $existing->forceFill([
                             'name' => $payload['name'],
                             'employee_number' => $payload['employee_number'] ?? $existing->employee_number,
+                            'designation' => $payload['designation'] ?? $existing->designation,
+                            'division' => $payload['division'] ?? $existing->division,
                             'department_id' => $payload['department_id'] ?? $existing->department_id,
                             'department_role' => $payload['department_role'],
                             'org_level' => $payload['org_level'],
@@ -112,6 +134,8 @@ class StaffImportService
                         $this->sharedMailboxPolicy->applyToUser($existing->fresh());
                         $stats['updated']++;
                     }
+
+                    $this->reconcileRepCode($user ?? $existing, $payload, $row, $stats);
                 });
             } catch (\Throwable $exception) {
                 $stats['errors'][] = "{$email}: {$exception->getMessage()}";
@@ -134,15 +158,24 @@ class StaffImportService
         $sheet = $spreadsheet->getActiveSheet();
         $headers = [];
         $rows = [];
+        $headerFound = false;
 
-        foreach ($sheet->getRowIterator() as $rowIndex => $row) {
+        foreach ($sheet->getRowIterator() as $row) {
             $cells = [];
             foreach ($row->getCellIterator() as $cell) {
                 $cells[] = trim((string) $cell->getValue());
             }
 
-            if ($rowIndex === 1) {
+            if (! $headerFound) {
+                // Some exports lead with a title/subtitle row before the real header row
+                // (e.g. "Matched Staff — Email, Employee Number, ..." then a summary line)
+                // — a real header row has more than one populated cell.
+                $nonEmpty = count(array_filter($cells, static fn ($v) => $v !== ''));
+                if ($nonEmpty <= 1) {
+                    continue;
+                }
                 $headers = array_map('strtolower', $cells);
+                $headerFound = true;
                 continue;
             }
 
@@ -168,7 +201,10 @@ class StaffImportService
         }
 
         $payload = is_array($gap->source_payload) ? $gap->source_payload : [];
-        $departmentId = $this->resolveDepartmentId((string) ($payload['function_slug'] ?? 'gap'));
+        $departmentId = $this->resolveDepartmentId(
+            (string) ($payload['function_slug'] ?? 'gap'),
+            (string) ($payload['department'] ?? ''),
+        );
         $orgLevel = (string) ($payload['org_level'] ?? 'gap');
 
         $user = User::create([
@@ -255,14 +291,16 @@ class StaffImportService
         }
 
         return [
-            'email' => $mapped['email'] ?? null,
-            'display_name' => $mapped['display_name'] ?? null,
+            'email' => $mapped['email'] ?? $mapped['email_address'] ?? null,
+            'display_name' => $mapped['display_name'] ?? $mapped['employee_name'] ?? null,
             'match_score' => isset($mapped['match_score']) ? (float) $mapped['match_score'] : null,
-            'match_confidence' => $mapped['match_confidence'] ?? 'low',
+            'match_confidence' => $mapped['match_confidence']
+                ?? (isset($mapped['employee_name'], $mapped['email_address'], $mapped['employee_number']) ? 'high' : 'low'),
             'employee_number' => $mapped['employee_number'] ?? null,
             'staff_name' => $mapped['staff_name'] ?? null,
             'department' => $mapped['department'] ?? null,
             'designation' => $mapped['designation'] ?? null,
+            'division' => $mapped['division'] ?? null,
             'org_level' => $mapped['org_level'] ?? 'gap',
             'function_slug' => $mapped['function_slug'] ?? 'gap',
             'sector_tags' => $sectors,
@@ -270,7 +308,83 @@ class StaffImportService
         ];
     }
 
-    private function resolveDepartmentId(string $functionSlug): ?int
+    /** @param array<string, mixed> $payload */
+    private function previewRepCodeReconciliation(User $user, array $payload, array &$stats): void
+    {
+        $employeeNumber = $this->normalizeRepCode($payload['employee_number'] ?? null);
+        $repCode = $this->normalizeRepCode($user->rep_code);
+        if ($employeeNumber === null) {
+            return;
+        }
+        if ($repCode === null && $this->isKnownRepCodePattern($employeeNumber)) {
+            $stats['rep_code_backfilled']++;
+        } elseif ($repCode !== null && $repCode !== $employeeNumber) {
+            $stats['rep_code_conflicts']++;
+            $stats['gaps']++;
+        }
+    }
+
+    /** @param array<string, mixed> $payload @param array<string, mixed> $sourceRow */
+    private function reconcileRepCode(User $user, array $payload, array $sourceRow, array &$stats): void
+    {
+        $employeeNumber = $this->normalizeRepCode($payload['employee_number'] ?? null);
+        $repCode = $this->normalizeRepCode($user->rep_code);
+        if ($employeeNumber === null || $repCode === $employeeNumber) {
+            return;
+        }
+
+        if ($repCode === null && $this->isKnownRepCodePattern($employeeNumber)) {
+            $user->forceFill(['rep_code' => $employeeNumber])->save();
+            UserRepCodeHistory::create([
+                'user_id' => $user->id,
+                'rep_code' => $employeeNumber,
+                'changed_by_name' => 'Staff import',
+                'changed_by' => null,
+                'change_reason' => 'staff_import_backfill',
+                'changed_at' => now(),
+            ]);
+            $stats['rep_code_backfilled']++;
+            return;
+        }
+
+        if ($repCode !== null) {
+            UserAcumaticaRepMapping::query()->updateOrCreate(
+                ['user_id' => $user->id, 'acumatica_rep_code' => $employeeNumber],
+                ['is_primary' => false],
+            );
+            StaffImportGap::query()->updateOrCreate(
+                [
+                    'email' => $user->email,
+                    'employee_number' => $employeeNumber,
+                    'gap_reason' => 'rep_code_employee_number_mismatch',
+                    'resolution_status' => 'open',
+                ],
+                [
+                    'display_name' => $user->name,
+                    'match_score' => 1.0,
+                    'source_payload' => array_merge($sourceRow, [
+                        'user_id' => $user->id,
+                        'existing_rep_code' => $repCode,
+                    ]),
+                ],
+            );
+            $stats['rep_code_conflicts']++;
+            $stats['gaps']++;
+        }
+    }
+
+    private function normalizeRepCode(mixed $value): ?string
+    {
+        $value = strtoupper(trim((string) $value));
+        return $value === '' ? null : $value;
+    }
+
+    private function isKnownRepCodePattern(string $value): bool
+    {
+        return preg_match('/^(?:P\d{3,}|C\d{3,})$/', $value) === 1;
+    }
+
+    private function resolveDepartmentId(string $functionSlug, string $departmentName = ''): ?int
     {
         $slugMap = [
             'mt_consumer_sales' => 'mt_consumer_sales',
@@ -289,11 +403,21 @@ class StaffImportService
         ];
 
         $slug = $slugMap[$functionSlug] ?? null;
-        if ($slug === null) {
+        if ($slug !== null) {
+            $id = Department::query()->where('slug', $slug)->value('id');
+            if ($id !== null) {
+                return (int) $id;
+            }
+        }
+
+        $departmentName = trim($departmentName);
+        if ($departmentName === '') {
             return null;
         }
 
-        return Department::query()->where('slug', $slug)->value('id');
+        return Department::query()
+            ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($departmentName)])
+            ->value('id');
     }
 
     private function mapDepartmentRole(string $orgLevel): string

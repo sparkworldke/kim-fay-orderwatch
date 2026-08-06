@@ -46,7 +46,8 @@ class RbacAccessTest extends TestCase
 
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/customers/categories')
-            ->assertForbidden();
+            ->assertOk()
+            ->assertExactJson([]);
 
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/emails')
@@ -61,4 +62,3 @@ class RbacAccessTest extends TestCase
             ->assertForbidden();
     }
 }
-

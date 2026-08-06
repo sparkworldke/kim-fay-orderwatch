@@ -28,7 +28,7 @@ class NotificationRulesConfigMailService
         $body = $this->buildBody($rules);
 
         Mail::to(self::RECIPIENT)->send(new NotificationRulesConfigMail(
-            'OrderWatch Notification Rules Configuration',
+            'Sight Notification Rules Configuration',
             $body,
         ));
 

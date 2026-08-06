@@ -6,13 +6,15 @@ use App\Models\AiApiKey;
 
 class AiConnectorService
 {
+    public const PROVIDERS = ['openai', 'xai', 'anthropic'];
+
     public function __construct(private readonly EncryptionService $encryption)
     {
     }
 
     public function statuses(): array
     {
-        return collect(['openai', 'anthropic'])->map(fn (string $provider) => $this->status($provider))->all();
+        return collect(self::PROVIDERS)->map(fn (string $provider) => $this->status($provider))->all();
     }
 
     public function status(string $provider): array
@@ -27,7 +29,8 @@ class AiConnectorService
             'source' => $record ? 'database' : 'environment',
             'masked_preview' => $this->encryption->mask($rawKey),
             'last_used_at' => $record?->last_used_at,
-            'health_status' => $record?->health_status ?? ($rawKey ? 'healthy' : 'unchecked'),
+            'health_status' => $record?->health_status ?? ($rawKey ? 'configured' : 'missing'),
+            'has_key' => is_string($rawKey) && $rawKey !== '',
         ];
     }
 
@@ -39,25 +42,37 @@ class AiConnectorService
     {
         $record = AiApiKey::where('provider', $provider)->first();
         $envKey = $this->envKey($provider);
-        $raw    = $record ? $this->encryption->decrypt($record->key_encrypted) : env($envKey);
+        $raw = $record ? $this->encryption->decrypt($record->key_encrypted) : env($envKey);
 
         return (is_string($raw) && $raw !== '') ? $raw : null;
     }
 
     /**
      * Returns [provider, key] for the first configured provider in preference order,
-     * or ['openai', null] when nothing is configured.
+     * or [first preference, null] when nothing is configured.
+     *
+     * @param  list<string>|null  $preferenceOrder
+     * @return array{0: string, 1: string|null}
      */
-    public function resolveKey(array $preferenceOrder = ['openai', 'anthropic']): array
+    public function resolveKey(?array $preferenceOrder = null): array
     {
-        foreach ($preferenceOrder as $provider) {
+        $order = $preferenceOrder ?? config('ai.provider_order', self::PROVIDERS);
+        if ($order === []) {
+            $order = self::PROVIDERS;
+        }
+
+        foreach ($order as $provider) {
+            $provider = strtolower(trim((string) $provider));
+            if (! in_array($provider, self::PROVIDERS, true)) {
+                continue;
+            }
             $key = $this->getKey($provider);
             if ($key !== null) {
                 return [$provider, $key];
             }
         }
 
-        return ['openai', null];
+        return [(string) ($order[0] ?? 'openai'), null];
     }
 
     public function store(string $provider, string $key, ?int $userId): AiApiKey
@@ -72,8 +87,24 @@ class AiConnectorService
         );
     }
 
+    public function touchHealth(string $provider, string $status, ?string $message = null): void
+    {
+        $record = AiApiKey::where('provider', $provider)->first();
+        if (! $record) {
+            return;
+        }
+        $record->update([
+            'health_status' => $status,
+            'last_used_at' => now(),
+        ]);
+    }
+
     private function envKey(string $provider): string
     {
-        return $provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY';
+        return match ($provider) {
+            'anthropic' => 'ANTHROPIC_API_KEY',
+            'xai' => 'XAI_API_KEY',
+            default => 'OPENAI_API_KEY',
+        };
     }
 }

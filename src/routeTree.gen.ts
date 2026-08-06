@@ -9,52 +9,79 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ProductionRouteImport } from './routes/production'
 import { Route as AppIndexRouteImport } from './routes/app.index'
-import { Route as AppZonesRouteImport } from './routes/app.zones'
-import { Route as AppTeamRouteImport } from './routes/app.team'
-import { Route as AppSoImportsRouteImport } from './routes/app.so-imports'
-import { Route as AppSalesManagementRouteImport } from './routes/app.sales-management'
-import { Route as AppSalesConsultantsRouteImport } from './routes/app.sales-consultants'
-import { Route as AppRolesRouteImport } from './routes/app.roles'
-import { Route as AppReportsRouteImport } from './routes/app.reports'
-import { Route as AppProfileRouteImport } from './routes/app.profile'
-import { Route as AppPriceChangeRequestsRouteImport } from './routes/app.price-change-requests'
-import { Route as AppOrdersRouteImport } from './routes/app.orders'
-import { Route as AppOrderMatchRouteImport } from './routes/app.order-match'
-import { Route as AppNotificationsRouteImport } from './routes/app.notifications'
-import { Route as AppMailboxRouteImport } from './routes/app.mailbox'
-import { Route as AppInventoryRouteImport } from './routes/app.inventory'
-import { Route as AppFillRateRouteImport } from './routes/app.fill-rate'
-import { Route as AppDiscrepanciesRouteImport } from './routes/app.discrepancies'
-import { Route as AppCustomersRouteImport } from './routes/app.customers'
-import { Route as AppCustomerFeedRouteImport } from './routes/app.customer-feed'
-import { Route as AppCreditNotesMoreRouteImport } from './routes/app.credit-notes-more'
-import { Route as AppBusinessOptimizationRouteImport } from './routes/app.business-optimization'
-import { Route as AppBackordersRouteImport } from './routes/app.backorders'
-import { Route as AppAiIntelligenceRouteImport } from './routes/app.ai-intelligence'
-import { Route as AppAiInsightsRouteImport } from './routes/app.ai-insights'
+import { Route as AppAccountsRouteImport } from './routes/app.accounts'
 import { Route as AppAdministrationRouteImport } from './routes/app.administration'
-import { Route as AppSalesConsultantsIdRouteImport } from './routes/app.sales-consultants.$id'
-import { Route as AppPriceChangeRequestsNewRouteImport } from './routes/app.price-change-requests.new'
-import { Route as AppPriceChangeRequestsIdRouteImport } from './routes/app.price-change-requests.$id'
-import { Route as AppOrdersByDateDateRouteImport } from './routes/app.orders-by-date.$date'
-import { Route as AppKpFolRouteImport } from './routes/app.kp.fol'
+import { Route as AppAdoptionRouteImport } from './routes/app.adoption'
+import { Route as AppAiInsightsRouteImport } from './routes/app.ai-insights'
+import { Route as AppAiIntelligenceRouteImport } from './routes/app.ai-intelligence'
+import { Route as AppBackordersRouteImport } from './routes/app.backorders'
+import { Route as AppBusinessOptimizationRouteImport } from './routes/app.business-optimization'
+import { Route as AppChannelClassificationRouteImport } from './routes/app.channel-classification'
+import { Route as AppCreditNotesMoreRouteImport } from './routes/app.credit-notes-more'
+import { Route as AppCustomerFeedRouteImport } from './routes/app.customer-feed'
+import { Route as AppCustomersRouteImport } from './routes/app.customers'
+import { Route as AppDiscrepanciesRouteImport } from './routes/app.discrepancies'
+import { Route as AppDownloadsRouteImport } from './routes/app.downloads'
+import { Route as AppFillRateRouteImport } from './routes/app.fill-rate'
+import { Route as AppInventoryRouteImport } from './routes/app.inventory'
+import { Route as AppMailboxRouteImport } from './routes/app.mailbox'
+import { Route as AppNotificationsRouteImport } from './routes/app.notifications'
+import { Route as AppOrderMatchRouteImport } from './routes/app.order-match'
+import { Route as AppOrdersRouteImport } from './routes/app.orders'
+import { Route as AppPriceChangeRequestsRouteImport } from './routes/app.price-change-requests'
+import { Route as AppProductionRouteImport } from './routes/app.production'
+import { Route as AppProductsNotDeliveredRouteImport } from './routes/app.products-not-delivered'
+import { Route as AppProfileRouteImport } from './routes/app.profile'
+import { Route as AppReportsRouteImport } from './routes/app.reports'
+import { Route as AppRolesRouteImport } from './routes/app.roles'
+import { Route as AppSalesConsultantsRouteImport } from './routes/app.sales-consultants'
+import { Route as AppSalesIntelligenceRouteImport } from './routes/app.sales-intelligence'
+import { Route as AppSalesManagementRouteImport } from './routes/app.sales-management'
+import { Route as AppSoImportsRouteImport } from './routes/app.so-imports'
+import { Route as AppTeamRouteImport } from './routes/app.team'
+import { Route as AppZonesRouteImport } from './routes/app.zones'
+import { Route as ProductionIndexRouteImport } from './routes/production/index'
+import { Route as ProductionPartnersRouteImport } from './routes/production/partners'
+import { Route as ProductionSalesRouteImport } from './routes/production/sales'
+import { Route as AppCustomerBrandsCustomerIdRouteImport } from './routes/app.customer-brands.$customerId'
 import { Route as AppCustomerOrdersCustomerIdRouteImport } from './routes/app.customer-orders.$customerId'
-import { Route as AppKpFolNewRouteImport } from './routes/app.kp.fol.new'
-import { Route as AppKpFolCalendarRouteImport } from './routes/app.kp.fol.calendar'
-import { Route as AppKpFolIdRouteImport } from './routes/app.kp.fol.$id'
+import { Route as AppKpCalendarRouteImport } from './routes/app.kp.calendar'
+import { Route as AppKpCommissionsRouteImport } from './routes/app.kp.commissions'
+import { Route as AppKpContractCleanersRouteImport } from './routes/app.kp.contract-cleaners'
+import { Route as AppKpDormantRouteImport } from './routes/app.kp.dormant'
+import { Route as AppKpFolRouteImport } from './routes/app.kp.fol'
+import { Route as AppKpItemsNotOrderedRouteImport } from './routes/app.kp.items-not-ordered'
+import { Route as AppKpMeetingsRouteImport } from './routes/app.kp.meetings'
+import { Route as AppOrdersByDateDateRouteImport } from './routes/app.orders-by-date.$date'
+import { Route as AppPriceChangeRequestsIdRouteImport } from './routes/app.price-change-requests.$id'
+import { Route as AppPriceChangeRequestsNewRouteImport } from './routes/app.price-change-requests.new'
+import { Route as AppProductionIndexRouteImport } from './routes/app.production.index'
+import { Route as AppProductionPartnersRouteImport } from './routes/app.production.partners'
+import { Route as AppProductionSalesRouteImport } from './routes/app.production.sales'
+import { Route as AppSalesConsultantsIdRouteImport } from './routes/app.sales-consultants.$id'
 import { Route as AppCustomerOrdersCustomerIdSuggestedRouteImport } from './routes/app.customer-orders.$customerId.suggested'
-import { Route as AppCustomerOrdersCustomerIdSoOrderIdRouteImport } from './routes/app.customer-orders.$customerId.so.$orderId'
+import { Route as AppKpCommissionsStatementIdRouteImport } from './routes/app.kp.commissions.$statementId'
+import { Route as AppKpDtcCalltronixCustomersRouteImport } from './routes/app.kp.dtc-calltronix.customers'
+import { Route as AppKpDtcCalltronixPriceListRouteImport } from './routes/app.kp.dtc-calltronix.price-list'
+import { Route as AppKpDtcCalltronixQuotesRouteImport } from './routes/app.kp.dtc-calltronix.quotes'
+import { Route as AppKpDtcCalltronixSalesOrdersRouteImport } from './routes/app.kp.dtc-calltronix.sales-orders'
+import { Route as AppKpFolIdRouteImport } from './routes/app.kp.fol.$id'
+import { Route as AppKpFolCalendarRouteImport } from './routes/app.kp.fol.calendar'
+import { Route as AppKpFolNewRouteImport } from './routes/app.kp.fol.new'
+import { Route as AppKpFolSettingsRouteImport } from './routes/app.kp.fol.settings'
 import { Route as AppCustomerOrdersCustomerIdBranchBranchIdRouteImport } from './routes/app.customer-orders.$customerId.branch.$branchId'
+import { Route as AppCustomerOrdersCustomerIdSoOrderIdRouteImport } from './routes/app.customer-orders.$customerId.so.$orderId'
 import { Route as AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRouteImport } from './routes/app.customer-orders.$customerId.branch.$branchId.suggested'
 import { Route as AppCustomerOrdersCustomerIdBranchBranchIdSoOrderIdRouteImport } from './routes/app.customer-orders.$customerId.branch.$branchId.so.$orderId'
 
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -62,9 +89,14 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductionRoute = ProductionRouteImport.update({
+  id: '/production',
+  path: '/production',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -72,119 +104,9 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
-const AppZonesRoute = AppZonesRouteImport.update({
-  id: '/zones',
-  path: '/zones',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTeamRoute = AppTeamRouteImport.update({
-  id: '/team',
-  path: '/team',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSoImportsRoute = AppSoImportsRouteImport.update({
-  id: '/so-imports',
-  path: '/so-imports',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSalesManagementRoute = AppSalesManagementRouteImport.update({
-  id: '/sales-management',
-  path: '/sales-management',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSalesConsultantsRoute = AppSalesConsultantsRouteImport.update({
-  id: '/sales-consultants',
-  path: '/sales-consultants',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppRolesRoute = AppRolesRouteImport.update({
-  id: '/roles',
-  path: '/roles',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReportsRoute = AppReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppProfileRoute = AppProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPriceChangeRequestsRoute = AppPriceChangeRequestsRouteImport.update({
-  id: '/price-change-requests',
-  path: '/price-change-requests',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppOrdersRoute = AppOrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppOrderMatchRoute = AppOrderMatchRouteImport.update({
-  id: '/order-match',
-  path: '/order-match',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppNotificationsRoute = AppNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppMailboxRoute = AppMailboxRouteImport.update({
-  id: '/mailbox',
-  path: '/mailbox',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppInventoryRoute = AppInventoryRouteImport.update({
-  id: '/inventory',
-  path: '/inventory',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppFillRateRoute = AppFillRateRouteImport.update({
-  id: '/fill-rate',
-  path: '/fill-rate',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDiscrepanciesRoute = AppDiscrepanciesRouteImport.update({
-  id: '/discrepancies',
-  path: '/discrepancies',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCustomersRoute = AppCustomersRouteImport.update({
-  id: '/customers',
-  path: '/customers',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCustomerFeedRoute = AppCustomerFeedRouteImport.update({
-  id: '/customer-feed',
-  path: '/customer-feed',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCreditNotesMoreRoute = AppCreditNotesMoreRouteImport.update({
-  id: '/credit-notes-more',
-  path: '/credit-notes-more',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppBusinessOptimizationRoute = AppBusinessOptimizationRouteImport.update({
-  id: '/business-optimization',
-  path: '/business-optimization',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppBackordersRoute = AppBackordersRouteImport.update({
-  id: '/backorders',
-  path: '/backorders',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAiIntelligenceRoute = AppAiIntelligenceRouteImport.update({
-  id: '/ai-intelligence',
-  path: '/ai-intelligence',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAiInsightsRoute = AppAiInsightsRouteImport.update({
-  id: '/ai-insights',
-  path: '/ai-insights',
+const AppAccountsRoute = AppAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAdministrationRoute = AppAdministrationRouteImport.update({
@@ -192,26 +114,197 @@ const AppAdministrationRoute = AppAdministrationRouteImport.update({
   path: '/administration',
   getParentRoute: () => AppRoute,
 } as any)
-const AppSalesConsultantsIdRoute = AppSalesConsultantsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AppSalesConsultantsRoute,
+const AppAdoptionRoute = AppAdoptionRouteImport.update({
+  id: '/adoption',
+  path: '/adoption',
+  getParentRoute: () => AppRoute,
 } as any)
-const AppPriceChangeRequestsNewRoute =
-  AppPriceChangeRequestsNewRouteImport.update({
-    id: '/new',
-    path: '/new',
-    getParentRoute: () => AppPriceChangeRequestsRoute,
+const AppAiInsightsRoute = AppAiInsightsRouteImport.update({
+  id: '/ai-insights',
+  path: '/ai-insights',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAiIntelligenceRoute = AppAiIntelligenceRouteImport.update({
+  id: '/ai-intelligence',
+  path: '/ai-intelligence',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBackordersRoute = AppBackordersRouteImport.update({
+  id: '/backorders',
+  path: '/backorders',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBusinessOptimizationRoute = AppBusinessOptimizationRouteImport.update({
+  id: '/business-optimization',
+  path: '/business-optimization',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppChannelClassificationRoute =
+  AppChannelClassificationRouteImport.update({
+    id: '/channel-classification',
+    path: '/channel-classification',
+    getParentRoute: () => AppRoute,
   } as any)
-const AppPriceChangeRequestsIdRoute =
-  AppPriceChangeRequestsIdRouteImport.update({
-    id: '/$id',
-    path: '/$id',
-    getParentRoute: () => AppPriceChangeRequestsRoute,
+const AppCreditNotesMoreRoute = AppCreditNotesMoreRouteImport.update({
+  id: '/credit-notes-more',
+  path: '/credit-notes-more',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCustomerFeedRoute = AppCustomerFeedRouteImport.update({
+  id: '/customer-feed',
+  path: '/customer-feed',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCustomersRoute = AppCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDiscrepanciesRoute = AppDiscrepanciesRouteImport.update({
+  id: '/discrepancies',
+  path: '/discrepancies',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDownloadsRoute = AppDownloadsRouteImport.update({
+  id: '/downloads',
+  path: '/downloads',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFillRateRoute = AppFillRateRouteImport.update({
+  id: '/fill-rate',
+  path: '/fill-rate',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInventoryRoute = AppInventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMailboxRoute = AppMailboxRouteImport.update({
+  id: '/mailbox',
+  path: '/mailbox',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOrderMatchRoute = AppOrderMatchRouteImport.update({
+  id: '/order-match',
+  path: '/order-match',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOrdersRoute = AppOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPriceChangeRequestsRoute = AppPriceChangeRequestsRouteImport.update({
+  id: '/price-change-requests',
+  path: '/price-change-requests',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProductionRoute = AppProductionRouteImport.update({
+  id: '/production',
+  path: '/production',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProductsNotDeliveredRoute = AppProductsNotDeliveredRouteImport.update({
+  id: '/products-not-delivered',
+  path: '/products-not-delivered',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRolesRoute = AppRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSalesConsultantsRoute = AppSalesConsultantsRouteImport.update({
+  id: '/sales-consultants',
+  path: '/sales-consultants',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSalesIntelligenceRoute = AppSalesIntelligenceRouteImport.update({
+  id: '/sales-intelligence',
+  path: '/sales-intelligence',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSalesManagementRoute = AppSalesManagementRouteImport.update({
+  id: '/sales-management',
+  path: '/sales-management',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSoImportsRoute = AppSoImportsRouteImport.update({
+  id: '/so-imports',
+  path: '/so-imports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTeamRoute = AppTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppZonesRoute = AppZonesRouteImport.update({
+  id: '/zones',
+  path: '/zones',
+  getParentRoute: () => AppRoute,
+} as any)
+const ProductionIndexRoute = ProductionIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProductionRoute,
+} as any)
+const ProductionPartnersRoute = ProductionPartnersRouteImport.update({
+  id: '/partners',
+  path: '/partners',
+  getParentRoute: () => ProductionRoute,
+} as any)
+const ProductionSalesRoute = ProductionSalesRouteImport.update({
+  id: '/sales',
+  path: '/sales',
+  getParentRoute: () => ProductionRoute,
+} as any)
+const AppCustomerBrandsCustomerIdRoute =
+  AppCustomerBrandsCustomerIdRouteImport.update({
+    id: '/customer-brands/$customerId',
+    path: '/customer-brands/$customerId',
+    getParentRoute: () => AppRoute,
   } as any)
-const AppOrdersByDateDateRoute = AppOrdersByDateDateRouteImport.update({
-  id: '/orders-by-date/$date',
-  path: '/orders-by-date/$date',
+const AppCustomerOrdersCustomerIdRoute =
+  AppCustomerOrdersCustomerIdRouteImport.update({
+    id: '/customer-orders/$customerId',
+    path: '/customer-orders/$customerId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppKpCalendarRoute = AppKpCalendarRouteImport.update({
+  id: '/kp/calendar',
+  path: '/kp/calendar',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppKpCommissionsRoute = AppKpCommissionsRouteImport.update({
+  id: '/kp/commissions',
+  path: '/kp/commissions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppKpContractCleanersRoute = AppKpContractCleanersRouteImport.update({
+  id: '/kp/contract-cleaners',
+  path: '/kp/contract-cleaners',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppKpDormantRoute = AppKpDormantRouteImport.update({
+  id: '/kp/dormant',
+  path: '/kp/dormant',
   getParentRoute: () => AppRoute,
 } as any)
 const AppKpFolRoute = AppKpFolRouteImport.update({
@@ -219,26 +312,52 @@ const AppKpFolRoute = AppKpFolRouteImport.update({
   path: '/kp/fol',
   getParentRoute: () => AppRoute,
 } as any)
-const AppCustomerOrdersCustomerIdRoute =
-  AppCustomerOrdersCustomerIdRouteImport.update({
-    id: '/customer-orders/$customerId',
-    path: '/customer-orders/$customerId',
-    getParentRoute: () => AppRoute,
+const AppKpItemsNotOrderedRoute = AppKpItemsNotOrderedRouteImport.update({
+  id: '/kp/items-not-ordered',
+  path: '/kp/items-not-ordered',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppKpMeetingsRoute = AppKpMeetingsRouteImport.update({
+  id: '/kp/meetings',
+  path: '/kp/meetings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOrdersByDateDateRoute = AppOrdersByDateDateRouteImport.update({
+  id: '/orders-by-date/$date',
+  path: '/orders-by-date/$date',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPriceChangeRequestsIdRoute =
+  AppPriceChangeRequestsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AppPriceChangeRequestsRoute,
   } as any)
-const AppKpFolNewRoute = AppKpFolNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => AppKpFolRoute,
+const AppPriceChangeRequestsNewRoute =
+  AppPriceChangeRequestsNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AppPriceChangeRequestsRoute,
+  } as any)
+const AppProductionIndexRoute = AppProductionIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppProductionRoute,
 } as any)
-const AppKpFolCalendarRoute = AppKpFolCalendarRouteImport.update({
-  id: '/calendar',
-  path: '/calendar',
-  getParentRoute: () => AppKpFolRoute,
+const AppProductionPartnersRoute = AppProductionPartnersRouteImport.update({
+  id: '/partners',
+  path: '/partners',
+  getParentRoute: () => AppProductionRoute,
 } as any)
-const AppKpFolIdRoute = AppKpFolIdRouteImport.update({
+const AppProductionSalesRoute = AppProductionSalesRouteImport.update({
+  id: '/sales',
+  path: '/sales',
+  getParentRoute: () => AppProductionRoute,
+} as any)
+const AppSalesConsultantsIdRoute = AppSalesConsultantsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
-  getParentRoute: () => AppKpFolRoute,
+  getParentRoute: () => AppSalesConsultantsRoute,
 } as any)
 const AppCustomerOrdersCustomerIdSuggestedRoute =
   AppCustomerOrdersCustomerIdSuggestedRouteImport.update({
@@ -246,16 +365,66 @@ const AppCustomerOrdersCustomerIdSuggestedRoute =
     path: '/suggested',
     getParentRoute: () => AppCustomerOrdersCustomerIdRoute,
   } as any)
-const AppCustomerOrdersCustomerIdSoOrderIdRoute =
-  AppCustomerOrdersCustomerIdSoOrderIdRouteImport.update({
-    id: '/so/$orderId',
-    path: '/so/$orderId',
-    getParentRoute: () => AppCustomerOrdersCustomerIdRoute,
+const AppKpCommissionsStatementIdRoute =
+  AppKpCommissionsStatementIdRouteImport.update({
+    id: '/$statementId',
+    path: '/$statementId',
+    getParentRoute: () => AppKpCommissionsRoute,
   } as any)
+const AppKpDtcCalltronixCustomersRoute =
+  AppKpDtcCalltronixCustomersRouteImport.update({
+    id: '/kp/dtc-calltronix/customers',
+    path: '/kp/dtc-calltronix/customers',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppKpDtcCalltronixPriceListRoute =
+  AppKpDtcCalltronixPriceListRouteImport.update({
+    id: '/kp/dtc-calltronix/price-list',
+    path: '/kp/dtc-calltronix/price-list',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppKpDtcCalltronixQuotesRoute =
+  AppKpDtcCalltronixQuotesRouteImport.update({
+    id: '/kp/dtc-calltronix/quotes',
+    path: '/kp/dtc-calltronix/quotes',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppKpDtcCalltronixSalesOrdersRoute =
+  AppKpDtcCalltronixSalesOrdersRouteImport.update({
+    id: '/kp/dtc-calltronix/sales-orders',
+    path: '/kp/dtc-calltronix/sales-orders',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppKpFolIdRoute = AppKpFolIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppKpFolRoute,
+} as any)
+const AppKpFolCalendarRoute = AppKpFolCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => AppKpFolRoute,
+} as any)
+const AppKpFolNewRoute = AppKpFolNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AppKpFolRoute,
+} as any)
+const AppKpFolSettingsRoute = AppKpFolSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppKpFolRoute,
+} as any)
 const AppCustomerOrdersCustomerIdBranchBranchIdRoute =
   AppCustomerOrdersCustomerIdBranchBranchIdRouteImport.update({
     id: '/branch/$branchId',
     path: '/branch/$branchId',
+    getParentRoute: () => AppCustomerOrdersCustomerIdRoute,
+  } as any)
+const AppCustomerOrdersCustomerIdSoOrderIdRoute =
+  AppCustomerOrdersCustomerIdSoOrderIdRouteImport.update({
+    id: '/so/$orderId',
+    path: '/so/$orderId',
     getParentRoute: () => AppCustomerOrdersCustomerIdRoute,
   } as any)
 const AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute =
@@ -275,15 +444,20 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/production': typeof ProductionRouteWithChildren
+  '/app/accounts': typeof AppAccountsRoute
   '/app/administration': typeof AppAdministrationRoute
+  '/app/adoption': typeof AppAdoptionRoute
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/ai-intelligence': typeof AppAiIntelligenceRoute
   '/app/backorders': typeof AppBackordersRoute
   '/app/business-optimization': typeof AppBusinessOptimizationRoute
+  '/app/channel-classification': typeof AppChannelClassificationRoute
   '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
   '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/downloads': typeof AppDownloadsRoute
   '/app/fill-rate': typeof AppFillRateRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
@@ -291,25 +465,47 @@ export interface FileRoutesByFullPath {
   '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/price-change-requests': typeof AppPriceChangeRequestsRouteWithChildren
+  '/app/production': typeof AppProductionRouteWithChildren
+  '/app/products-not-delivered': typeof AppProductsNotDeliveredRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
+  '/app/sales-intelligence': typeof AppSalesIntelligenceRoute
   '/app/sales-management': typeof AppSalesManagementRoute
   '/app/so-imports': typeof AppSoImportsRoute
   '/app/team': typeof AppTeamRoute
   '/app/zones': typeof AppZonesRoute
+  '/production/partners': typeof ProductionPartnersRoute
+  '/production/sales': typeof ProductionSalesRoute
   '/app/': typeof AppIndexRoute
+  '/production/': typeof ProductionIndexRoute
+  '/app/customer-brands/$customerId': typeof AppCustomerBrandsCustomerIdRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/kp/calendar': typeof AppKpCalendarRoute
+  '/app/kp/commissions': typeof AppKpCommissionsRouteWithChildren
+  '/app/kp/contract-cleaners': typeof AppKpContractCleanersRoute
+  '/app/kp/dormant': typeof AppKpDormantRoute
   '/app/kp/fol': typeof AppKpFolRouteWithChildren
+  '/app/kp/items-not-ordered': typeof AppKpItemsNotOrderedRoute
+  '/app/kp/meetings': typeof AppKpMeetingsRoute
   '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
   '/app/price-change-requests/$id': typeof AppPriceChangeRequestsIdRoute
   '/app/price-change-requests/new': typeof AppPriceChangeRequestsNewRoute
+  '/app/production/partners': typeof AppProductionPartnersRoute
+  '/app/production/sales': typeof AppProductionSalesRoute
   '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
+  '/app/production/': typeof AppProductionIndexRoute
   '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/kp/commissions/$statementId': typeof AppKpCommissionsStatementIdRoute
+  '/app/kp/dtc-calltronix/customers': typeof AppKpDtcCalltronixCustomersRoute
+  '/app/kp/dtc-calltronix/price-list': typeof AppKpDtcCalltronixPriceListRoute
+  '/app/kp/dtc-calltronix/quotes': typeof AppKpDtcCalltronixQuotesRoute
+  '/app/kp/dtc-calltronix/sales-orders': typeof AppKpDtcCalltronixSalesOrdersRoute
   '/app/kp/fol/$id': typeof AppKpFolIdRoute
   '/app/kp/fol/calendar': typeof AppKpFolCalendarRoute
   '/app/kp/fol/new': typeof AppKpFolNewRoute
+  '/app/kp/fol/settings': typeof AppKpFolSettingsRoute
   '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
   '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
   '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
@@ -318,15 +514,19 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/app/accounts': typeof AppAccountsRoute
   '/app/administration': typeof AppAdministrationRoute
+  '/app/adoption': typeof AppAdoptionRoute
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/ai-intelligence': typeof AppAiIntelligenceRoute
   '/app/backorders': typeof AppBackordersRoute
   '/app/business-optimization': typeof AppBusinessOptimizationRoute
+  '/app/channel-classification': typeof AppChannelClassificationRoute
   '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
   '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/downloads': typeof AppDownloadsRoute
   '/app/fill-rate': typeof AppFillRateRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
@@ -334,25 +534,46 @@ export interface FileRoutesByTo {
   '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/price-change-requests': typeof AppPriceChangeRequestsRouteWithChildren
+  '/app/products-not-delivered': typeof AppProductsNotDeliveredRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
+  '/app/sales-intelligence': typeof AppSalesIntelligenceRoute
   '/app/sales-management': typeof AppSalesManagementRoute
   '/app/so-imports': typeof AppSoImportsRoute
   '/app/team': typeof AppTeamRoute
   '/app/zones': typeof AppZonesRoute
+  '/production/partners': typeof ProductionPartnersRoute
+  '/production/sales': typeof ProductionSalesRoute
   '/app': typeof AppIndexRoute
+  '/production': typeof ProductionIndexRoute
+  '/app/customer-brands/$customerId': typeof AppCustomerBrandsCustomerIdRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/kp/calendar': typeof AppKpCalendarRoute
+  '/app/kp/commissions': typeof AppKpCommissionsRouteWithChildren
+  '/app/kp/contract-cleaners': typeof AppKpContractCleanersRoute
+  '/app/kp/dormant': typeof AppKpDormantRoute
   '/app/kp/fol': typeof AppKpFolRouteWithChildren
+  '/app/kp/items-not-ordered': typeof AppKpItemsNotOrderedRoute
+  '/app/kp/meetings': typeof AppKpMeetingsRoute
   '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
   '/app/price-change-requests/$id': typeof AppPriceChangeRequestsIdRoute
   '/app/price-change-requests/new': typeof AppPriceChangeRequestsNewRoute
+  '/app/production/partners': typeof AppProductionPartnersRoute
+  '/app/production/sales': typeof AppProductionSalesRoute
   '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
+  '/app/production': typeof AppProductionIndexRoute
   '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/kp/commissions/$statementId': typeof AppKpCommissionsStatementIdRoute
+  '/app/kp/dtc-calltronix/customers': typeof AppKpDtcCalltronixCustomersRoute
+  '/app/kp/dtc-calltronix/price-list': typeof AppKpDtcCalltronixPriceListRoute
+  '/app/kp/dtc-calltronix/quotes': typeof AppKpDtcCalltronixQuotesRoute
+  '/app/kp/dtc-calltronix/sales-orders': typeof AppKpDtcCalltronixSalesOrdersRoute
   '/app/kp/fol/$id': typeof AppKpFolIdRoute
   '/app/kp/fol/calendar': typeof AppKpFolCalendarRoute
   '/app/kp/fol/new': typeof AppKpFolNewRoute
+  '/app/kp/fol/settings': typeof AppKpFolSettingsRoute
   '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
   '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
   '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
@@ -363,15 +584,20 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/production': typeof ProductionRouteWithChildren
+  '/app/accounts': typeof AppAccountsRoute
   '/app/administration': typeof AppAdministrationRoute
+  '/app/adoption': typeof AppAdoptionRoute
   '/app/ai-insights': typeof AppAiInsightsRoute
   '/app/ai-intelligence': typeof AppAiIntelligenceRoute
   '/app/backorders': typeof AppBackordersRoute
   '/app/business-optimization': typeof AppBusinessOptimizationRoute
+  '/app/channel-classification': typeof AppChannelClassificationRoute
   '/app/credit-notes-more': typeof AppCreditNotesMoreRoute
   '/app/customer-feed': typeof AppCustomerFeedRoute
   '/app/customers': typeof AppCustomersRoute
   '/app/discrepancies': typeof AppDiscrepanciesRoute
+  '/app/downloads': typeof AppDownloadsRoute
   '/app/fill-rate': typeof AppFillRateRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/mailbox': typeof AppMailboxRoute
@@ -379,25 +605,47 @@ export interface FileRoutesById {
   '/app/order-match': typeof AppOrderMatchRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/price-change-requests': typeof AppPriceChangeRequestsRouteWithChildren
+  '/app/production': typeof AppProductionRouteWithChildren
+  '/app/products-not-delivered': typeof AppProductsNotDeliveredRoute
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/sales-consultants': typeof AppSalesConsultantsRouteWithChildren
+  '/app/sales-intelligence': typeof AppSalesIntelligenceRoute
   '/app/sales-management': typeof AppSalesManagementRoute
   '/app/so-imports': typeof AppSoImportsRoute
   '/app/team': typeof AppTeamRoute
   '/app/zones': typeof AppZonesRoute
+  '/production/partners': typeof ProductionPartnersRoute
+  '/production/sales': typeof ProductionSalesRoute
   '/app/': typeof AppIndexRoute
+  '/production/': typeof ProductionIndexRoute
+  '/app/customer-brands/$customerId': typeof AppCustomerBrandsCustomerIdRoute
   '/app/customer-orders/$customerId': typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  '/app/kp/calendar': typeof AppKpCalendarRoute
+  '/app/kp/commissions': typeof AppKpCommissionsRouteWithChildren
+  '/app/kp/contract-cleaners': typeof AppKpContractCleanersRoute
+  '/app/kp/dormant': typeof AppKpDormantRoute
   '/app/kp/fol': typeof AppKpFolRouteWithChildren
+  '/app/kp/items-not-ordered': typeof AppKpItemsNotOrderedRoute
+  '/app/kp/meetings': typeof AppKpMeetingsRoute
   '/app/orders-by-date/$date': typeof AppOrdersByDateDateRoute
   '/app/price-change-requests/$id': typeof AppPriceChangeRequestsIdRoute
   '/app/price-change-requests/new': typeof AppPriceChangeRequestsNewRoute
+  '/app/production/partners': typeof AppProductionPartnersRoute
+  '/app/production/sales': typeof AppProductionSalesRoute
   '/app/sales-consultants/$id': typeof AppSalesConsultantsIdRoute
+  '/app/production/': typeof AppProductionIndexRoute
   '/app/customer-orders/$customerId/suggested': typeof AppCustomerOrdersCustomerIdSuggestedRoute
+  '/app/kp/commissions/$statementId': typeof AppKpCommissionsStatementIdRoute
+  '/app/kp/dtc-calltronix/customers': typeof AppKpDtcCalltronixCustomersRoute
+  '/app/kp/dtc-calltronix/price-list': typeof AppKpDtcCalltronixPriceListRoute
+  '/app/kp/dtc-calltronix/quotes': typeof AppKpDtcCalltronixQuotesRoute
+  '/app/kp/dtc-calltronix/sales-orders': typeof AppKpDtcCalltronixSalesOrdersRoute
   '/app/kp/fol/$id': typeof AppKpFolIdRoute
   '/app/kp/fol/calendar': typeof AppKpFolCalendarRoute
   '/app/kp/fol/new': typeof AppKpFolNewRoute
+  '/app/kp/fol/settings': typeof AppKpFolSettingsRoute
   '/app/customer-orders/$customerId/branch/$branchId': typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteWithChildren
   '/app/customer-orders/$customerId/so/$orderId': typeof AppCustomerOrdersCustomerIdSoOrderIdRoute
   '/app/customer-orders/$customerId/branch/$branchId/suggested': typeof AppCustomerOrdersCustomerIdBranchBranchIdSuggestedRoute
@@ -409,15 +657,20 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
+    | '/production'
+    | '/app/accounts'
     | '/app/administration'
+    | '/app/adoption'
     | '/app/ai-insights'
     | '/app/ai-intelligence'
     | '/app/backorders'
     | '/app/business-optimization'
+    | '/app/channel-classification'
     | '/app/credit-notes-more'
     | '/app/customer-feed'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/downloads'
     | '/app/fill-rate'
     | '/app/inventory'
     | '/app/mailbox'
@@ -425,25 +678,47 @@ export interface FileRouteTypes {
     | '/app/order-match'
     | '/app/orders'
     | '/app/price-change-requests'
+    | '/app/production'
+    | '/app/products-not-delivered'
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/sales-consultants'
+    | '/app/sales-intelligence'
     | '/app/sales-management'
     | '/app/so-imports'
     | '/app/team'
     | '/app/zones'
+    | '/production/partners'
+    | '/production/sales'
     | '/app/'
+    | '/production/'
+    | '/app/customer-brands/$customerId'
     | '/app/customer-orders/$customerId'
+    | '/app/kp/calendar'
+    | '/app/kp/commissions'
+    | '/app/kp/contract-cleaners'
+    | '/app/kp/dormant'
     | '/app/kp/fol'
+    | '/app/kp/items-not-ordered'
+    | '/app/kp/meetings'
     | '/app/orders-by-date/$date'
     | '/app/price-change-requests/$id'
     | '/app/price-change-requests/new'
+    | '/app/production/partners'
+    | '/app/production/sales'
     | '/app/sales-consultants/$id'
+    | '/app/production/'
     | '/app/customer-orders/$customerId/suggested'
+    | '/app/kp/commissions/$statementId'
+    | '/app/kp/dtc-calltronix/customers'
+    | '/app/kp/dtc-calltronix/price-list'
+    | '/app/kp/dtc-calltronix/quotes'
+    | '/app/kp/dtc-calltronix/sales-orders'
     | '/app/kp/fol/$id'
     | '/app/kp/fol/calendar'
     | '/app/kp/fol/new'
+    | '/app/kp/fol/settings'
     | '/app/customer-orders/$customerId/branch/$branchId'
     | '/app/customer-orders/$customerId/so/$orderId'
     | '/app/customer-orders/$customerId/branch/$branchId/suggested'
@@ -452,15 +727,19 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/app/accounts'
     | '/app/administration'
+    | '/app/adoption'
     | '/app/ai-insights'
     | '/app/ai-intelligence'
     | '/app/backorders'
     | '/app/business-optimization'
+    | '/app/channel-classification'
     | '/app/credit-notes-more'
     | '/app/customer-feed'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/downloads'
     | '/app/fill-rate'
     | '/app/inventory'
     | '/app/mailbox'
@@ -468,25 +747,46 @@ export interface FileRouteTypes {
     | '/app/order-match'
     | '/app/orders'
     | '/app/price-change-requests'
+    | '/app/products-not-delivered'
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/sales-consultants'
+    | '/app/sales-intelligence'
     | '/app/sales-management'
     | '/app/so-imports'
     | '/app/team'
     | '/app/zones'
+    | '/production/partners'
+    | '/production/sales'
     | '/app'
+    | '/production'
+    | '/app/customer-brands/$customerId'
     | '/app/customer-orders/$customerId'
+    | '/app/kp/calendar'
+    | '/app/kp/commissions'
+    | '/app/kp/contract-cleaners'
+    | '/app/kp/dormant'
     | '/app/kp/fol'
+    | '/app/kp/items-not-ordered'
+    | '/app/kp/meetings'
     | '/app/orders-by-date/$date'
     | '/app/price-change-requests/$id'
     | '/app/price-change-requests/new'
+    | '/app/production/partners'
+    | '/app/production/sales'
     | '/app/sales-consultants/$id'
+    | '/app/production'
     | '/app/customer-orders/$customerId/suggested'
+    | '/app/kp/commissions/$statementId'
+    | '/app/kp/dtc-calltronix/customers'
+    | '/app/kp/dtc-calltronix/price-list'
+    | '/app/kp/dtc-calltronix/quotes'
+    | '/app/kp/dtc-calltronix/sales-orders'
     | '/app/kp/fol/$id'
     | '/app/kp/fol/calendar'
     | '/app/kp/fol/new'
+    | '/app/kp/fol/settings'
     | '/app/customer-orders/$customerId/branch/$branchId'
     | '/app/customer-orders/$customerId/so/$orderId'
     | '/app/customer-orders/$customerId/branch/$branchId/suggested'
@@ -496,15 +796,20 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
+    | '/production'
+    | '/app/accounts'
     | '/app/administration'
+    | '/app/adoption'
     | '/app/ai-insights'
     | '/app/ai-intelligence'
     | '/app/backorders'
     | '/app/business-optimization'
+    | '/app/channel-classification'
     | '/app/credit-notes-more'
     | '/app/customer-feed'
     | '/app/customers'
     | '/app/discrepancies'
+    | '/app/downloads'
     | '/app/fill-rate'
     | '/app/inventory'
     | '/app/mailbox'
@@ -512,25 +817,47 @@ export interface FileRouteTypes {
     | '/app/order-match'
     | '/app/orders'
     | '/app/price-change-requests'
+    | '/app/production'
+    | '/app/products-not-delivered'
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/sales-consultants'
+    | '/app/sales-intelligence'
     | '/app/sales-management'
     | '/app/so-imports'
     | '/app/team'
     | '/app/zones'
+    | '/production/partners'
+    | '/production/sales'
     | '/app/'
+    | '/production/'
+    | '/app/customer-brands/$customerId'
     | '/app/customer-orders/$customerId'
+    | '/app/kp/calendar'
+    | '/app/kp/commissions'
+    | '/app/kp/contract-cleaners'
+    | '/app/kp/dormant'
     | '/app/kp/fol'
+    | '/app/kp/items-not-ordered'
+    | '/app/kp/meetings'
     | '/app/orders-by-date/$date'
     | '/app/price-change-requests/$id'
     | '/app/price-change-requests/new'
+    | '/app/production/partners'
+    | '/app/production/sales'
     | '/app/sales-consultants/$id'
+    | '/app/production/'
     | '/app/customer-orders/$customerId/suggested'
+    | '/app/kp/commissions/$statementId'
+    | '/app/kp/dtc-calltronix/customers'
+    | '/app/kp/dtc-calltronix/price-list'
+    | '/app/kp/dtc-calltronix/quotes'
+    | '/app/kp/dtc-calltronix/sales-orders'
     | '/app/kp/fol/$id'
     | '/app/kp/fol/calendar'
     | '/app/kp/fol/new'
+    | '/app/kp/fol/settings'
     | '/app/customer-orders/$customerId/branch/$branchId'
     | '/app/customer-orders/$customerId/so/$orderId'
     | '/app/customer-orders/$customerId/branch/$branchId/suggested'
@@ -541,15 +868,16 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ProductionRoute: typeof ProductionRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -559,11 +887,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/production': {
+      id: '/production'
+      path: '/production'
+      fullPath: '/production'
+      preLoaderRoute: typeof ProductionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -573,165 +908,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/zones': {
-      id: '/app/zones'
-      path: '/zones'
-      fullPath: '/app/zones'
-      preLoaderRoute: typeof AppZonesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/team': {
-      id: '/app/team'
-      path: '/team'
-      fullPath: '/app/team'
-      preLoaderRoute: typeof AppTeamRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/so-imports': {
-      id: '/app/so-imports'
-      path: '/so-imports'
-      fullPath: '/app/so-imports'
-      preLoaderRoute: typeof AppSoImportsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/sales-management': {
-      id: '/app/sales-management'
-      path: '/sales-management'
-      fullPath: '/app/sales-management'
-      preLoaderRoute: typeof AppSalesManagementRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/sales-consultants': {
-      id: '/app/sales-consultants'
-      path: '/sales-consultants'
-      fullPath: '/app/sales-consultants'
-      preLoaderRoute: typeof AppSalesConsultantsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/roles': {
-      id: '/app/roles'
-      path: '/roles'
-      fullPath: '/app/roles'
-      preLoaderRoute: typeof AppRolesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/reports': {
-      id: '/app/reports'
-      path: '/reports'
-      fullPath: '/app/reports'
-      preLoaderRoute: typeof AppReportsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/profile': {
-      id: '/app/profile'
-      path: '/profile'
-      fullPath: '/app/profile'
-      preLoaderRoute: typeof AppProfileRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/price-change-requests': {
-      id: '/app/price-change-requests'
-      path: '/price-change-requests'
-      fullPath: '/app/price-change-requests'
-      preLoaderRoute: typeof AppPriceChangeRequestsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/orders': {
-      id: '/app/orders'
-      path: '/orders'
-      fullPath: '/app/orders'
-      preLoaderRoute: typeof AppOrdersRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/order-match': {
-      id: '/app/order-match'
-      path: '/order-match'
-      fullPath: '/app/order-match'
-      preLoaderRoute: typeof AppOrderMatchRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/notifications': {
-      id: '/app/notifications'
-      path: '/notifications'
-      fullPath: '/app/notifications'
-      preLoaderRoute: typeof AppNotificationsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/mailbox': {
-      id: '/app/mailbox'
-      path: '/mailbox'
-      fullPath: '/app/mailbox'
-      preLoaderRoute: typeof AppMailboxRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/inventory': {
-      id: '/app/inventory'
-      path: '/inventory'
-      fullPath: '/app/inventory'
-      preLoaderRoute: typeof AppInventoryRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/fill-rate': {
-      id: '/app/fill-rate'
-      path: '/fill-rate'
-      fullPath: '/app/fill-rate'
-      preLoaderRoute: typeof AppFillRateRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/discrepancies': {
-      id: '/app/discrepancies'
-      path: '/discrepancies'
-      fullPath: '/app/discrepancies'
-      preLoaderRoute: typeof AppDiscrepanciesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/customers': {
-      id: '/app/customers'
-      path: '/customers'
-      fullPath: '/app/customers'
-      preLoaderRoute: typeof AppCustomersRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/customer-feed': {
-      id: '/app/customer-feed'
-      path: '/customer-feed'
-      fullPath: '/app/customer-feed'
-      preLoaderRoute: typeof AppCustomerFeedRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/credit-notes-more': {
-      id: '/app/credit-notes-more'
-      path: '/credit-notes-more'
-      fullPath: '/app/credit-notes-more'
-      preLoaderRoute: typeof AppCreditNotesMoreRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/business-optimization': {
-      id: '/app/business-optimization'
-      path: '/business-optimization'
-      fullPath: '/app/business-optimization'
-      preLoaderRoute: typeof AppBusinessOptimizationRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/backorders': {
-      id: '/app/backorders'
-      path: '/backorders'
-      fullPath: '/app/backorders'
-      preLoaderRoute: typeof AppBackordersRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/ai-intelligence': {
-      id: '/app/ai-intelligence'
-      path: '/ai-intelligence'
-      fullPath: '/app/ai-intelligence'
-      preLoaderRoute: typeof AppAiIntelligenceRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/ai-insights': {
-      id: '/app/ai-insights'
-      path: '/ai-insights'
-      fullPath: '/app/ai-insights'
-      preLoaderRoute: typeof AppAiInsightsRouteImport
+    '/app/accounts': {
+      id: '/app/accounts'
+      path: '/accounts'
+      fullPath: '/app/accounts'
+      preLoaderRoute: typeof AppAccountsRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/administration': {
@@ -741,39 +922,235 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdministrationRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/sales-consultants/$id': {
-      id: '/app/sales-consultants/$id'
-      path: '/$id'
-      fullPath: '/app/sales-consultants/$id'
-      preLoaderRoute: typeof AppSalesConsultantsIdRouteImport
-      parentRoute: typeof AppSalesConsultantsRoute
-    }
-    '/app/price-change-requests/new': {
-      id: '/app/price-change-requests/new'
-      path: '/new'
-      fullPath: '/app/price-change-requests/new'
-      preLoaderRoute: typeof AppPriceChangeRequestsNewRouteImport
-      parentRoute: typeof AppPriceChangeRequestsRoute
-    }
-    '/app/price-change-requests/$id': {
-      id: '/app/price-change-requests/$id'
-      path: '/$id'
-      fullPath: '/app/price-change-requests/$id'
-      preLoaderRoute: typeof AppPriceChangeRequestsIdRouteImport
-      parentRoute: typeof AppPriceChangeRequestsRoute
-    }
-    '/app/orders-by-date/$date': {
-      id: '/app/orders-by-date/$date'
-      path: '/orders-by-date/$date'
-      fullPath: '/app/orders-by-date/$date'
-      preLoaderRoute: typeof AppOrdersByDateDateRouteImport
+    '/app/adoption': {
+      id: '/app/adoption'
+      path: '/adoption'
+      fullPath: '/app/adoption'
+      preLoaderRoute: typeof AppAdoptionRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/kp/fol': {
-      id: '/app/kp/fol'
-      path: '/kp/fol'
-      fullPath: '/app/kp/fol'
-      preLoaderRoute: typeof AppKpFolRouteImport
+    '/app/ai-insights': {
+      id: '/app/ai-insights'
+      path: '/ai-insights'
+      fullPath: '/app/ai-insights'
+      preLoaderRoute: typeof AppAiInsightsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/ai-intelligence': {
+      id: '/app/ai-intelligence'
+      path: '/ai-intelligence'
+      fullPath: '/app/ai-intelligence'
+      preLoaderRoute: typeof AppAiIntelligenceRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/backorders': {
+      id: '/app/backorders'
+      path: '/backorders'
+      fullPath: '/app/backorders'
+      preLoaderRoute: typeof AppBackordersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/business-optimization': {
+      id: '/app/business-optimization'
+      path: '/business-optimization'
+      fullPath: '/app/business-optimization'
+      preLoaderRoute: typeof AppBusinessOptimizationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/channel-classification': {
+      id: '/app/channel-classification'
+      path: '/channel-classification'
+      fullPath: '/app/channel-classification'
+      preLoaderRoute: typeof AppChannelClassificationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/credit-notes-more': {
+      id: '/app/credit-notes-more'
+      path: '/credit-notes-more'
+      fullPath: '/app/credit-notes-more'
+      preLoaderRoute: typeof AppCreditNotesMoreRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/customer-feed': {
+      id: '/app/customer-feed'
+      path: '/customer-feed'
+      fullPath: '/app/customer-feed'
+      preLoaderRoute: typeof AppCustomerFeedRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/customers': {
+      id: '/app/customers'
+      path: '/customers'
+      fullPath: '/app/customers'
+      preLoaderRoute: typeof AppCustomersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/discrepancies': {
+      id: '/app/discrepancies'
+      path: '/discrepancies'
+      fullPath: '/app/discrepancies'
+      preLoaderRoute: typeof AppDiscrepanciesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/downloads': {
+      id: '/app/downloads'
+      path: '/downloads'
+      fullPath: '/app/downloads'
+      preLoaderRoute: typeof AppDownloadsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/fill-rate': {
+      id: '/app/fill-rate'
+      path: '/fill-rate'
+      fullPath: '/app/fill-rate'
+      preLoaderRoute: typeof AppFillRateRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/inventory': {
+      id: '/app/inventory'
+      path: '/inventory'
+      fullPath: '/app/inventory'
+      preLoaderRoute: typeof AppInventoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/mailbox': {
+      id: '/app/mailbox'
+      path: '/mailbox'
+      fullPath: '/app/mailbox'
+      preLoaderRoute: typeof AppMailboxRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/notifications': {
+      id: '/app/notifications'
+      path: '/notifications'
+      fullPath: '/app/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/order-match': {
+      id: '/app/order-match'
+      path: '/order-match'
+      fullPath: '/app/order-match'
+      preLoaderRoute: typeof AppOrderMatchRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/orders': {
+      id: '/app/orders'
+      path: '/orders'
+      fullPath: '/app/orders'
+      preLoaderRoute: typeof AppOrdersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/price-change-requests': {
+      id: '/app/price-change-requests'
+      path: '/price-change-requests'
+      fullPath: '/app/price-change-requests'
+      preLoaderRoute: typeof AppPriceChangeRequestsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/production': {
+      id: '/app/production'
+      path: '/production'
+      fullPath: '/app/production'
+      preLoaderRoute: typeof AppProductionRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/products-not-delivered': {
+      id: '/app/products-not-delivered'
+      path: '/products-not-delivered'
+      fullPath: '/app/products-not-delivered'
+      preLoaderRoute: typeof AppProductsNotDeliveredRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/profile': {
+      id: '/app/profile'
+      path: '/profile'
+      fullPath: '/app/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/reports': {
+      id: '/app/reports'
+      path: '/reports'
+      fullPath: '/app/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/roles': {
+      id: '/app/roles'
+      path: '/roles'
+      fullPath: '/app/roles'
+      preLoaderRoute: typeof AppRolesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/sales-consultants': {
+      id: '/app/sales-consultants'
+      path: '/sales-consultants'
+      fullPath: '/app/sales-consultants'
+      preLoaderRoute: typeof AppSalesConsultantsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/sales-intelligence': {
+      id: '/app/sales-intelligence'
+      path: '/sales-intelligence'
+      fullPath: '/app/sales-intelligence'
+      preLoaderRoute: typeof AppSalesIntelligenceRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/sales-management': {
+      id: '/app/sales-management'
+      path: '/sales-management'
+      fullPath: '/app/sales-management'
+      preLoaderRoute: typeof AppSalesManagementRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/so-imports': {
+      id: '/app/so-imports'
+      path: '/so-imports'
+      fullPath: '/app/so-imports'
+      preLoaderRoute: typeof AppSoImportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/team': {
+      id: '/app/team'
+      path: '/team'
+      fullPath: '/app/team'
+      preLoaderRoute: typeof AppTeamRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/zones': {
+      id: '/app/zones'
+      path: '/zones'
+      fullPath: '/app/zones'
+      preLoaderRoute: typeof AppZonesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/production/': {
+      id: '/production/'
+      path: '/'
+      fullPath: '/production/'
+      preLoaderRoute: typeof ProductionIndexRouteImport
+      parentRoute: typeof ProductionRoute
+    }
+    '/production/partners': {
+      id: '/production/partners'
+      path: '/partners'
+      fullPath: '/production/partners'
+      preLoaderRoute: typeof ProductionPartnersRouteImport
+      parentRoute: typeof ProductionRoute
+    }
+    '/production/sales': {
+      id: '/production/sales'
+      path: '/sales'
+      fullPath: '/production/sales'
+      preLoaderRoute: typeof ProductionSalesRouteImport
+      parentRoute: typeof ProductionRoute
+    }
+    '/app/customer-brands/$customerId': {
+      id: '/app/customer-brands/$customerId'
+      path: '/customer-brands/$customerId'
+      fullPath: '/app/customer-brands/$customerId'
+      preLoaderRoute: typeof AppCustomerBrandsCustomerIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/customer-orders/$customerId': {
@@ -783,11 +1160,151 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCustomerOrdersCustomerIdRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/kp/fol/new': {
-      id: '/app/kp/fol/new'
+    '/app/kp/calendar': {
+      id: '/app/kp/calendar'
+      path: '/kp/calendar'
+      fullPath: '/app/kp/calendar'
+      preLoaderRoute: typeof AppKpCalendarRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/commissions': {
+      id: '/app/kp/commissions'
+      path: '/kp/commissions'
+      fullPath: '/app/kp/commissions'
+      preLoaderRoute: typeof AppKpCommissionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/contract-cleaners': {
+      id: '/app/kp/contract-cleaners'
+      path: '/kp/contract-cleaners'
+      fullPath: '/app/kp/contract-cleaners'
+      preLoaderRoute: typeof AppKpContractCleanersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/dormant': {
+      id: '/app/kp/dormant'
+      path: '/kp/dormant'
+      fullPath: '/app/kp/dormant'
+      preLoaderRoute: typeof AppKpDormantRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/fol': {
+      id: '/app/kp/fol'
+      path: '/kp/fol'
+      fullPath: '/app/kp/fol'
+      preLoaderRoute: typeof AppKpFolRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/items-not-ordered': {
+      id: '/app/kp/items-not-ordered'
+      path: '/kp/items-not-ordered'
+      fullPath: '/app/kp/items-not-ordered'
+      preLoaderRoute: typeof AppKpItemsNotOrderedRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/meetings': {
+      id: '/app/kp/meetings'
+      path: '/kp/meetings'
+      fullPath: '/app/kp/meetings'
+      preLoaderRoute: typeof AppKpMeetingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/orders-by-date/$date': {
+      id: '/app/orders-by-date/$date'
+      path: '/orders-by-date/$date'
+      fullPath: '/app/orders-by-date/$date'
+      preLoaderRoute: typeof AppOrdersByDateDateRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/price-change-requests/$id': {
+      id: '/app/price-change-requests/$id'
+      path: '/$id'
+      fullPath: '/app/price-change-requests/$id'
+      preLoaderRoute: typeof AppPriceChangeRequestsIdRouteImport
+      parentRoute: typeof AppPriceChangeRequestsRoute
+    }
+    '/app/price-change-requests/new': {
+      id: '/app/price-change-requests/new'
       path: '/new'
-      fullPath: '/app/kp/fol/new'
-      preLoaderRoute: typeof AppKpFolNewRouteImport
+      fullPath: '/app/price-change-requests/new'
+      preLoaderRoute: typeof AppPriceChangeRequestsNewRouteImport
+      parentRoute: typeof AppPriceChangeRequestsRoute
+    }
+    '/app/production/': {
+      id: '/app/production/'
+      path: '/'
+      fullPath: '/app/production/'
+      preLoaderRoute: typeof AppProductionIndexRouteImport
+      parentRoute: typeof AppProductionRoute
+    }
+    '/app/production/partners': {
+      id: '/app/production/partners'
+      path: '/partners'
+      fullPath: '/app/production/partners'
+      preLoaderRoute: typeof AppProductionPartnersRouteImport
+      parentRoute: typeof AppProductionRoute
+    }
+    '/app/production/sales': {
+      id: '/app/production/sales'
+      path: '/sales'
+      fullPath: '/app/production/sales'
+      preLoaderRoute: typeof AppProductionSalesRouteImport
+      parentRoute: typeof AppProductionRoute
+    }
+    '/app/sales-consultants/$id': {
+      id: '/app/sales-consultants/$id'
+      path: '/$id'
+      fullPath: '/app/sales-consultants/$id'
+      preLoaderRoute: typeof AppSalesConsultantsIdRouteImport
+      parentRoute: typeof AppSalesConsultantsRoute
+    }
+    '/app/customer-orders/$customerId/suggested': {
+      id: '/app/customer-orders/$customerId/suggested'
+      path: '/suggested'
+      fullPath: '/app/customer-orders/$customerId/suggested'
+      preLoaderRoute: typeof AppCustomerOrdersCustomerIdSuggestedRouteImport
+      parentRoute: typeof AppCustomerOrdersCustomerIdRoute
+    }
+    '/app/kp/commissions/$statementId': {
+      id: '/app/kp/commissions/$statementId'
+      path: '/$statementId'
+      fullPath: '/app/kp/commissions/$statementId'
+      preLoaderRoute: typeof AppKpCommissionsStatementIdRouteImport
+      parentRoute: typeof AppKpCommissionsRoute
+    }
+    '/app/kp/dtc-calltronix/customers': {
+      id: '/app/kp/dtc-calltronix/customers'
+      path: '/kp/dtc-calltronix/customers'
+      fullPath: '/app/kp/dtc-calltronix/customers'
+      preLoaderRoute: typeof AppKpDtcCalltronixCustomersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/dtc-calltronix/price-list': {
+      id: '/app/kp/dtc-calltronix/price-list'
+      path: '/kp/dtc-calltronix/price-list'
+      fullPath: '/app/kp/dtc-calltronix/price-list'
+      preLoaderRoute: typeof AppKpDtcCalltronixPriceListRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/dtc-calltronix/quotes': {
+      id: '/app/kp/dtc-calltronix/quotes'
+      path: '/kp/dtc-calltronix/quotes'
+      fullPath: '/app/kp/dtc-calltronix/quotes'
+      preLoaderRoute: typeof AppKpDtcCalltronixQuotesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/dtc-calltronix/sales-orders': {
+      id: '/app/kp/dtc-calltronix/sales-orders'
+      path: '/kp/dtc-calltronix/sales-orders'
+      fullPath: '/app/kp/dtc-calltronix/sales-orders'
+      preLoaderRoute: typeof AppKpDtcCalltronixSalesOrdersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kp/fol/$id': {
+      id: '/app/kp/fol/$id'
+      path: '/$id'
+      fullPath: '/app/kp/fol/$id'
+      preLoaderRoute: typeof AppKpFolIdRouteImport
       parentRoute: typeof AppKpFolRoute
     }
     '/app/kp/fol/calendar': {
@@ -797,18 +1314,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppKpFolCalendarRouteImport
       parentRoute: typeof AppKpFolRoute
     }
-    '/app/kp/fol/$id': {
-      id: '/app/kp/fol/$id'
-      path: '/$id'
-      fullPath: '/app/kp/fol/$id'
-      preLoaderRoute: typeof AppKpFolIdRouteImport
+    '/app/kp/fol/new': {
+      id: '/app/kp/fol/new'
+      path: '/new'
+      fullPath: '/app/kp/fol/new'
+      preLoaderRoute: typeof AppKpFolNewRouteImport
       parentRoute: typeof AppKpFolRoute
     }
-    '/app/customer-orders/$customerId/suggested': {
-      id: '/app/customer-orders/$customerId/suggested'
-      path: '/suggested'
-      fullPath: '/app/customer-orders/$customerId/suggested'
-      preLoaderRoute: typeof AppCustomerOrdersCustomerIdSuggestedRouteImport
+    '/app/kp/fol/settings': {
+      id: '/app/kp/fol/settings'
+      path: '/settings'
+      fullPath: '/app/kp/fol/settings'
+      preLoaderRoute: typeof AppKpFolSettingsRouteImport
+      parentRoute: typeof AppKpFolRoute
+    }
+    '/app/customer-orders/$customerId/branch/$branchId': {
+      id: '/app/customer-orders/$customerId/branch/$branchId'
+      path: '/branch/$branchId'
+      fullPath: '/app/customer-orders/$customerId/branch/$branchId'
+      preLoaderRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteImport
       parentRoute: typeof AppCustomerOrdersCustomerIdRoute
     }
     '/app/customer-orders/$customerId/so/$orderId': {
@@ -816,13 +1340,6 @@ declare module '@tanstack/react-router' {
       path: '/so/$orderId'
       fullPath: '/app/customer-orders/$customerId/so/$orderId'
       preLoaderRoute: typeof AppCustomerOrdersCustomerIdSoOrderIdRouteImport
-      parentRoute: typeof AppCustomerOrdersCustomerIdRoute
-    }
-    '/app/customer-orders/$customerId/branch/$branchId': {
-      id: '/app/customer-orders/$customerId/branch/$branchId'
-      path: '/branch/$branchId'
-      fullPath: '/app/customer-orders/$customerId/branch/$branchId'
-      preLoaderRoute: typeof AppCustomerOrdersCustomerIdBranchBranchIdRouteImport
       parentRoute: typeof AppCustomerOrdersCustomerIdRoute
     }
     '/app/customer-orders/$customerId/branch/$branchId/suggested': {
@@ -857,6 +1374,22 @@ const AppPriceChangeRequestsRouteWithChildren =
   AppPriceChangeRequestsRoute._addFileChildren(
     AppPriceChangeRequestsRouteChildren,
   )
+
+interface AppProductionRouteChildren {
+  AppProductionPartnersRoute: typeof AppProductionPartnersRoute
+  AppProductionSalesRoute: typeof AppProductionSalesRoute
+  AppProductionIndexRoute: typeof AppProductionIndexRoute
+}
+
+const AppProductionRouteChildren: AppProductionRouteChildren = {
+  AppProductionPartnersRoute: AppProductionPartnersRoute,
+  AppProductionSalesRoute: AppProductionSalesRoute,
+  AppProductionIndexRoute: AppProductionIndexRoute,
+}
+
+const AppProductionRouteWithChildren = AppProductionRoute._addFileChildren(
+  AppProductionRouteChildren,
+)
 
 interface AppSalesConsultantsRouteChildren {
   AppSalesConsultantsIdRoute: typeof AppSalesConsultantsIdRoute
@@ -908,16 +1441,29 @@ const AppCustomerOrdersCustomerIdRouteWithChildren =
     AppCustomerOrdersCustomerIdRouteChildren,
   )
 
+interface AppKpCommissionsRouteChildren {
+  AppKpCommissionsStatementIdRoute: typeof AppKpCommissionsStatementIdRoute
+}
+
+const AppKpCommissionsRouteChildren: AppKpCommissionsRouteChildren = {
+  AppKpCommissionsStatementIdRoute: AppKpCommissionsStatementIdRoute,
+}
+
+const AppKpCommissionsRouteWithChildren =
+  AppKpCommissionsRoute._addFileChildren(AppKpCommissionsRouteChildren)
+
 interface AppKpFolRouteChildren {
   AppKpFolIdRoute: typeof AppKpFolIdRoute
   AppKpFolCalendarRoute: typeof AppKpFolCalendarRoute
   AppKpFolNewRoute: typeof AppKpFolNewRoute
+  AppKpFolSettingsRoute: typeof AppKpFolSettingsRoute
 }
 
 const AppKpFolRouteChildren: AppKpFolRouteChildren = {
   AppKpFolIdRoute: AppKpFolIdRoute,
   AppKpFolCalendarRoute: AppKpFolCalendarRoute,
   AppKpFolNewRoute: AppKpFolNewRoute,
+  AppKpFolSettingsRoute: AppKpFolSettingsRoute,
 }
 
 const AppKpFolRouteWithChildren = AppKpFolRoute._addFileChildren(
@@ -925,15 +1471,19 @@ const AppKpFolRouteWithChildren = AppKpFolRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppAccountsRoute: typeof AppAccountsRoute
   AppAdministrationRoute: typeof AppAdministrationRoute
+  AppAdoptionRoute: typeof AppAdoptionRoute
   AppAiInsightsRoute: typeof AppAiInsightsRoute
   AppAiIntelligenceRoute: typeof AppAiIntelligenceRoute
   AppBackordersRoute: typeof AppBackordersRoute
   AppBusinessOptimizationRoute: typeof AppBusinessOptimizationRoute
+  AppChannelClassificationRoute: typeof AppChannelClassificationRoute
   AppCreditNotesMoreRoute: typeof AppCreditNotesMoreRoute
   AppCustomerFeedRoute: typeof AppCustomerFeedRoute
   AppCustomersRoute: typeof AppCustomersRoute
   AppDiscrepanciesRoute: typeof AppDiscrepanciesRoute
+  AppDownloadsRoute: typeof AppDownloadsRoute
   AppFillRateRoute: typeof AppFillRateRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppMailboxRoute: typeof AppMailboxRoute
@@ -941,30 +1491,48 @@ interface AppRouteChildren {
   AppOrderMatchRoute: typeof AppOrderMatchRoute
   AppOrdersRoute: typeof AppOrdersRoute
   AppPriceChangeRequestsRoute: typeof AppPriceChangeRequestsRouteWithChildren
+  AppProductionRoute: typeof AppProductionRouteWithChildren
+  AppProductsNotDeliveredRoute: typeof AppProductsNotDeliveredRoute
   AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
   AppRolesRoute: typeof AppRolesRoute
   AppSalesConsultantsRoute: typeof AppSalesConsultantsRouteWithChildren
+  AppSalesIntelligenceRoute: typeof AppSalesIntelligenceRoute
   AppSalesManagementRoute: typeof AppSalesManagementRoute
   AppSoImportsRoute: typeof AppSoImportsRoute
   AppTeamRoute: typeof AppTeamRoute
   AppZonesRoute: typeof AppZonesRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppCustomerBrandsCustomerIdRoute: typeof AppCustomerBrandsCustomerIdRoute
   AppCustomerOrdersCustomerIdRoute: typeof AppCustomerOrdersCustomerIdRouteWithChildren
+  AppKpCalendarRoute: typeof AppKpCalendarRoute
+  AppKpCommissionsRoute: typeof AppKpCommissionsRouteWithChildren
+  AppKpContractCleanersRoute: typeof AppKpContractCleanersRoute
+  AppKpDormantRoute: typeof AppKpDormantRoute
   AppKpFolRoute: typeof AppKpFolRouteWithChildren
+  AppKpItemsNotOrderedRoute: typeof AppKpItemsNotOrderedRoute
+  AppKpMeetingsRoute: typeof AppKpMeetingsRoute
   AppOrdersByDateDateRoute: typeof AppOrdersByDateDateRoute
+  AppKpDtcCalltronixCustomersRoute: typeof AppKpDtcCalltronixCustomersRoute
+  AppKpDtcCalltronixPriceListRoute: typeof AppKpDtcCalltronixPriceListRoute
+  AppKpDtcCalltronixQuotesRoute: typeof AppKpDtcCalltronixQuotesRoute
+  AppKpDtcCalltronixSalesOrdersRoute: typeof AppKpDtcCalltronixSalesOrdersRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAccountsRoute: AppAccountsRoute,
   AppAdministrationRoute: AppAdministrationRoute,
+  AppAdoptionRoute: AppAdoptionRoute,
   AppAiInsightsRoute: AppAiInsightsRoute,
   AppAiIntelligenceRoute: AppAiIntelligenceRoute,
   AppBackordersRoute: AppBackordersRoute,
   AppBusinessOptimizationRoute: AppBusinessOptimizationRoute,
+  AppChannelClassificationRoute: AppChannelClassificationRoute,
   AppCreditNotesMoreRoute: AppCreditNotesMoreRoute,
   AppCustomerFeedRoute: AppCustomerFeedRoute,
   AppCustomersRoute: AppCustomersRoute,
   AppDiscrepanciesRoute: AppDiscrepanciesRoute,
+  AppDownloadsRoute: AppDownloadsRoute,
   AppFillRateRoute: AppFillRateRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppMailboxRoute: AppMailboxRoute,
@@ -972,27 +1540,58 @@ const AppRouteChildren: AppRouteChildren = {
   AppOrderMatchRoute: AppOrderMatchRoute,
   AppOrdersRoute: AppOrdersRoute,
   AppPriceChangeRequestsRoute: AppPriceChangeRequestsRouteWithChildren,
+  AppProductionRoute: AppProductionRouteWithChildren,
+  AppProductsNotDeliveredRoute: AppProductsNotDeliveredRoute,
   AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,
   AppRolesRoute: AppRolesRoute,
   AppSalesConsultantsRoute: AppSalesConsultantsRouteWithChildren,
+  AppSalesIntelligenceRoute: AppSalesIntelligenceRoute,
   AppSalesManagementRoute: AppSalesManagementRoute,
   AppSoImportsRoute: AppSoImportsRoute,
   AppTeamRoute: AppTeamRoute,
   AppZonesRoute: AppZonesRoute,
   AppIndexRoute: AppIndexRoute,
+  AppCustomerBrandsCustomerIdRoute: AppCustomerBrandsCustomerIdRoute,
   AppCustomerOrdersCustomerIdRoute:
     AppCustomerOrdersCustomerIdRouteWithChildren,
+  AppKpCalendarRoute: AppKpCalendarRoute,
+  AppKpCommissionsRoute: AppKpCommissionsRouteWithChildren,
+  AppKpContractCleanersRoute: AppKpContractCleanersRoute,
+  AppKpDormantRoute: AppKpDormantRoute,
   AppKpFolRoute: AppKpFolRouteWithChildren,
+  AppKpItemsNotOrderedRoute: AppKpItemsNotOrderedRoute,
+  AppKpMeetingsRoute: AppKpMeetingsRoute,
   AppOrdersByDateDateRoute: AppOrdersByDateDateRoute,
+  AppKpDtcCalltronixCustomersRoute: AppKpDtcCalltronixCustomersRoute,
+  AppKpDtcCalltronixPriceListRoute: AppKpDtcCalltronixPriceListRoute,
+  AppKpDtcCalltronixQuotesRoute: AppKpDtcCalltronixQuotesRoute,
+  AppKpDtcCalltronixSalesOrdersRoute: AppKpDtcCalltronixSalesOrdersRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
+interface ProductionRouteChildren {
+  ProductionPartnersRoute: typeof ProductionPartnersRoute
+  ProductionSalesRoute: typeof ProductionSalesRoute
+  ProductionIndexRoute: typeof ProductionIndexRoute
+}
+
+const ProductionRouteChildren: ProductionRouteChildren = {
+  ProductionPartnersRoute: ProductionPartnersRoute,
+  ProductionSalesRoute: ProductionSalesRoute,
+  ProductionIndexRoute: ProductionIndexRoute,
+}
+
+const ProductionRouteWithChildren = ProductionRoute._addFileChildren(
+  ProductionRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  ProductionRoute: ProductionRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

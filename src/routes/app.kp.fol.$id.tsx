@@ -1,7 +1,9 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, Link2, RefreshCw, UserRoundCog, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Link2, Pencil, RefreshCw, UserRoundCog, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { AttachmentList } from "@/components/attachment-viewer";
+import { CustomerLink } from "@/components/entity-links";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +17,7 @@ import { useAuth } from "@/lib/auth";
 import { FOL_STATUS_CLASS, FOL_STATUS_LABEL, formatFolDate } from "@/lib/fol";
 
 export const Route = createFileRoute("/app/kp/fol/$id")({
-  head: () => ({ meta: [{ title: "KP FOL Request - Kim-Fay OrderWatch" }] }),
+  head: () => ({ meta: [{ title: "KP FOL Request - Kim-Fay Sight" }] }),
   component: FolDetailPage,
 });
 
@@ -38,6 +40,10 @@ function FolDetailPage() {
   const canApprove = permissions.includes("kp.fol.approve") && fol && ["submitted", "in_approval"].includes(fol.status);
   const canInvoice = permissions.includes("kp.fol.invoice") && fol && ["ready_for_invoicing", "so_linked", "invoiced", "fulfilled"].includes(fol.status);
   const canPoMatch = fol && ["ready_for_invoicing", "so_linked", "invoiced", "fulfilled"].includes(fol.status);
+  const canEditDraft =
+    !!fol &&
+    fol.status === "draft" &&
+    permissions.includes("kp.fol.request");
   const canAssignTechnician = permissions.includes("kp.fol.install.manage");
   const isAssignedTech =
     !!fol?.assigned_technician_user_id &&
@@ -53,9 +59,14 @@ function FolDetailPage() {
 
   async function decide(next: "approved" | "rejected") {
     try {
-      await decision.mutateAsync({ decision: next, comment });
+      const updated = await decision.mutateAsync({ decision: next, comment });
       setComment("");
-      toast.success(next === "approved" ? "Approval recorded." : "Rejection recorded.");
+      if (next === "approved") {
+        const so = updated?.so_number ?? updated?.acumatica_so_number ?? updated?.linked_so_order_nbrs?.[0];
+        toast.success(so ? `Approved. Sales Order ${so} attached to FOL.` : "Approval recorded.");
+      } else {
+        toast.success("Rejection recorded.");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to record decision.");
     }
@@ -117,12 +128,28 @@ function FolDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{fol.public_ref}</h1>
             <Badge variant="outline" className={FOL_STATUS_CLASS[fol.status]}>{FOL_STATUS_LABEL[fol.status]}</Badge>
+            {(fol.so_number || fol.acumatica_so_number || fol.linked_so_order_nbrs?.[0]) && (
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 font-mono text-emerald-800">
+                SO {fol.so_number ?? fol.acumatica_so_number ?? fol.linked_so_order_nbrs?.[0]}
+              </Badge>
+            )}
           </div>
-          <p className="text-sm text-muted-foreground">{fol.customer_name} · {fol.customer_acumatica_id}</p>
+          <p className="text-sm text-muted-foreground">
+            <CustomerLink customerId={fol.customer_acumatica_id} customerName={fol.customer_name} showId />
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => request.refetch()}>
-          <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {canEditDraft && (
+            <Button asChild size="sm">
+              <Link to="/app/kp/fol/new" search={{ draft: String(fol.id) }}>
+                <Pencil className="mr-1 h-3.5 w-3.5" /> Edit draft
+              </Link>
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => request.refetch()}>
+            <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -135,15 +162,57 @@ function FolDetailPage() {
               <Info label="Email" value={fol.requestor_email} />
               <Info label="Origin" value={fol.request_origin.replaceAll("_", " ")} />
               <Info label="Last purchase" value={fol.consumables_last_purchase_date ?? "-"} />
+              <Info label="3m sales" value={`KES ${Number(fol.consumables_sales_3m_kes ?? 0).toLocaleString()}`} />
+              <Info label="3m volume" value={Number(fol.consumables_volume_3m ?? 0).toLocaleString()} />
               <Info label="6m sales" value={`KES ${Number(fol.consumables_sales_6m_kes ?? 0).toLocaleString()}`} />
               <Info label="6m volume" value={Number(fol.consumables_volume_6m ?? 0).toLocaleString()} />
+              <Info label="Consumable SKUs" value={(fol.consumable_inventory_ids ?? []).join(", ") || "-"} />
               <Info label="Stage" value={fol.current_stage_key ?? "-"} />
               <Info label="Technician" value={fol.assigned_technician?.name ?? "-"} />
+              <Info
+                label="SO number"
+                value={fol.so_number ?? fol.acumatica_so_number ?? fol.linked_so_order_nbrs?.[0] ?? "-"}
+              />
+              <Info label="SO status" value={fol.so_status ?? fol.linked_so_status_summary ?? "-"} />
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <TextBlock label="Reason" value={fol.reason_text} />
               <TextBlock label="Debt explanation" value={fol.debt_explanation} />
             </div>
+            {(fol.consumable_inventory_ids ?? []).length > 0 && (
+              <div className="mt-4 overflow-x-auto rounded-md border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Supporting consumable</th>
+                      <th className="px-3 py-2 text-right">3m value</th>
+                      <th className="px-3 py-2 text-right">3m volume</th>
+                      <th className="px-3 py-2 text-right">6m value</th>
+                      <th className="px-3 py-2 text-right">6m volume</th>
+                      <th className="px-3 py-2 text-left">Last purchase</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {(fol.consumable_inventory_ids ?? []).map((inventoryId) => {
+                      const evidence = fol.consumables_evidence_json?.[inventoryId];
+                      return (
+                        <tr key={inventoryId}>
+                          <td className="px-3 py-2 font-mono font-medium">{inventoryId}</td>
+                          <td className="px-3 py-2 text-right">KES {Number(evidence?.value_3m ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">{Number(evidence?.qty_3m ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">KES {Number(evidence?.value ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">{Number(evidence?.qty ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-2">{evidence?.date ?? "No SO history"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <p className="border-t bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
+                  Acumatica customer and inventory IDs; snapshot {fol.consumables_metrics_as_of ?? "captured with request"}.
+                </p>
+              </div>
+            )}
           </section>
 
           <section className="overflow-x-auto rounded-lg border bg-card shadow-sm">
@@ -163,10 +232,12 @@ function FolDetailPage() {
           </section>
 
           <section className="rounded-lg border bg-card p-4 shadow-sm">
-            <h2 className="text-sm font-semibold">Attachments</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {fol.attachments.length === 0 && <span className="text-sm text-muted-foreground">No attachments.</span>}
-              {fol.attachments.map((file) => <Badge key={file.id} variant="outline">{file.original_name}</Badge>)}
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">Attachments</h2>
+              <p className="text-[11px] text-muted-foreground">Click to preview · image / PDF / Excel table</p>
+            </div>
+            <div className="mt-3">
+              <AttachmentList attachments={fol.attachments} />
             </div>
           </section>
         </main>
@@ -213,18 +284,28 @@ function FolDetailPage() {
             </section>
           )}
 
-          {(fol.so_links ?? []).length > 0 && (
-            <section className="rounded-lg border bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-semibold">Linked sales orders</h2>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {(fol.so_links ?? []).map((link) => (
-                  <Badge key={link.id} variant="outline" className="gap-1">
-                    {link.acumatica_order_nbr}
-                    <span className="text-muted-foreground">· {link.link_type.replaceAll("_", " ")}</span>
-                    {link.po_number && <span className="text-muted-foreground">· PO {link.po_number}</span>}
-                  </Badge>
-                ))}
+          {((fol.so_links ?? []).length > 0 || fol.so_number || (fol.linked_so_order_nbrs ?? []).length > 0) && (
+            <section className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
+              <h2 className="text-sm font-semibold text-emerald-900">Attached Sales Order</h2>
+              <div className="mt-2 font-mono text-lg font-semibold tracking-tight text-emerald-900">
+                {fol.so_number ?? fol.acumatica_so_number ?? fol.linked_so_order_nbrs?.[0] ?? "—"}
               </div>
+              {(fol.so_status || fol.linked_so_status_summary) && (
+                <p className="mt-1 text-xs text-emerald-800">
+                  Status: {fol.so_status ?? fol.linked_so_status_summary}
+                </p>
+              )}
+              {(fol.so_links ?? []).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {(fol.so_links ?? []).map((link) => (
+                    <Badge key={link.id} variant="outline" className="gap-1 border-emerald-200 bg-white">
+                      {link.acumatica_order_nbr}
+                      <span className="text-muted-foreground">· {link.link_type.replaceAll("_", " ")}</span>
+                      {link.po_number && <span className="text-muted-foreground">· PO {link.po_number}</span>}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 

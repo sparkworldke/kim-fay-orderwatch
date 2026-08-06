@@ -10,9 +10,10 @@ class AdminOrCustomerServiceManager
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $role = (string) ($request->user()?->role ?? '');
+        $user = $request->user();
+        $role = (string) ($user?->role ?? '');
 
-        if (! in_array($role, ['Administrator', 'Customer Service Manager'], true)) {
+        if (! $user?->is_super_admin && ! in_array($role, ['Administrator', 'Customer Service Manager'], true)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

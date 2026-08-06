@@ -3,6 +3,8 @@ import type { PcrStatus } from "@/hooks/usePriceChangeRequests";
 export const PCR_STATUS_LABEL: Record<PcrStatus, string> = {
   submitted: "Submitted",
   in_approval: "In approval",
+  countered: "Countered",
+  withdrawn: "Withdrawn",
   rejected: "Rejected",
   pending_erp_apply: "Pending ERP apply",
   applied_erp: "Applied in ERP",
@@ -11,6 +13,8 @@ export const PCR_STATUS_LABEL: Record<PcrStatus, string> = {
 export const PCR_STATUS_CLASS: Record<PcrStatus, string> = {
   submitted: "border-blue-200 bg-blue-50 text-blue-700",
   in_approval: "border-amber-200 bg-amber-50 text-amber-700",
+  countered: "border-orange-200 bg-orange-50 text-orange-700",
+  withdrawn: "border-slate-200 bg-slate-50 text-slate-600",
   rejected: "border-red-200 bg-red-50 text-red-700",
   pending_erp_apply: "border-violet-200 bg-violet-50 text-violet-700",
   applied_erp: "border-emerald-200 bg-emerald-50 text-emerald-700",

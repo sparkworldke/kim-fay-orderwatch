@@ -9,6 +9,8 @@ use App\Models\AcumaticaShippingZone;
 use App\Models\User;
 use App\Services\Admin\SalesOrderLineFulfillmentDeriver;
 use App\Services\Operations\OperationsCatalogResolver;
+use App\Services\Team\CustomerAttributionService;
+use App\Services\Team\AccessTierService;
 use App\Support\DataScope;
 use App\Support\SalesConsultantScope;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +25,112 @@ class DashboardController extends Controller
     ) {
     }
 
+    public function filterOptions(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $isSalesConsultant = app(AccessTierService::class)
+            ->isExclusivelySalesConsultant($user);
+
+        $visibleOrders = DataScope::applyOrderScope(
+            AcumaticaSalesOrder::query()->salesOrdersOnly(),
+            $user,
+        );
+        $this->applyLegacyConsultantFallback($visibleOrders, $user);
+
+        $repCodes = (clone $visibleOrders)
+            ->whereNotNull('sales_consultant_rep_code')
+            ->where('sales_consultant_rep_code', '!=', '')
+            ->distinct()
+            ->pluck('sales_consultant_rep_code')
+            ->map(fn ($code) => strtoupper(trim((string) $code)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $consultants = User::query()
+            ->where('is_active', true)
+            ->whereNotNull('rep_code')
+            ->whereIn(DB::raw('UPPER(rep_code)'), $repCodes->all())
+            ->orderBy('name')
+            ->get(['id', 'name', 'rep_code'])
+            ->map(fn (User $consultant) => [
+                'id' => $consultant->id,
+                'name' => $consultant->name,
+                'rep_code' => strtoupper(trim((string) $consultant->rep_code)),
+            ])
+            ->values();
+
+        // Distinct customers visible in scoped SO history (for multi-select filter).
+        // Prefer catalog name from acumatica_customers — SO.customer_name is often blank/ID-like.
+        $customerIds = (clone $visibleOrders)
+            ->whereNotNull('customer_acumatica_id')
+            ->where('customer_acumatica_id', '!=', '')
+            ->distinct()
+            ->orderBy('customer_acumatica_id')
+            ->limit(3000)
+            ->pluck('customer_acumatica_id')
+            ->map(fn ($id) => (string) $id)
+            ->values();
+
+        $orderNames = (clone $visibleOrders)
+            ->whereIn('customer_acumatica_id', $customerIds->all())
+            ->whereNotNull('customer_name')
+            ->where('customer_name', '!=', '')
+            ->selectRaw('customer_acumatica_id, MAX(TRIM(customer_name)) as name')
+            ->groupBy('customer_acumatica_id')
+            ->pluck('name', 'customer_acumatica_id');
+
+        $catalogNames = $this->catalogResolver->namesForCustomerIds($customerIds->all());
+
+        $customers = $customerIds
+            ->map(function (string $id) use ($catalogNames, $orderNames) {
+                $catalog = $catalogNames->get($id);
+                $fromCatalog = is_string($catalog) ? trim($catalog) : '';
+                $fromOrder = trim((string) ($orderNames->get($id) ?? ''));
+                // Never surface bare customer ID as the display label when a real name exists.
+                $name = $fromCatalog !== '' && ! $this->looksLikeCustomerId($fromCatalog)
+                    ? $fromCatalog
+                    : ($fromOrder !== '' && ! $this->looksLikeCustomerId($fromOrder)
+                        ? $fromOrder
+                        : ($fromCatalog !== '' ? $fromCatalog : ($fromOrder !== '' ? $fromOrder : $id)));
+
+                return [
+                    'id' => $id,
+                    'name' => $name,
+                ];
+            })
+            ->sortBy(fn (array $row) => mb_strtolower($row['name']), SORT_NATURAL)
+            ->values();
+
+        return response()->json([
+            'brands' => DB::table('acumatica_inventory_items')
+                ->whereNotNull('brand')
+                ->where('brand', '!=', '')
+                ->distinct()
+                ->orderBy('brand')
+                ->pluck('brand')
+                ->values(),
+            'segments' => [
+                ['id' => 'KP', 'name' => 'KP'],
+                ['id' => 'CS', 'name' => 'Consumer Sales'],
+            ],
+            'statuses' => [
+                'Open', 'Pending Approval', 'Shipping', 'Completed',
+                'Rejected', 'On Hold', 'Credit Hold',
+            ],
+            'customers' => $customers,
+            'consultants' => $isSalesConsultant
+                ? $consultants->where('id', $user->id)->values()
+                : $consultants,
+            'consultant_locked' => $isSalesConsultant,
+            'current_consultant' => $isSalesConsultant ? [
+                'id' => $user->id,
+                'name' => $user->name,
+                'rep_code' => strtoupper(trim((string) $user->rep_code)),
+            ] : null,
+        ]);
+    }
+
     /** Return status-broken-down KPI counts for the given date range (excludes Goods Lost in Transit). */
     public function kpis(Request $request): JsonResponse
     {
@@ -30,9 +138,9 @@ class DashboardController extends Controller
         $dateTo   = $request->input('date_to',   now()->toDateString());
         $user = $request->user();
 
-        $counts = $this->statusCounts($dateFrom, $dateTo, $user, excludeSpecialCustomers: true);
-        $allCounts = $this->statusCounts($dateFrom, $dateTo, $user, excludeSpecialCustomers: false);
-        $gltCounts = $this->statusCounts($dateFrom, $dateTo, $user, onlyGoodsLostInTransit: true);
+        $counts = $this->statusCounts($dateFrom, $dateTo, $user, $request, excludeSpecialCustomers: true);
+        $allCounts = $this->statusCounts($dateFrom, $dateTo, $user, $request, excludeSpecialCustomers: false);
+        $gltCounts = $this->statusCounts($dateFrom, $dateTo, $user, $request, onlyGoodsLostInTransit: true);
 
         return response()->json(array_merge($counts, [
             'date_from' => $dateFrom,
@@ -187,12 +295,12 @@ class DashboardController extends Controller
             return response()->json(['message' => 'Invalid status key.'], 422);
         }
 
-        $orders = $this->excludeSpecialCustomers(
+        $orders = $this->applyDashboardFilters($this->excludeSpecialCustomers(
             DataScope::applyOrderScope(
                 AcumaticaSalesOrder::query()->salesOrdersOnly(),
                 $request->user(),
             ),
-        )
+        ), $request, applyStatus: false)
             ->whereDate('order_date', '>=', $dateFrom)
             ->whereDate('order_date', '<=', $dateTo)
             ->whereIn('status', $statuses)
@@ -345,14 +453,14 @@ class DashboardController extends Controller
         $dateTo   = $request->input('date_to',   now()->toDateString());
         $compare  = $request->boolean('compare', false);
 
-        $current = $this->dailyTrend($dateFrom, $dateTo, null, $request->user());
+        $current = $this->dailyTrend($dateFrom, $dateTo, null, $request->user(), $request);
 
         $previous = null;
         if ($compare) {
             $days     = Carbon::parse($dateFrom)->diffInDays(Carbon::parse($dateTo)) + 1;
             $prevFrom = Carbon::parse($dateFrom)->subDays($days)->toDateString();
             $prevTo   = Carbon::parse($dateTo)->subDays($days)->toDateString();
-            $previous = $this->dailyTrend($prevFrom, $prevTo, $prevFrom, $request->user());
+            $previous = $this->dailyTrend($prevFrom, $prevTo, $prevFrom, $request->user(), $request);
         }
 
         return response()->json([
@@ -369,13 +477,14 @@ class DashboardController extends Controller
         string $dateFrom,
         string $dateTo,
         ?User $user,
+        Request $request,
         bool $excludeSpecialCustomers = true,
         bool $onlyGoodsLostInTransit = false,
     ): array {
-        $base = DataScope::applyOrderScope(
+        $base = $this->applyDashboardFilters(DataScope::applyOrderScope(
             AcumaticaSalesOrder::salesOrdersOnly(),
             $user,
-        )
+        ), $request)
             ->whereDate('order_date', '>=', $dateFrom)
             ->whereDate('order_date', '<=', $dateTo);
 
@@ -469,14 +578,18 @@ class DashboardController extends Controller
      * $labelOffset shifts the "label" day for comparison rows so the chart
      * can align current vs previous on the same x-axis position.
      */
-    private function dailyTrend(string $dateFrom, string $dateTo, ?string $labelOffset = null, ?User $user = null): array
+    private function dailyTrend(string $dateFrom, string $dateTo, ?string $labelOffset = null, ?User $user = null, ?Request $request = null): array
     {
-        $rows = $this->excludeSpecialCustomers(
+        $base = $this->excludeSpecialCustomers(
             DataScope::applyOrderScope(
                 AcumaticaSalesOrder::query()->salesOrdersOnly(),
                 $user,
             ),
-        )
+        );
+        if ($request !== null) {
+            $base = $this->applyDashboardFilters($base, $request);
+        }
+        $rows = $base
             ->selectRaw('DATE(order_date) as day, status, COUNT(*) as cnt')
             ->whereDate('order_date', '>=', $dateFrom)
             ->whereDate('order_date', '<=', $dateTo)
@@ -484,7 +597,7 @@ class DashboardController extends Controller
             ->orderByRaw('DATE(order_date)')
             ->get();
 
-        $fillRatesByDay = $this->fillRateQtyByDay($dateFrom, $dateTo, $user);
+        $fillRatesByDay = $this->fillRateQtyByDay($dateFrom, $dateTo, $user, $request);
 
         // Build a map keyed by day
         $byDay = [];
@@ -568,7 +681,7 @@ class DashboardController extends Controller
     /**
      * @return array<string, array{shipped: float, ordered: float}>
      */
-    private function fillRateQtyByDay(string $dateFrom, string $dateTo, ?User $user = null): array
+    private function fillRateQtyByDay(string $dateFrom, string $dateTo, ?User $user = null, ?Request $request = null): array
     {
         $query = DB::table('acumatica_fill_rate_snapshots as f')
             ->join('acumatica_sales_orders as o', 'f.sales_order_id', '=', 'o.id')
@@ -593,6 +706,10 @@ class DashboardController extends Controller
             $query->where('o.sales_consultant_rep_code', $repCode);
         }
 
+        if ($request !== null) {
+            $this->applyAliasedDashboardFilters($query, $request);
+        }
+
         $rows = $query
             ->selectRaw('DATE(o.order_date) as day')
             ->selectRaw('SUM(f.total_shipped_qty) as shipped')
@@ -609,5 +726,159 @@ class DashboardController extends Controller
         }
 
         return $byDay;
+    }
+
+    private function applyDashboardFilters($query, Request $request, bool $applyStatus = true)
+    {
+        $this->applyLegacyConsultantFallback($query, $request->user());
+
+        $this->applyCustomerFilter($query, $request, customerColumn: 'customer_acumatica_id', nameColumn: 'customer_name');
+
+        if ($applyStatus) {
+            $statuses = $this->multiFilterValues($request, 'status');
+            if ($statuses !== []) {
+                $query->whereIn('status', $statuses);
+            }
+        }
+
+        $segments = array_map('strtoupper', $this->multiFilterValues($request, 'segment'));
+        $hasKp = in_array('KP', $segments, true);
+        $hasCs = in_array('CS', $segments, true);
+        // KP and CS partition the catalog; selecting both (or neither) means no segment filter.
+        if ($hasKp && ! $hasCs) {
+            $query->whereHas('customer', fn ($q) => $q->whereRaw("UPPER(TRIM(COALESCE(customer_class, ''))) LIKE 'KP%'"));
+        } elseif ($hasCs && ! $hasKp) {
+            $query->whereHas('customer', fn ($q) => $q->whereRaw("UPPER(TRIM(COALESCE(customer_class, ''))) NOT LIKE 'KP%'"));
+        }
+
+        $brands = $this->multiFilterValues($request, 'brand');
+        if ($brands !== []) {
+            $query->whereExists(function ($subquery) use ($brands) {
+                $subquery->selectRaw('1')
+                    ->from('acumatica_sales_order_lines as dashboard_lines')
+                    ->join('acumatica_inventory_items as dashboard_items', 'dashboard_items.inventory_id', '=', 'dashboard_lines.inventory_id')
+                    ->whereColumn('dashboard_lines.sales_order_id', 'acumatica_sales_orders.id')
+                    ->whereIn('dashboard_items.brand', $brands);
+            });
+        }
+
+        $repCodes = array_map('strtoupper', $this->multiFilterValues($request, 'rep_code'));
+        if ($repCodes !== []) {
+            $query->whereIn('sales_consultant_rep_code', $repCodes);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Accept multi-select filters as comma-separated strings or arrays
+     * (status / status[] / statuses).
+     *
+     * @return list<string>
+     */
+    private function multiFilterValues(Request $request, string $key): array
+    {
+        $raw = $request->input($key);
+        if ($raw === null || $raw === '') {
+            $plural = $key.'s';
+            $raw = $request->input($plural);
+        }
+
+        if (is_array($raw)) {
+            $values = $raw;
+        } else {
+            $values = preg_split('/\s*,\s*/', trim((string) $raw), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            static fn ($value) => trim((string) $value),
+            $values,
+        ), static fn ($value) => $value !== '')));
+    }
+
+    /**
+     * Multi-select customer IDs (whereIn) or a single free-text needle (LIKE id/name).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    private function applyCustomerFilter($query, Request $request, string $customerColumn, string $nameColumn): void
+    {
+        $customers = $this->multiFilterValues($request, 'customer');
+        if ($customers === []) {
+            $customers = $this->multiFilterValues($request, 'customer_id');
+        }
+        if ($customers === []) {
+            return;
+        }
+
+        // Multi-select or explicit IDs → exact match on customer_acumatica_id.
+        if (count($customers) > 1 || $this->looksLikeCustomerId($customers[0])) {
+            $query->whereIn($customerColumn, $customers);
+
+            return;
+        }
+
+        // Single free-text search (legacy).
+        $needle = $customers[0];
+        $query->where(function ($q) use ($needle, $customerColumn, $nameColumn) {
+            $q->where($customerColumn, 'like', "%{$needle}%")
+                ->orWhere($nameColumn, 'like', "%{$needle}%");
+        });
+    }
+
+    private function looksLikeCustomerId(string $value): bool
+    {
+        $v = strtoupper(trim($value));
+
+        return (bool) preg_match('/^CUST\d+/i', $v)
+            || (bool) preg_match('/^[A-Z0-9]{4,}$/', $v);
+    }
+
+    private function applyLegacyConsultantFallback($query, ?User $user): void
+    {
+        if (! SalesConsultantScope::appliesTo($user)
+            || app(CustomerAttributionService::class)->isMappedOnlyConsultant($user)) {
+            return;
+        }
+
+        $repCode = SalesConsultantScope::repCode($user);
+        $repCode === null
+            ? $query->whereRaw('1 = 0')
+            : $query->where('sales_consultant_rep_code', $repCode);
+    }
+
+    private function applyAliasedDashboardFilters($query, Request $request): void
+    {
+        $this->applyCustomerFilter($query, $request, customerColumn: 'o.customer_acumatica_id', nameColumn: 'o.customer_name');
+
+        $statuses = $this->multiFilterValues($request, 'status');
+        if ($statuses !== []) {
+            $query->whereIn('o.status', $statuses);
+        }
+
+        $repCodes = array_map('strtoupper', $this->multiFilterValues($request, 'rep_code'));
+        if ($repCodes !== []) {
+            $query->whereIn('o.sales_consultant_rep_code', $repCodes);
+        }
+
+        $segments = array_map('strtoupper', $this->multiFilterValues($request, 'segment'));
+        $hasKp = in_array('KP', $segments, true);
+        $hasCs = in_array('CS', $segments, true);
+        if ($hasKp xor $hasCs) {
+            $query->join('acumatica_customers as dashboard_customer', 'dashboard_customer.acumatica_id', '=', 'o.customer_acumatica_id');
+            $operator = $hasKp ? 'LIKE' : 'NOT LIKE';
+            $query->whereRaw("UPPER(TRIM(COALESCE(dashboard_customer.customer_class, ''))) {$operator} 'KP%'");
+        }
+
+        $brands = $this->multiFilterValues($request, 'brand');
+        if ($brands !== []) {
+            $query->whereExists(function ($subquery) use ($brands) {
+                $subquery->selectRaw('1')
+                    ->from('acumatica_sales_order_lines as dashboard_lines')
+                    ->join('acumatica_inventory_items as dashboard_items', 'dashboard_items.inventory_id', '=', 'dashboard_lines.inventory_id')
+                    ->whereColumn('dashboard_lines.sales_order_id', 'o.id')
+                    ->whereIn('dashboard_items.brand', $brands);
+            });
+        }
     }
 }

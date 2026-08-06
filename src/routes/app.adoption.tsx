@@ -1,0 +1,10 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+
+export const Route=createFileRoute("/app/adoption")({component:Page,head:()=>({meta:[{title:"Training adoption"}]})});
+function Page(){const q=useQuery({queryKey:["adoption-report"],queryFn:()=>apiFetch<any>("admin/adoption-report")});if(q.isLoading)return <Skeleton className="h-64"/>;if(q.isError)return <p className="text-destructive">{q.error instanceof Error?q.error.message:"Report unavailable."}</p>;return <div className="space-y-5"><div><h1 className="text-2xl font-semibold">Training adoption</h1><p className="text-sm text-muted-foreground">Authoritative sign-in audit for trained users; shared mailboxes are excluded.</p></div><div className="grid gap-3 sm:grid-cols-3"><Metric label="Trained" value={q.data.summary.trained}/><Metric label="Signed in" value={q.data.summary.signed_in}/><Metric label="Not signed in" value={q.data.summary.not_signed_in}/></div><div className="overflow-x-auto rounded-md border"><table className="w-full text-sm"><thead><tr className="border-b bg-muted/40 text-left"><th className="p-3">User</th><th>Role</th><th>Trained</th><th>Last sign-in</th><th>Status</th></tr></thead><tbody>{q.data.data.map((u:any)=><tr key={u.id} className="border-b"><td className="p-3"><b>{u.name}</b><span className="block text-xs text-muted-foreground">{u.email}</span></td><td>{u.role}</td><td>{u.trained_at?new Date(u.trained_at).toLocaleDateString():"—"}</td><td>{u.last_signed_in_at?new Date(u.last_signed_in_at).toLocaleString():"Never"}</td><td><Badge variant={u.has_signed_in?"default":"destructive"}>{u.has_signed_in?"Signed in":"Pending"}</Badge></td></tr>)}</tbody></table></div></div>}
+function Metric({label,value}:{label:string;value:number}){return <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></CardContent></Card>}
