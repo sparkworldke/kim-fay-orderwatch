@@ -17,7 +17,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => env('DB_CONNECTION', 'mysql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -75,6 +75,23 @@ return [
             'collation' => 'utf8mb4_unicode_ci',
             'prefix' => '',
             'strict' => true,
+        ],
+
+        // Solutech BI is strictly read-only. Never use this connection for writes.
+        'sfa_remote' => [
+            'driver' => 'mysql',
+            'host' => env('SFA_DB_HOST', '127.0.0.1'),
+            'port' => env('SFA_DB_PORT', '1166'),
+            'database' => env('SFA_DB_DATABASE', ''),
+            'username' => env('SFA_DB_USERNAME', ''),
+            'password' => env('SFA_DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                Mysql::ATTR_SSL_CA => env('SFA_DB_SSL_CA'),
+            ]) : [],
         ],
 
         'mariadb' => [

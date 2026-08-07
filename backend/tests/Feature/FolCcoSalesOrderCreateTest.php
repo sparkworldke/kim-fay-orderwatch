@@ -82,12 +82,16 @@ class FolCcoSalesOrderCreateTest extends TestCase
         $client = Mockery::mock(AcumaticaClient::class);
         $client->shouldReceive('createSalesOrder')
             ->once()
-            ->withArgs(function (string $customerId, array $lines, ?string $customerOrder, ?string $description) {
+            ->withArgs(function (string $customerId, array $lines, ?string $customerOrder, ?string $description, string $orderType, bool $zeroPrice) {
                 return $customerId === 'CUST-FOL-1'
-                    && $customerOrder === 'FOL-2026-009001'
+                    && $customerOrder === null
+                    && $description === null
+                    && $orderType === 'SO'
+                    && $zeroPrice === false
                     && count($lines) === 1
                     && $lines[0]['inventory_id'] === 'FOLSKU001'
-                    && (float) $lines[0]['qty'] === 2.0;
+                    && (float) $lines[0]['qty'] === 2.0
+                    && array_keys($lines[0]) === ['inventory_id', 'qty'];
             })
             ->andReturn([
                 'order_nbr' => 'SO999001',
@@ -325,6 +329,77 @@ class FolCcoSalesOrderCreateTest extends TestCase
         $this->assertSame('in_approval', $updated->status);
         $this->assertSame('cco', $updated->current_stage_key);
         $this->assertDatabaseMissing('fol_so_links', ['fol_request_id' => $fol->id]);
+    }
+
+    public function test_invoicing_user_can_manually_create_and_link_sales_order(): void
+    {
+        config(['fol.create_so_on_final_approval' => false]);
+        $this->seedFolPermissionsAndStages();
+
+        $admin = User::factory()->create([
+            'role' => 'Administrator',
+            'is_super_admin' => true,
+            'is_active' => true,
+        ]);
+        $fol = FolRequest::query()->create([
+            'public_ref' => 'FOL-2026-009005',
+            'customer_acumatica_id' => 'CUST-FOL-5',
+            'customer_name' => 'KP Manual Hotel',
+            'sales_consultant_user_id' => $admin->id,
+            'request_origin' => 'sales_consultant_visit',
+            'requestor_first_name' => 'Manual',
+            'requestor_last_name' => 'Tester',
+            'requestor_phone' => '0700',
+            'requestor_email' => 'manual@test.local',
+            'issue_types' => ['new_dispenser'],
+            'reason_text' => 'Manually create the approved FOL sales order.',
+            'debt_explanation' => 'None',
+            'status' => 'ready_for_invoicing',
+            'current_stage_key' => 'done',
+            'decided_at' => now(),
+        ]);
+        FolRequestLine::query()->create([
+            'fol_request_id' => $fol->id,
+            'line_no' => 1,
+            'inventory_id' => 'FOLSKU005',
+            'product_description' => 'Manual unit',
+            'qty_requested' => 1,
+        ]);
+
+        $client = Mockery::mock(AcumaticaClient::class);
+        $client->shouldReceive('createSalesOrder')->once()->andReturn([
+            'order_nbr' => 'SO999005',
+            'order_id' => 'guid-manual',
+            'raw' => ['OrderNbr' => ['value' => 'SO999005'], 'Status' => ['value' => 'Open']],
+        ]);
+        $client->shouldReceive('fetchSalesOrdersByNumbers')->once()->with(['SO999005'])->andReturn([[
+            'OrderNbr' => ['value' => 'SO999005'],
+            'Status' => ['value' => 'Open'],
+        ]]);
+        $this->app->instance(AcumaticaClient::class, $client);
+        $this->app->instance(FolAcumaticaSalesOrderService::class, new FolAcumaticaSalesOrderService($client));
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/kp/fol/{$fol->id}/sales-order")
+            ->assertOk()
+            ->assertJsonPath('result.order_nbr', 'SO999005')
+            ->assertJsonPath('fol.so_number', 'SO999005');
+
+        $this->assertDatabaseHas('fol_so_links', [
+            'fol_request_id' => $fol->id,
+            'acumatica_order_nbr' => 'SO999005',
+            'link_type' => 'manual_create',
+        ]);
+        $this->assertDatabaseHas('fol_so_create_logs', [
+            'fol_request_id' => $fol->id,
+            'attempt_source' => 'manual_ui',
+            'status' => 'success',
+        ]);
+        $this->assertDatabaseHas('fol_request_events', [
+            'fol_request_id' => $fol->id,
+            'event_type' => 'so_created',
+            'actor_user_id' => $admin->id,
+        ]);
     }
 
     private function seedFolPermissionsAndStages(): void

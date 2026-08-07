@@ -27,6 +27,7 @@ import {
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useCommonProducts, useSuggestedOrders } from "@/hooks/useCustomers";
 import { useOrders, type OrderFilters } from "@/hooks/useOrders";
+import { usePagination } from "@/hooks/usePagination";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { AcumaticaCustomer } from "@/types/admin";
 import { useQuery } from "@tanstack/react-query";
@@ -39,7 +40,6 @@ export const Route = createFileRoute("/app/customer-orders/$customerId/branch/$b
 type SortOption = NonNullable<OrderFilters["sort"]>;
 
 const WHITESPOT_PAGE_SIZE = 8;
-const DOCUMENTS_PAGE_SIZE = 15;
 const COMMON_PRODUCTS_PAGE_SIZE = 20;
 
 /** Local (non-UTC) date string in YYYY-MM-DD, matching <input type="date">. */
@@ -74,7 +74,7 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
   const [dateFrom, setDateFrom] = useState(() => monthToDateRange().from);
   const [dateTo, setDateTo] = useState(() => monthToDateRange().to);
   const [sort, setSort] = useState<SortOption>("latest");
-  const [docsPage, setDocsPage] = useState(1);
+  const { page: docsPage, perPage: docsPerPage, setPage: setDocsPage, setPerPage: setDocsPerPage } = usePagination(20);
 
   const branch = useQuery({
     queryKey: ["customers", branchId],
@@ -89,7 +89,7 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
     page: docsPage,
-    per_page: DOCUMENTS_PAGE_SIZE,
+    per_page: docsPerPage,
   });
   const commonProducts = useCommonProducts(branchId);
   const suggestedOrders = useSuggestedOrders(branchId);
@@ -210,10 +210,9 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
                         currentPage={docsPage}
                         lastPage={docsLastPage}
                         total={docsTotal}
-                        perPage={DOCUMENTS_PAGE_SIZE}
+                        perPage={docsPerPage}
                         onPageChange={setDocsPage}
-                        onPerPageChange={() => {}}
-                        pageSizes={[DOCUMENTS_PAGE_SIZE]}
+                        onPerPageChange={setDocsPerPage}
                       />
                     </div>
                   </>

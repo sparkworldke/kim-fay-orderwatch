@@ -250,22 +250,22 @@ export const useDtcPriceImportJobs = () =>
       query.state.data?.data?.some((job) => ["queued", "running"].includes(job.status)) ? 3000 : false,
   });
 
-export const useDtcCustomers = (q = "") =>
+export const useDtcCustomers = (q = "", page = 1, per_page = 20) =>
   useQuery({
-    queryKey: ["dtc-customers", q],
-    queryFn: () => apiFetch<Page<DtcCustomer>>(`kp/dtc-calltronix/customers?${qs({ q })}`),
+    queryKey: ["dtc-customers", q, page, per_page],
+    queryFn: () => apiFetch<Page<DtcCustomer>>(`kp/dtc-calltronix/customers?${qs({ q, page, per_page })}`),
   });
 
-export const useDtcQuotes = (q = "", status = "") =>
+export const useDtcQuotes = (q = "", status = "", page = 1, per_page = 20) =>
   useQuery({
-    queryKey: ["dtc-quotes", q, status],
-    queryFn: () => apiFetch<Page<DtcQuote>>(`kp/dtc-calltronix/quotes?${qs({ q, status })}`),
+    queryKey: ["dtc-quotes", q, status, page, per_page],
+    queryFn: () => apiFetch<Page<DtcQuote>>(`kp/dtc-calltronix/quotes?${qs({ q, status, page, per_page })}`),
   });
 
-export const useDtcSalesOrders = (q = "") =>
+export const useDtcSalesOrders = (q = "", page = 1, per_page = 20) =>
   useQuery({
-    queryKey: ["dtc-sales-orders", q],
-    queryFn: () => apiFetch<Page<DtcSalesOrder>>(`kp/dtc-calltronix/sales-orders?${qs({ q })}`),
+    queryKey: ["dtc-sales-orders", q, page, per_page],
+    queryFn: () => apiFetch<Page<DtcSalesOrder>>(`kp/dtc-calltronix/sales-orders?${qs({ q, page, per_page })}`),
   });
 
 export function useDtcActions() {

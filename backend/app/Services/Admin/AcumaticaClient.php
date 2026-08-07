@@ -391,14 +391,21 @@ class AcumaticaClient
         string $orderType = 'SO',
         bool $zeroPrice = true,
         ?array $shipTo = null,
+        string $entity = 'SalesOrder',
     ): array {
+        // Required payload: CustomerID + Details[].InventoryID + Details[].OrderQty.
+        $customerId = strtoupper(trim($customerId));
+        if ($customerId === '') {
+            throw new RuntimeException('Cannot create sales order without Customer ID.');
+        }
+
         if ($lines === []) {
             throw new RuntimeException('Cannot create sales order without line items.');
         }
 
         $details = [];
         foreach ($lines as $line) {
-            $inventoryId = trim((string) ($line['inventory_id'] ?? ''));
+            $inventoryId = strtoupper(trim((string) ($line['inventory_id'] ?? '')));
             $qty = (float) ($line['qty'] ?? 0);
             if ($inventoryId === '' || $qty <= 0) {
                 continue;
@@ -423,16 +430,28 @@ class AcumaticaClient
         }
 
         if ($details === []) {
-            throw new RuntimeException('Cannot create sales order: no valid line items.');
+            throw new RuntimeException(
+                'Cannot create sales order: no valid lines (each needs Inventory ID and quantity > 0).',
+            );
         }
 
         // IpayV2 SalesOrder uses Details + OrderQty (DocumentDetails is invalid on this entity).
         // WC iPay plugin used PosOrder + DocumentDetails + Quantity for e‑commerce — different entity.
         $payload = [
-            'OrderType' => ['value' => $orderType],
             'CustomerID' => ['value' => $customerId],
             'Details' => $details,
         ];
+        if ($entity === 'SalesOrder') {
+            // IpayV2 22.200.001 requires the explicit <NEW> key to commit an
+            // auto-numbered document. Without it the graph can return a
+            // transient GUID/<NEW> response without a persisted SO.
+            $payload = [
+                'OrderType' => ['value' => $orderType],
+                'OrderNbr' => ['value' => '<NEW>'],
+                'Date' => ['value' => now('Africa/Nairobi')->toDateString()],
+                ...$payload,
+            ];
+        }
 
         if ($customerOrder !== null && $customerOrder !== '') {
             $payload['CustomerOrder'] = ['value' => $customerOrder];
@@ -445,13 +464,49 @@ class AcumaticaClient
             $payload = [...$payload, ...$this->shipToOverridePayload($shipTo)];
         }
 
-        $response = $this->put('SalesOrder', $payload, [
-            '$expand' => 'Details',
+        // Standard contract endpoint is SalesOrder. The optional entity
+        // argument is retained only for integrations that expose another
+        // compatible contract entity.
+        $response = $this->put($entity, $payload, $entity === 'SalesOrder'
+            ? ['$expand' => 'Details']
+            : []);
+
+        Log::info('Acumatica sales order create response', [
+            'entity' => $entity,
+            'id' => isset($response['id']) ? (string) $response['id'] : null,
+            'order_nbr' => self::scalarVal($response['OrderNbr'] ?? null),
+            'order_type' => self::scalarVal($response['OrderType'] ?? null),
+            'status' => self::scalarVal($response['Status'] ?? null),
         ]);
 
         $orderNbr = self::scalarVal($response['OrderNbr'] ?? null);
-        if ($orderNbr === null || $orderNbr === '') {
-            throw new RuntimeException('Acumatica created a sales order but OrderNbr was missing: '.json_encode($response));
+        if (($orderNbr === null || $orderNbr === '' || preg_match('/^<?NEW>?$/i', trim($orderNbr))) && ! empty($response['id'])) {
+            // The contract route is keyed by OrderType/OrderNbr, and IpayV2
+            // does not expose the system `id` as an OData-filterable field.
+            // Query the supported customer/date fields, then match the GUID
+            // client-side to obtain the auto-generated OrderNbr.
+            $createdId = (string) $response['id'];
+            $businessDate = now('Africa/Nairobi')->toDateString();
+            $candidates = $this->fetchSalesOrdersForCustomerByDateRange(
+                $customerId,
+                $businessDate,
+                $businessDate,
+                0,
+                self::PAGE_SIZE,
+            );
+            $saved = collect($candidates)->first(
+                fn ($candidate) => is_array($candidate)
+                    && isset($candidate['id'])
+                    && strcasecmp((string) $candidate['id'], $createdId) === 0,
+            ) ?? [];
+            $savedOrderNbr = self::scalarVal($saved['OrderNbr'] ?? null);
+            if ($savedOrderNbr !== null && $savedOrderNbr !== '' && ! preg_match('/^<?NEW>?$/i', trim($savedOrderNbr))) {
+                $response = $saved;
+                $orderNbr = $savedOrderNbr;
+            }
+        }
+        if ($orderNbr === null || $orderNbr === '' || preg_match('/^<?NEW>?$/i', trim($orderNbr))) {
+            throw new RuntimeException('Acumatica did not return its auto-generated SO number: '.json_encode($response));
         }
 
         return [

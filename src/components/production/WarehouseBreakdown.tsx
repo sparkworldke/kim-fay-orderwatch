@@ -2,6 +2,8 @@ import { Warehouse } from "lucide-react";
 import { Panel } from "./Panel";
 import { formatNumber, formatShare } from "@/utils/Stock/format";
 import type { WarehouseStock } from "@/types/Stock/inventory";
+import { isMsaWarehouse, isPrimaryFgsWarehouse } from "@/utils/Stock/transferRecommendation";
+import { cn } from "@/lib/utils";
 
 /** Prefer available; when ERP omits available, use on-hand so the breakdown still totals correctly. */
 function resolvedAvailable(stock: WarehouseStock): number {
@@ -38,9 +40,12 @@ export function WarehouseBreakdown({
           const available = resolvedAvailable(w);
           const share = shareBase > 0 ? (onHand / shareBase) * 100 : 0;
           return (
-            <li key={w.warehouseId} className="space-y-1 px-3 py-2">
+            <li key={w.warehouseId} className={cn("space-y-1 px-3 py-2", isPrimaryFgsWarehouse(w.warehouseId, w.warehouseName) && "bg-blue-50 dark:bg-blue-950/30")}>
               <div className="min-w-0">
-                <p className="truncate text-[9px] font-bold text-navy">{w.warehouseName}</p>
+                <p className="truncate text-[9px] font-bold text-navy">
+                  {w.warehouseName}
+                  {isPrimaryFgsWarehouse(w.warehouseId, w.warehouseName) ? " · Default" : isMsaWarehouse(w.warehouseId, w.warehouseName) ? " · View only" : ""}
+                </p>
               </div>
               <div className="grid grid-cols-3 gap-2 text-[9px] text-muted-foreground">
                 <span>
@@ -91,9 +96,12 @@ export function WarehouseBreakdown({
               return (
                 <tr
                   key={w.warehouseId}
-                  className="border-b border-border/60 last:border-0 hover:bg-secondary/60"
+                  className={cn("border-b border-border/60 last:border-0 hover:bg-secondary/60", isPrimaryFgsWarehouse(w.warehouseId, w.warehouseName) && "bg-blue-50 dark:bg-blue-950/30")}
                 >
-                  <td className="px-3 py-1.5 font-bold text-foreground">{w.warehouseName}</td>
+                  <td className="px-3 py-1.5 font-bold text-foreground">
+                    {w.warehouseName}
+                    {isPrimaryFgsWarehouse(w.warehouseId, w.warehouseName) ? " · Default" : isMsaWarehouse(w.warehouseId, w.warehouseName) ? " · View only" : ""}
+                  </td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{formatNumber(onHand)}</td>
                   <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-primary">
                     {formatNumber(available)}
@@ -135,6 +143,11 @@ export function WarehouseBreakdown({
       {stocks.some((w) => w.qtyAvailableMissing) ? (
         <p className="border-t border-border px-3 py-1.5 text-[8px] text-muted-foreground">
           * Qty Available falls back to Qty on Hand when Acumatica does not return available for that warehouse.
+        </p>
+      ) : null}
+      {stocks.some((w) => isMsaWarehouse(w.warehouseId, w.warehouseName)) ? (
+        <p className="border-t border-border px-3 py-1.5 text-[8px] text-muted-foreground">
+          MSA quantities are included for visibility but cannot be used for transfers into FGS.
         </p>
       ) : null}
       <div className="grid grid-cols-3 gap-2 border-t border-border bg-brand-soft/60 px-3 py-2 text-[9px] font-bold text-primary md:hidden">

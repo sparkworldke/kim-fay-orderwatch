@@ -97,7 +97,7 @@ export function KpAccountsTable({
 
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(hideHeader ? 10 : 25);
+  const [perPage, setPerPage] = useState(hideHeader ? 10 : 20);
   const [contactsAccount, setContactsAccount] = useState<KpAccount | null>(null);
 
   const list = useKpAccounts({

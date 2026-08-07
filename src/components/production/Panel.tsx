@@ -42,9 +42,9 @@ export function Panel({
         <div className="flex min-w-0 items-center gap-2">
           {Icon ? <Icon className="size-4 shrink-0 text-primary" /> : null}
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-bold text-navy sm:text-base">{title}</h2>
+            <h2 className="truncate text-[12px] font-bold text-navy">{title}</h2>
             {subtitle ? (
-              <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
+              <p className="truncate text-[9px] text-muted-foreground">{subtitle}</p>
             ) : null}
           </div>
         </div>
@@ -53,7 +53,7 @@ export function Panel({
       <div
         className={cn(
           compact ? "p-2.5 sm:p-3" : "p-3 sm:p-4",
-          fill && "lg:min-h-0 lg:flex-1 lg:overflow-auto",
+          fill && "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden",
           bodyClassName,
         )}
       >

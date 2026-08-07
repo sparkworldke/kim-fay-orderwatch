@@ -46,6 +46,8 @@ interface DataTableProps<T> {
   renderMobileCard: (row: T) => ReactNode;
   toolbar?: ReactNode;
   initialColumnVisibility?: VisibilityState;
+  /** Fill the parent panel and keep desktop rows internally scrollable. */
+  fill?: boolean;
   /** Preview a row's details by hovering it (desktop only). */
   selectOnHover?: boolean;
 }
@@ -66,6 +68,7 @@ export function DataTable<T>({
   renderMobileCard,
   toolbar,
   initialColumnVisibility = {},
+  fill = false,
   selectOnHover = true,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([
@@ -101,7 +104,7 @@ export function DataTable<T>({
     : 0;
 
   return (
-    <div className="flex min-w-0 flex-col">
+    <div className={cn("flex min-w-0 flex-col", fill && "lg:min-h-0 lg:flex-1")}>
       <div className="grid gap-2 border-b border-border p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-3">
         <div className="relative min-w-0 sm:max-w-xs">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -193,7 +196,9 @@ export function DataTable<T>({
             ref={desktopScrollRef}
             className={cn(
               "hidden overflow-auto overscroll-contain md:block",
-              density === "compact" ? "h-[152px]" : "h-[218px]",
+              fill
+                ? "h-[360px] lg:h-auto lg:min-h-0 lg:flex-1"
+                : density === "compact" ? "h-[152px]" : "h-[218px]",
             )}
           >
             <table className="ui-dense w-full table-fixed">

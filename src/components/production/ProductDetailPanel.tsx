@@ -15,9 +15,9 @@ import { WarehouseBreakdown } from "./WarehouseBreakdown";
 function Field({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="min-w-0 rounded-md bg-secondary/70 px-2 py-1.5">
-      <p className="text-[11px] leading-tight text-muted-foreground">{label}</p>
-      <p className="text-sm font-semibold text-navy tabular-nums">{value}</p>
-      {detail ? <p className="text-[10px] text-muted-foreground tabular-nums">{detail}</p> : null}
+      <p className="text-[9px] leading-tight text-muted-foreground">{label}</p>
+      <p className="text-[9px] font-semibold text-navy tabular-nums">{value}</p>
+      {detail ? <p className="text-[9px] text-muted-foreground tabular-nums">{detail}</p> : null}
     </div>
   );
 }
@@ -118,13 +118,13 @@ export function ProductDetailBody({
           <Field label="Monthly Average" value={Number.isFinite(yearAverage) ? formatNumber(Math.round(yearAverage)) : "—"} />
           <Field label="Change (First → Latest)" value={Number.isFinite(change) ? formatPercent(change) : "—"} />
           <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5">
-            <p className="text-[11px] leading-tight text-red-700">YTD Missed Opportunity Volume</p>
-            <p className="text-sm font-semibold text-red-700 tabular-nums">{formatNumber(missedVolume)}</p>
+            <p className="text-[9px] leading-tight text-red-700">YTD Missed Opportunity Volume</p>
+            <p className="text-[9px] font-semibold text-red-700 tabular-nums">{formatNumber(missedVolume)}</p>
           </div>
           <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5">
-            <p className="text-[11px] leading-tight text-red-700">YTD Missed Opportunity Revenue</p>
-            <p className="text-sm font-semibold text-red-700 tabular-nums">{formattedRevenue}</p>
-            {!revenueComplete && revenueMonths.length ? <p className="text-[10px] text-red-600">Partial pricing</p> : null}
+            <p className="text-[9px] leading-tight text-red-700">YTD Missed Opportunity Revenue</p>
+            <p className="text-[9px] font-semibold text-red-700 tabular-nums">{formattedRevenue}</p>
+            {!revenueComplete && revenueMonths.length ? <p className="text-[9px] text-red-600">Partial pricing</p> : null}
           </div>
         </div>
       </Panel>

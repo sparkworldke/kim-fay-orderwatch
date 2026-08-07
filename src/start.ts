@@ -26,7 +26,7 @@ const authMiddleware = createMiddleware().server(async ({ request, next }) => {
 
   const token = readCookie(request.headers.get("cookie"), "kf_token");
   if (!token) {
-    return Response.redirect(new URL("/auth", url), 302);
+    return redirectToLogin(url);
   }
 
   const apiBase = getServerApiBaseUrl();
@@ -38,31 +38,30 @@ const authMiddleware = createMiddleware().server(async ({ request, next }) => {
     });
 
     if (response.status === 401 || response.status === 403) {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          Location: new URL("/auth", url).toString(),
-          "Set-Cookie": "kf_token=; Path=/; Max-Age=0; SameSite=Lax",
-        },
-      });
+      return redirectToLogin(url);
     }
 
     if (!response.ok) {
-      return new Response("Authentication service is temporarily unavailable.", {
-        status: 503,
-        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
-      });
+      return redirectToLogin(url);
     }
   } catch (error) {
     console.error("Session validation failed", error);
-    return new Response("Authentication service is temporarily unavailable.", {
-      status: 503,
-      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
-    });
+    return redirectToLogin(url);
   }
 
   return next();
 });
+
+function redirectToLogin(currentUrl: URL): Response {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: new URL("/auth", currentUrl).toString(),
+      "Set-Cookie": "kf_token=; Path=/; Max-Age=0; SameSite=Lax",
+      "Cache-Control": "no-store",
+    },
+  });
+}
 
 function readCookie(header: string | null, name: string): string | null {
   if (!header) return null;

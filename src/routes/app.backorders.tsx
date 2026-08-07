@@ -257,6 +257,42 @@ type InventoryBackorderGroup = {
   lines: BackorderLine[];
 };
 
+type CustomerBackorderGroup = {
+  id: string;
+  name: string;
+  branches: Array<{ id: string; name: string; lines: BackorderLine[]; revenue: number; orders: number }>;
+  revenue: number;
+  orders: number;
+};
+
+function groupBackordersByCustomer(lines: BackorderLine[]): CustomerBackorderGroup[] {
+  const parents = new Map<string, CustomerBackorderGroup>();
+  for (const line of lines) {
+    const parentId = line.parent_customer_id || line.customer_acumatica_id || "UNASSIGNED";
+    let parent = parents.get(parentId);
+    if (!parent) {
+      parent = { id: parentId, name: line.parent_customer_name || line.customer_name || parentId, branches: [], revenue: 0, orders: 0 };
+      parents.set(parentId, parent);
+    }
+    const branchId = line.customer_acumatica_id || "UNASSIGNED";
+    let branch = parent.branches.find((item) => item.id === branchId);
+    if (!branch) {
+      branch = { id: branchId, name: line.customer_name || branchId, lines: [], revenue: 0, orders: 0 };
+      parent.branches.push(branch);
+    }
+    const revenue = Number(line.revenue_at_risk) || 0;
+    branch.lines.push(line);
+    branch.revenue += revenue;
+    parent.revenue += revenue;
+  }
+  for (const parent of parents.values()) {
+    parent.branches.sort((a, b) => b.revenue - a.revenue);
+    for (const branch of parent.branches) branch.orders = new Set(branch.lines.map((line) => line.order_nbr)).size;
+    parent.orders = new Set(parent.branches.flatMap((branch) => branch.lines.map((line) => line.order_nbr))).size;
+  }
+  return [...parents.values()].sort((a, b) => b.revenue - a.revenue);
+}
+
 function groupBackordersByInventory(lines: BackorderLine[]): InventoryBackorderGroup[] {
   const groups = new Map<string, InventoryBackorderGroup>();
 
@@ -308,7 +344,7 @@ function groupBackordersByInventory(lines: BackorderLine[]): InventoryBackorderG
   return Array.from(groups.values()).sort((a, b) => b.totalRevenueAtRisk - a.totalRevenueAtRisk);
 }
 
-const GROUPS_PAGE_SIZE_OPTIONS = [25, 50, 100];
+const GROUPS_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 function BackordersPage() {
   const kes = useMaskedKESFormatter();
@@ -338,10 +374,12 @@ function BackordersPage() {
   const [view, setView] = useState<"active" | "resolved">("active");
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [coverageFilter, setCoverageFilter] = useState<"all" | Coverage>("all");
+  const [groupingMode, setGroupingMode] = useState<"sku" | "customer">("sku");
+  const [skuSort, setSkuSort] = useState<"value" | "volume">("value");
 
   // Fetch a large page so client-side InventoryID grouping is complete for the filter set.
   const [groupPage, setGroupPage] = useState(1);
-  const [groupsPerPage, setGroupsPerPage] = useState(25);
+  const [groupsPerPage, setGroupsPerPage] = useState(20);
   /** Accordion values expanded (auto-open when search matches a few SKUs). */
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
@@ -648,7 +686,11 @@ function BackordersPage() {
     }
   }, [searchActive, allGroups]);
 
-  const coverageGroups = useMemo(() => coverageFilter === "all" ? allGroups : allGroups.filter((group) => coverageForLines(group.lines) === coverageFilter), [allGroups, coverageFilter]);
+  const coverageGroups = useMemo(() => {
+    const filtered = coverageFilter === "all" ? allGroups : allGroups.filter((group) => coverageForLines(group.lines) === coverageFilter);
+    return [...filtered].sort((a, b) => skuSort === "volume" ? b.totalOpenQty - a.totalOpenQty : b.totalRevenueAtRisk - a.totalRevenueAtRisk);
+  }, [allGroups, coverageFilter, skuSort]);
+  const customerGroups = useMemo(() => groupBackordersByCustomer(data?.data ?? []), [data]);
   const totalGroups = coverageGroups.length;
   const lastGroupPage = Math.max(1, Math.ceil(totalGroups / groupsPerPage));
   const safeGroupPage = Math.min(groupPage, lastGroupPage);
@@ -1208,6 +1250,18 @@ function BackordersPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm">
+        <div><p className="text-sm font-medium">Decision view</p><p className="text-xs text-muted-foreground">Products support supply action; customers support commercial follow-up.</p></div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant={groupingMode === "sku" ? "default" : "outline"} onClick={() => setGroupingMode("sku")}>By SKU</Button>
+          <Button size="sm" variant={groupingMode === "customer" ? "default" : "outline"} onClick={() => setGroupingMode("customer")}>By customer</Button>
+          {groupingMode === "sku" && <Select value={skuSort} onValueChange={(value) => { setSkuSort(value as typeof skuSort); setGroupPage(1); }}><SelectTrigger className="h-8 w-[155px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="value">Sort by value</SelectItem><SelectItem value="volume">Sort by volume</SelectItem></SelectContent></Select>}
+        </div>
+      </div>
+
+      {groupingMode === "customer" && <CustomerHierarchyPanel groups={customerGroups} loading={isLoading} />}
+
+      {groupingMode === "sku" && (<>
       {/* Grouped table — always reflects active filters (segment, brand, category, dates, …) */}
       <div className="rounded-lg border bg-card shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
@@ -1561,6 +1615,7 @@ function BackordersPage() {
           </div>
         )}
       </div>
+      </>)}
       </>
       )}
 
@@ -1625,6 +1680,29 @@ function BackordersPage() {
  * (when it started) and `resolved_at` (when it cleared) are independent — no attempt is
  * made to assign a single "owning" month to a line that spans two.
  */
+function CustomerHierarchyPanel({ groups, loading }: { groups: CustomerBackorderGroup[]; loading: boolean }) {
+  const kes = useMaskedKESFormatter();
+  if (loading) return <div className="space-y-2 rounded-lg border bg-card p-4">{Array.from({length:5}).map((_,i)=><Skeleton key={i} className="h-12 w-full" />)}</div>;
+  if (groups.length === 0) return <div className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">No customer backorders for the current filters.</div>;
+  return <div className="rounded-lg border bg-card shadow-sm">
+    <div className="border-b px-4 py-3"><h2 className="font-medium">Backorders by parent customer</h2><p className="text-xs text-muted-foreground">Parent account → branch → sales order → product line</p></div>
+    <Accordion type="multiple" className="w-full">
+      {groups.map((parent) => <AccordionItem key={parent.id} value={parent.id} className="px-4">
+        <AccordionTrigger className="hover:no-underline"><div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-4 pr-3 text-left"><div><p className="font-medium">{parent.name}</p><p className="text-xs text-muted-foreground">{parent.id} · {parent.branches.length} branch{parent.branches.length!==1?"es":""} · {parent.orders} SOs</p></div><p className="font-semibold">{kes(parent.revenue)}</p></div></AccordionTrigger>
+        <AccordionContent><div className="space-y-3 pb-3">
+          {parent.branches.map((branch) => <div key={branch.id} className="rounded-lg border bg-muted/20 p-3">
+            <div className="mb-2 flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-medium">{branch.name}</p><p className="text-xs text-muted-foreground">{branch.id} · {branch.orders} SOs</p></div><p className="text-sm font-semibold">{kes(branch.revenue)}</p></div>
+            {[...new Set(branch.lines.map((line)=>line.order_nbr))].map((orderNbr) => { const orderLines=branch.lines.filter((line)=>line.order_nbr===orderNbr); const total=orderLines.reduce((sum,line)=>sum+(Number(line.revenue_at_risk)||0),0); return <div key={orderNbr} className="mt-2 rounded-md bg-background p-3 text-xs">
+              <div className="mb-2 flex justify-between gap-3"><div><OrderLink orderNbr={orderNbr} /><span className="ml-2 text-muted-foreground">{formatDate(orderLines[0]?.order_date)}</span></div><strong>{kes(total)}</strong></div>
+              <div className="space-y-1">{orderLines.map((line)=><div key={line.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t pt-1"><span>{line.inventory_id} · {line.product_name || "Unnamed product"} · {formatNumber(Number(line.open_qty)||Number(line.backorder_qty))} {line.uom || ""} · {line.backorder_age_days ?? 0}d</span><span>{kes(Number(line.revenue_at_risk)||0)}</span></div>)}</div>
+            </div>; })}
+          </div>)}
+        </div></AccordionContent>
+      </AccordionItem>)}
+    </Accordion>
+  </div>;
+}
+
 function resolvedAverageDays(rows: BackorderResolutionLine[]): number | null {
   const days = rows
     .map((row) => row.days_to_resolve)
@@ -1665,7 +1743,7 @@ function ResolvedBackordersPanel() {
   const [dateFrom, setDateFrom] = useState(startOfMonth());
   const [dateTo, setDateTo] = useState(today());
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
+  const [perPage, setPerPage] = useState(20);
   const [expandedSkus, setExpandedSkus] = useState<string[]>([]);
 
   useEffect(() => {

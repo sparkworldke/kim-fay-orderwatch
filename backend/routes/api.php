@@ -63,6 +63,8 @@ use App\Http\Controllers\Api\ItemsNotDeliveredController;
 use App\Http\Controllers\Api\SalesConsultantController;
 use App\Http\Controllers\Api\SalesManagementPromptController;
 use App\Http\Controllers\Api\SalesIntelligenceController;
+use App\Http\Controllers\Api\SfaDashboardController;
+use App\Http\Controllers\Api\Admin\SfaSyncController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -100,6 +102,7 @@ Route::get('public/downloads/{token}', [\App\Http\Controllers\Api\ExportDownload
 // --- Protected ---
 Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('view.only')->group(function () {
+    Route::get('sfa/dashboard', [SfaDashboardController::class, 'index']);
     Route::get('operations/items-not-delivered', [ItemsNotDeliveredController::class, 'index'])->middleware('response.cache:not-delivered,120');
     Route::get('operations/items-not-delivered/export', [ItemsNotDeliveredController::class, 'export']);
 
@@ -312,6 +315,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('attachments/{attachment}/view', [FolController::class, 'viewAttachment'])->whereNumber('attachment');
         Route::get('attachments/{attachment}/preview', [FolController::class, 'previewAttachment'])->whereNumber('attachment');
         Route::post('{folRequest}/so-links', [FolController::class, 'linkSalesOrder'])->whereNumber('folRequest');
+        Route::post('{folRequest}/sales-order', [FolController::class, 'createSalesOrder'])->whereNumber('folRequest');
         Route::post('{folRequest}/po-links', [FolController::class, 'matchPurchaseOrder'])->whereNumber('folRequest');
         Route::post('{folRequest}/technician', [FolController::class, 'assignTechnician'])->whereNumber('folRequest');
         Route::post('{folRequest}/technician/resolve', [FolController::class, 'resolveTechnician'])->whereNumber('folRequest');
@@ -486,6 +490,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('admin')->middleware('admin.only')->group(function () {
+        Route::get('sfa/status', [SfaSyncController::class, 'status']);
+        Route::post('sfa/run', [SfaSyncController::class, 'run']);
         Route::get('sales-consultant-digests', [SalesConsultantDigestController::class, 'index']);
         Route::put('sales-consultant-digests/bulk', [SalesConsultantDigestController::class, 'bulk']);
         Route::put('sales-consultant-digests/{user}', [SalesConsultantDigestController::class, 'update']);

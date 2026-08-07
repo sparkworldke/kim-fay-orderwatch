@@ -10,6 +10,7 @@ import type { ProductionFilters } from "@/types/Stock/filters";
 import type { InventoryItem, Site, StockStatus } from "@/types/Stock/inventory";
 import { reconcileSelection } from "@/utils/Stock/filters";
 import { ALL_STATUSES, STATUS_LABEL } from "@/utils/Stock/status";
+import { isFinishedGoodsWarehouse, isRawMaterialsWarehouse } from "@/utils/Stock/transferRecommendation";
 import { StockInventoryDashboard } from "@/pages/StockInventoryDashboard";
 import { ProductionPlanningManager } from "@/components/production/ProductionPlanningManager";
 import { useCapabilities } from "@/hooks/useCapabilities";
@@ -18,20 +19,6 @@ import { useProductionStockView } from "@/features/kimfay-production/stock-view-
 
 const SITES: Site[] = ["HQ", "Tatu"];
 const EMPTY_INVENTORY: InventoryItem[] = [];
-
-const warehouseTokens = (id: string, name: string) =>
-  `${id} ${name}`.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
-
-/** Raw-material sites: any warehouse id/name token containing RMS (PRMS, RMS1, TRMS, …). */
-const isRawMaterialsWarehouse = (id: string, name: string) =>
-  warehouseTokens(id, name).some((token) => token.includes("RMS"));
-
-/**
- * Finished-goods sites = every non-RMS warehouse that has stock.
- * Do not whitelist FGS/TPFGS only — include DTC, MSA, EXPORT, FGS2, PFGS, returns, etc.
- */
-const isFinishedGoodsWarehouse = (id: string, name: string) =>
-  !isRawMaterialsWarehouse(id, name);
 
 const warehouseHasStock = (stock: { qtyOnHand: number; qtyAvailable: number }) =>
   Number(stock.qtyOnHand) > 0 || Number(stock.qtyAvailable) > 0;
@@ -59,8 +46,9 @@ export function StockProductionIntelligencePage({ resetToken }: { resetToken: nu
   const isLoading = inventory.isLoading;
 
   const { value: filters, setValue, reset } = usePersistentState<ProductionFilters>(
-    // v2: FG defaults to all non-RMS warehouses with stock (not FGS/TPFGS-only).
-    "production-intelligence-filters-v2",
+    // v4 starts every multi-select with all valid options. Users narrow the
+    // dashboard by removing values, and their choices then persist locally.
+    "production-intelligence-filters-v4",
     DEFAULTS,
   );
 
@@ -85,6 +73,9 @@ export function StockProductionIntelligencePage({ resetToken }: { resetToken: nu
     }
     return [...names].sort();
   }, [items, stockView]);
+  const defaultWarehouses = useMemo(() => {
+    return validWarehouses;
+  }, [validWarehouses]);
   const validBrands = useMemo(() => [...new Set(items.map((item) => item.brand).filter(Boolean))].sort(), [items]);
   const validCategories = useMemo(
     () =>
@@ -102,9 +93,10 @@ export function StockProductionIntelligencePage({ resetToken }: { resetToken: nu
   );
   const validTradingGroups = useMemo(() => [...new Set(items.map((item) => item.tradingGroup).filter(Boolean))].sort(), [items]);
 
-  // When switching FG ↔ RMS, select all warehouses in the new view by default.
+  // Each stock view starts with all warehouses in that view selected. Users
+  // can then remove warehouses they do not want included.
   useEffect(() => {
-    setValue((prev) => ({ ...prev, warehouses: validWarehouses }));
+    setValue((prev) => ({ ...prev, warehouses: defaultWarehouses }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: stock view change resets warehouse multi-select to all-in-view
   }, [stockView]);
 
@@ -112,15 +104,8 @@ export function StockProductionIntelligencePage({ resetToken }: { resetToken: nu
   useEffect(() => {
     setValue((prev) => {
       const machines = prev.machines.length ? reconcileSelection(prev.machines, validMachines) : validMachines;
-      // Prefer all FG/RMS warehouses with stock; only narrow if user already picked a non-empty subset of current options.
-      const prevAllInView =
-        prev.warehouses.length === 0
-        || (validWarehouses.length > 0
-          && prev.warehouses.length === validWarehouses.length
-          && validWarehouses.every((w) => prev.warehouses.includes(w)));
-      const warehouses = prevAllInView
-        ? validWarehouses
-        : reconcileSelection(prev.warehouses, validWarehouses);
+      const reconciledWarehouses = reconcileSelection(prev.warehouses, validWarehouses);
+      const warehouses = reconciledWarehouses.length ? reconciledWarehouses : defaultWarehouses;
       const brands = prev.brands.length ? reconcileSelection(prev.brands, validBrands) : validBrands;
       const categories = prev.categories.length ? reconcileSelection(prev.categories, validCategories) : validCategories;
       const tradingGroups = prev.tradingGroups?.length ? reconcileSelection(prev.tradingGroups, validTradingGroups) : validTradingGroups;
@@ -134,7 +119,7 @@ export function StockProductionIntelligencePage({ resetToken }: { resetToken: nu
         return prev;
       return { ...prev, machines, warehouses, categories, brands, tradingGroups };
     });
-  }, [validMachines, validWarehouses, validCategories, validBrands, validTradingGroups, setValue]);
+  }, [validMachines, validWarehouses, defaultWarehouses, validCategories, validBrands, validTradingGroups, setValue]);
 
   const warehouseIds = useMemo(
     () =>
@@ -231,7 +216,7 @@ export function StockProductionIntelligencePage({ resetToken }: { resetToken: nu
             <MultiSelect label="Machine" hint="(Multi-select)" options={validMachines} selected={filters.machines} onChange={(machines) => setValue((p) => ({ ...p, machines }))} allLabel="All Machines" />
             <MultiSelect
               label="Warehouse"
-              hint={stockView === "finished-goods" ? "(All FG stores with stock, excl. RMS)" : "(RMS warehouses with stock)"}
+              hint={stockView === "finished-goods" ? "(FGS default; add other FG stores as needed)" : "(RMS warehouses only)"}
               options={validWarehouses}
               selected={filters.warehouses}
               onChange={(warehouses) => setValue((p) => ({ ...p, warehouses }))}

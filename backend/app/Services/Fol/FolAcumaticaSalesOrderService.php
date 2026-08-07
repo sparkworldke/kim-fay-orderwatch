@@ -2,9 +2,9 @@
 
 namespace App\Services\Fol;
 
-use App\Models\AcumaticaInventoryItem;
 use App\Models\AcumaticaSalesOrder;
 use App\Models\FolRequest;
+use App\Models\FolRequestEvent;
 use App\Models\FolSoCreateLog;
 use App\Models\FolSoLink;
 use App\Models\User;
@@ -54,11 +54,14 @@ class FolAcumaticaSalesOrderService
         string $attemptSource = 'cco_approve',
         ?int $cronRunLogId = null,
     ): array {
-        if (! $this->isEnabled()) {
+        // The configuration switch controls automatic/cron creation. An
+        // authorized invoicing user may still explicitly create from the UI.
+        if (! $this->isEnabled() && $attemptSource !== 'manual_ui') {
             $result = $this->result(false, null, null, null, null, true, false);
             $this->writeLog($request, $attemptSource, 'skipped', $result, $actor, $cronRunLogId, [
                 'reason' => 'fol.create_so_on_final_approval disabled',
             ]);
+            $this->writeEvent($request, 'so_create_skipped', $actor, $result, $attemptSource);
 
             return $result;
         }
@@ -78,6 +81,17 @@ class FolAcumaticaSalesOrderService
                 true,
             );
             $this->writeLog($request, $attemptSource, 'already_linked', $result, $actor, $cronRunLogId);
+            $this->writeEvent($request, 'so_already_linked', $actor, $result, $attemptSource);
+
+            return $result;
+        }
+
+        // Mandatory Acumatica payload: CustomerID + each line InventoryID + OrderQty.
+        $customerId = strtoupper(trim((string) $request->customer_acumatica_id));
+        if ($customerId === '') {
+            $result = $this->result(false, null, null, null, 'FOL has no customer Acumatica ID; cannot create sales order.', false, false);
+            $this->writeLog($request, $attemptSource, 'failed', $result, $actor, $cronRunLogId);
+            $this->writeEvent($request, 'so_create_failed', $actor, $result, $attemptSource);
 
             return $result;
         }
@@ -85,19 +99,23 @@ class FolAcumaticaSalesOrderService
         if ($request->lines->isEmpty()) {
             $result = $this->result(false, null, null, null, 'FOL has no lines to put on a sales order.', false, false);
             $this->writeLog($request, $attemptSource, 'failed', $result, $actor, $cronRunLogId);
+            $this->writeEvent($request, 'so_create_failed', $actor, $result, $attemptSource);
 
             return $result;
         }
 
         try {
             $lines = $this->buildLines($request);
+            // Standard contract-based API creation: PUT SalesOrder. Acumatica
+            // generates OrderNbr; the payload supplies OrderType, CustomerID,
+            // and Details containing InventoryID + OrderQty.
             $created = $this->client->createSalesOrder(
-                customerId: (string) $request->customer_acumatica_id,
+                customerId: $customerId,
                 lines: $lines,
-                customerOrder: (string) $request->public_ref,
-                description: $this->descriptionFor($request),
+                customerOrder: null,
+                description: null,
                 orderType: (string) config('fol.so_order_type', 'SO'),
-                zeroPrice: (bool) config('fol.so_zero_unit_price', true),
+                zeroPrice: false,
             );
 
             $orderNbr = $created['order_nbr'];
@@ -106,7 +124,7 @@ class FolAcumaticaSalesOrderService
             $pulled = $this->pullSalesOrder($orderNbr);
             $raw = $pulled !== [] ? $pulled : ($created['raw'] ?? []);
 
-            $this->persistLocalLink($request, $orderNbr, $actor, $raw);
+            $this->persistLocalLink($request, $orderNbr, $actor, $raw, $attemptSource);
 
             // Re-read request so linked_so_order_nbrs is current for present()/email.
             $request->refresh();
@@ -124,6 +142,7 @@ class FolAcumaticaSalesOrderService
             $this->writeLog($request, $attemptSource, 'success', $result, $actor, $cronRunLogId, [
                 'pulled_from_erp' => $pulled !== [],
             ]);
+            $this->writeEvent($request, 'so_created', $actor, $result, $attemptSource);
 
             return $result;
         } catch (Throwable $e) {
@@ -147,6 +166,7 @@ class FolAcumaticaSalesOrderService
             $this->writeLog($request, $attemptSource, 'failed', $result, $actor, $cronRunLogId, [
                 'exception_class' => $e::class,
             ]);
+            $this->writeEvent($request, 'so_create_failed', $actor, $result, $attemptSource);
 
             return $result;
         }
@@ -389,38 +409,29 @@ class FolAcumaticaSalesOrderService
     }
 
     /**
-     * @return list<array{inventory_id: string, qty: float, unit_price: float, warehouse_id: ?string, description: ?string}>
+     * @return list<array{inventory_id: string, qty: float}>
      */
     private function buildLines(FolRequest $request): array
     {
-        $inventoryIds = $request->lines->pluck('inventory_id')->filter()->unique()->values()->all();
-        $warehouses = AcumaticaInventoryItem::query()
-            ->whereIn('inventory_id', $inventoryIds)
-            ->pluck('default_warehouse_id', 'inventory_id');
-
-        $defaultWarehouse = config('fol.so_default_warehouse_id');
-
         $lines = [];
         foreach ($request->lines as $line) {
+            $inventoryId = strtoupper(trim((string) $line->inventory_id));
             $qty = (float) $line->qty_requested;
-            if ($qty <= 0) {
+            // Push only lines that Acumatica can accept: InventoryID + OrderQty > 0.
+            if ($inventoryId === '' || $qty <= 0) {
                 continue;
             }
 
-            $wh = $warehouses->get($line->inventory_id)
-                ?: ($defaultWarehouse ? (string) $defaultWarehouse : null);
-
             $lines[] = [
-                'inventory_id' => (string) $line->inventory_id,
+                'inventory_id' => $inventoryId,
                 'qty' => $qty,
-                'unit_price' => 0.0,
-                'warehouse_id' => $wh ? (string) $wh : null,
-                'description' => $line->product_description ? (string) $line->product_description : null,
             ];
         }
 
         if ($lines === []) {
-            throw new RuntimeException('No positive-qty FOL lines available for sales order.');
+            throw new RuntimeException(
+                'No valid FOL lines for sales order: each line needs Inventory ID and quantity > 0.',
+            );
         }
 
         return $lines;
@@ -438,7 +449,7 @@ class FolAcumaticaSalesOrderService
     }
 
     /** @param  array<string, mixed>  $raw */
-    private function persistLocalLink(FolRequest $request, string $orderNbr, ?User $actor, array $raw): void
+    private function persistLocalLink(FolRequest $request, string $orderNbr, ?User $actor, array $raw, string $attemptSource): void
     {
         $status = AcumaticaClient::scalarVal($raw['Status'] ?? null) ?? 'Open';
         $orderDate = AcumaticaClient::scalarVal($raw['Date'] ?? $raw['OrderDate'] ?? null);
@@ -460,7 +471,7 @@ class FolAcumaticaSalesOrderService
                 'status' => $status,
                 'order_date' => $orderDate ?: now('Africa/Nairobi')->toDateString(),
                 'order_total' => $orderTotal,
-                'import_source' => 'fol_auto_cco',
+                'import_source' => $attemptSource === 'manual_ui' ? 'fol_manual_ui' : 'fol_auto_cco',
                 'raw_payload' => $raw !== [] ? $raw : null,
                 'synced_at' => now(),
             ],
@@ -473,7 +484,7 @@ class FolAcumaticaSalesOrderService
             ],
             [
                 'sales_order_id' => $localOrder->id,
-                'link_type' => 'auto_cco_approve',
+                'link_type' => $attemptSource === 'manual_ui' ? 'manual_create' : 'auto_cco_approve',
                 'matched_at' => now(),
                 'matched_by' => $actor?->id,
             ],
@@ -485,5 +496,21 @@ class FolAcumaticaSalesOrderService
             'linked_so_order_nbrs' => array_values($links),
             'linked_so_status_summary' => (string) $status,
         ])->save();
+    }
+
+    /** @param array<string, mixed> $result */
+    private function writeEvent(FolRequest $request, string $eventType, ?User $actor, array $result, string $attemptSource): void
+    {
+        FolRequestEvent::create([
+            'fol_request_id' => $request->id,
+            'event_type' => $eventType,
+            'actor_user_id' => $actor?->id,
+            'comment' => $result['error'] ?? null,
+            'payload_json' => [
+                'attempt_source' => $attemptSource,
+                'order_nbr' => $result['order_nbr'] ?? null,
+                'log_id' => $result['log_id'] ?? null,
+            ],
+        ]);
     }
 }

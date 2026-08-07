@@ -260,6 +260,8 @@ export type BackorderLine = {
   is_excluded_from_kpi?: boolean;
   customer_acumatica_id: string | null;
   customer_name: string | null;
+  parent_customer_id?: string | null;
+  parent_customer_name?: string | null;
   order_qty: string;
   shipped_qty: string;
   invoiced_qty: string | null;

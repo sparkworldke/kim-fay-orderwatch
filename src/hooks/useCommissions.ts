@@ -15,10 +15,10 @@ export type CommissionStatement = {
 
 type Page = { data: CommissionStatement[]; current_page: number; last_page: number; total: number };
 
-export function useCommissionStatements(page = 1) {
+export function useCommissionStatements(page = 1, perPage = 20) {
   return useQuery({
-    queryKey: ["commission-statements", page],
-    queryFn: () => apiFetch<Page>(`kp/commissions?page=${page}&per_page=25`),
+    queryKey: ["commission-statements", page, perPage],
+    queryFn: () => apiFetch<Page>(`kp/commissions?page=${page}&per_page=${perPage}`),
   });
 }
 

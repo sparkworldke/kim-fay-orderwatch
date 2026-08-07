@@ -14,6 +14,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 import {
   useDtcActions,
   useDtcCustomers,
@@ -56,49 +58,6 @@ function formatAcumaticaDate(value?: string | null): string {
     month: "short",
     year: "numeric",
   });
-}
-function PaginationBar({
-  page,
-  lastPage,
-  total,
-  onPage,
-  label,
-}: {
-  page: number;
-  lastPage: number;
-  total: number;
-  onPage: (p: number) => void;
-  label: string;
-}) {
-  if (total <= 0) return null;
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-      <span>
-        {total.toLocaleString()} {label}
-        {lastPage > 1 ? ` · page ${page} of ${lastPage}` : ""}
-      </span>
-      {lastPage > 1 && (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-          >
-            Previous
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={page >= lastPage}
-            onClick={() => onPage(page + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function DtcCalltronixPage({ page }: { page: DtcPage }) {
@@ -219,7 +178,8 @@ function StatCard({
   );
 }
 function Quotes({ q }: { q: string }) {
-  const data = useDtcQuotes(q);
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
+  const data = useDtcQuotes(q, "", page, perPage);
   const meta = useDtcMeta();
   const actions = useDtcActions();
   const [open, setOpen] = useState(false);
@@ -304,6 +264,16 @@ function Quotes({ q }: { q: string }) {
           </tr>
         ))}
       </CardTable>
+      {data.data && data.data.total > 0 && (
+        <PaginationControls
+          currentPage={data.data.current_page}
+          lastPage={data.data.last_page}
+          total={data.data.total}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+        />
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -519,7 +489,7 @@ function QuoteDetail({ quote, close }: { quote: DtcQuote | null; close: () => vo
 const DEFAULT_PRICE_WAREHOUSES = ["DTC", "FGS"];
 
 function Prices({ q }: { q: string }) {
-  const [page, setPage] = useState(1);
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
   const [search, setSearch] = useState(q);
   const [brand, setBrand] = useState("");
   const [taxation, setTaxation] = useState("");
@@ -537,7 +507,7 @@ function Prices({ q }: { q: string }) {
   const data = useDtcPrices({
     q: search || undefined,
     page,
-    per_page: 100,
+    per_page: perPage,
     brand: brand || undefined,
     taxation: taxation || undefined,
     product_type: productType || undefined,
@@ -916,18 +886,22 @@ function Prices({ q }: { q: string }) {
           );
         })}
       </CardTable>
-      <PaginationBar
-        page={page}
-        lastPage={lastPage}
-        total={total}
-        onPage={setPage}
-        label="products"
-      />
+      {total > 0 && (
+        <PaginationControls
+          currentPage={data.data?.current_page ?? page}
+          lastPage={lastPage}
+          total={total}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+        />
+      )}
     </>
   );
 }
 function Customers({ q }: { q: string }) {
-  const data = useDtcCustomers(q);
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
+  const data = useDtcCustomers(q, page, perPage);
   const [view,setView]=useState<DtcCustomer|null>(null);
   return (
     <><CardTable headers={["Customer", "Billing address", "Contact", "Quotes", "POS orders", "Last order", ""]}>
@@ -945,12 +919,24 @@ function Customers({ q }: { q: string }) {
           <Td><Button size="sm" variant="outline" onClick={()=>setView(x)}>View orders</Button></Td>
         </tr>
       ))}
-    </CardTable><CustomerOrders customer={view} close={()=>setView(null)}/></>
+    </CardTable>
+    {data.data && data.data.total > 0 && (
+      <PaginationControls
+        currentPage={data.data.current_page}
+        lastPage={data.data.last_page}
+        total={data.data.total}
+        perPage={perPage}
+        onPageChange={setPage}
+        onPerPageChange={setPerPage}
+      />
+    )}
+    <CustomerOrders customer={view} close={()=>setView(null)}/></>
   );
 }
 function CustomerOrders({customer,close}:{customer:DtcCustomer|null;close:()=>void}) { return <Dialog open={!!customer} onOpenChange={v=>!v&&close()}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>{customer?.name}</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">{customer?.email} {customer?.phone} · {[customer?.billing_address?.address_line1,customer?.billing_address?.address_line2].filter(Boolean).join(', ')}</p><h3 className="font-semibold">Quotes</h3><CardTable headers={["QT","Status","QT price"]}>{customer?.quotes.map(x=><tr className="border-b" key={x.id}><Td>{x.number}</Td><Td>{x.status}</Td><Td>KES {Number(x.total).toLocaleString()}</Td></tr>)}</CardTable><h3 className="font-semibold">POS orders</h3>{customer?.pos_orders.map(pos=><div className="space-y-2 rounded border p-3" key={pos.order_nbr}><div className="flex justify-between font-semibold"><span>{pos.order_nbr}</span><span>POS total: KES {Number(pos.total).toLocaleString()}</span></div><CardTable headers={["SKU","Product","Qty","POS unit price","Total"]}>{pos.lines.map((l,i)=><tr className="border-b" key={l.id??i}><Td>{l.inventory_id}</Td><Td>{l.description??"—"}</Td><Td>{l.quantity}</Td><Td>{Number(l.unit_price).toLocaleString()}</Td><Td>{Number(l.line_total).toLocaleString()}</Td></tr>)}</CardTable></div>)}<DialogFooter><Button onClick={close}>Close</Button></DialogFooter></DialogContent></Dialog> }
 function SalesOrders({ q }: { q: string }) {
-  const data = useDtcSalesOrders(q);
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
+  const data = useDtcSalesOrders(q, page, perPage);
   const meta = useDtcMeta();
   const actions = useDtcActions();
   const [view, setView] = useState<DtcSalesOrder | null>(null);
@@ -993,6 +979,16 @@ function SalesOrders({ q }: { q: string }) {
           </tr>
         ))}
       </CardTable>
+      {data.data && data.data.total > 0 && (
+        <PaginationControls
+          currentPage={data.data.current_page}
+          lastPage={data.data.last_page}
+          total={data.data.total}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+        />
+      )}
       <PosOrderDetail order={view} close={() => setView(null)} />
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="max-w-md">

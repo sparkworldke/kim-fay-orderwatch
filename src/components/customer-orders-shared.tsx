@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { usePagination } from "@/hooks/usePagination";
 import { Link } from "@tanstack/react-router";
 import {
   ConsultantLink,
@@ -263,10 +264,9 @@ export function CommonProductsCard({
   onRetry: () => void;
   pageSize?: number;
 }) {
-  const [page, setPage] = useState(1);
+  const { page, perPage, setPage, setPerPage } = usePagination(pageSize ?? 20);
   const products = data?.products ?? [];
   const total = products.length;
-  const perPage = pageSize ?? total;
   const lastPage = Math.max(1, Math.ceil(total / perPage));
   const currentPage = Math.min(page, lastPage);
   const start = (currentPage - 1) * perPage;
@@ -324,7 +324,7 @@ export function CommonProductsCard({
                 ))}
               </TableBody>
             </Table>
-            {pageSize && lastPage > 1 && (
+            {lastPage > 1 && (
               <div className="mt-4">
                 <PaginationControls
                   currentPage={currentPage}
@@ -332,8 +332,7 @@ export function CommonProductsCard({
                   total={total}
                   perPage={perPage}
                   onPageChange={setPage}
-                  onPerPageChange={() => {}}
-                  pageSizes={[pageSize]}
+                  onPerPageChange={setPerPage}
                 />
               </div>
             )}
@@ -363,10 +362,9 @@ export function SuggestedOrdersCard({
   onRetry: () => void;
   pageSize?: number;
 }) {
-  const [page, setPage] = useState(1);
+  const { page, perPage, setPage, setPerPage } = usePagination(pageSize ?? 20);
   const suggestions = data?.suggestions ?? [];
   const total = suggestions.length;
-  const perPage = pageSize ?? total;
   const lastPage = Math.max(1, Math.ceil(total / perPage));
   const currentPage = Math.min(page, lastPage);
   const start = (currentPage - 1) * perPage;
@@ -432,7 +430,7 @@ export function SuggestedOrdersCard({
                 ))}
               </TableBody>
             </Table>
-            {pageSize && lastPage > 1 && (
+            {lastPage > 1 && (
               <div className="mt-4">
                 <PaginationControls
                   currentPage={currentPage}
@@ -440,8 +438,7 @@ export function SuggestedOrdersCard({
                   total={total}
                   perPage={perPage}
                   onPageChange={setPage}
-                  onPerPageChange={() => {}}
-                  pageSizes={[pageSize]}
+                  onPerPageChange={setPerPage}
                 />
               </div>
             )}

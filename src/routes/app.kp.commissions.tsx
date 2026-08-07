@@ -4,9 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useCommissionStatements, useCommissionTransition, useCreateCommissionPeriod } from "@/hooks/useCommissions";
+import { usePagination } from "@/hooks/usePagination";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/kp/commissions")({
@@ -17,9 +19,9 @@ export const Route = createFileRoute("/app/kp/commissions")({
 const money = (value: string | number) => `KES ${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
 function CommissionPage() {
-  const [page, setPage] = useState(1);
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const list = useCommissionStatements(page);
+  const list = useCommissionStatements(page, perPage);
   const createPeriod = useCreateCommissionPeriod();
   const transition = useCommissionTransition();
   const { permissions } = useCapabilities();
@@ -44,6 +46,6 @@ function CommissionPage() {
     </div>
     {list.isLoading ? <Skeleton className="h-48 w-full"/> : list.isError ? <p className="text-sm text-destructive">{list.error instanceof Error ? list.error.message : "Commission statements could not be loaded."}</p> :
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(list.data?.data ?? []).map((row)=><Card key={row.id}><CardHeader className="pb-2"><div className="flex items-center justify-between"><CardTitle className="text-base">{row.user.name}</CardTitle><Badge variant={row.period.status === "locked" ? "default" : "secondary"}>{row.period.shadow_mode ? "Shadow · " : ""}{row.period.status}</Badge></div><p className="text-xs text-muted-foreground">{row.period.period_month.slice(0,7)} · v{row.period.version}{row.user.rep_code ? ` · ${row.user.rep_code}` : ""}</p></CardHeader><CardContent className="space-y-3"><div className="grid grid-cols-2 gap-2 text-sm"><span className="text-muted-foreground">Eligible sales</span><b className="text-right">{money(row.eligible_sales)}</b><span className="text-muted-foreground">Target</span><b className="text-right">{money(row.target_amount)}</b><span className="text-muted-foreground">Attainment</span><b className="text-right">{Number(row.attainment_pct).toFixed(1)}%</b><span className="text-muted-foreground">Commission</span><b className="text-right">{money(row.net_commission)}</b></div><div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><Link to="/app/kp/commissions/$statementId" params={{statementId:String(row.id)}}>Calculation details</Link></Button>{canApprove && row.period.status==="draft" && <Button size="sm" onClick={()=>change(row.period.id,"approve")}>Approve</Button>}{canLock && row.period.status==="approved" && <Button size="sm" onClick={()=>change(row.period.id,"lock")}>Lock</Button>}</div></CardContent></Card>)}</div>}
-    {(list.data?.last_page ?? 1)>1 && <div className="flex justify-end gap-2"><Button variant="outline" disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Previous</Button><Button variant="outline" disabled={page>=(list.data?.last_page??1)} onClick={()=>setPage(p=>p+1)}>Next</Button></div>}
+    {(list.data?.total ?? 0)>0 && <PaginationControls currentPage={list.data?.current_page ?? page} lastPage={list.data?.last_page ?? 1} total={list.data?.total ?? 0} perPage={perPage} onPageChange={setPage} onPerPageChange={setPerPage} />}
   </div>;
 }

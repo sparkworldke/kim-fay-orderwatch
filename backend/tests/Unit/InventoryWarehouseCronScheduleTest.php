@@ -7,7 +7,19 @@ use Tests\TestCase;
 
 class InventoryWarehouseCronScheduleTest extends TestCase
 {
-    public function test_warehouse_stock_sync_is_staggered_by_thirty_minutes_from_830_and_1200(): void
+    public function test_business_checkpoints_and_staggered_job_offsets(): void
+    {
+        $this->assertSame(
+            ['0 8 * * *', '30 10 * * *', '0 13 * * *', '0 15 * * *', '20 16 * * *'],
+            CronJob::businessCheckpointCronExpressions(),
+        );
+        $this->assertSame(
+            ['5 8 * * *', '35 10 * * *', '5 13 * * *', '5 15 * * *', '25 16 * * *'],
+            CronJob::businessCheckpointCronExpressions(5),
+        );
+    }
+
+    public function test_each_warehouse_runs_once_daily_distributed_across_business_checkpoints(): void
     {
         config([
             'inventory.warehouses' => ['DTC', 'FGS', 'FGS2', 'FGS2 RETURNS', 'MSA', 'EXPORT', 'PRMS', 'RMS1', 'TRMS'],
@@ -17,22 +29,22 @@ class InventoryWarehouseCronScheduleTest extends TestCase
         ]);
 
         $expected = [
-            0 => ['30 8 * * *', '0 12 * * *'],   // DTC 08:30, 12:00
-            1 => ['0 9 * * *', '30 12 * * *'],    // FGS 09:00, 12:30
-            2 => ['30 9 * * *', '0 13 * * *'],    // FGS2 09:30, 13:00
-            3 => ['0 10 * * *', '30 13 * * *'],   // FGS2 RETURNS 10:00, 13:30
-            4 => ['30 10 * * *', '0 14 * * *'],   // MSA 10:30, 14:00
-            5 => ['0 11 * * *', '30 14 * * *'],   // EXPORT 11:00, 14:30
+            0 => '0 8 * * *',
+            1 => '30 10 * * *',
+            2 => '0 13 * * *',
+            3 => '0 15 * * *',
+            4 => '20 16 * * *',
+            5 => '0 8 * * *',
         ];
 
-        foreach ($expected as $index => $crons) {
+        foreach ($expected as $index => $cron) {
             $slots = CronJob::warehouseStockSyncCronExpressions($index);
-            $this->assertSame($crons[0], $slots[0]['cron'], "morning slot for index {$index}");
-            $this->assertSame($crons[1], $slots[1]['cron'], "midday slot for index {$index}");
+            $this->assertCount(1, $slots);
+            $this->assertSame($cron, $slots[0]['cron'], "daily slot for index {$index}");
         }
 
-        $this->assertSame(['08:30', '12:00'], CronJob::warehouseStockSyncTimeLabels(0));
-        $this->assertSame(['10:30', '14:00'], CronJob::warehouseStockSyncTimeLabels(4));
+        $this->assertSame(['08:00'], CronJob::warehouseStockSyncTimeLabels(0));
+        $this->assertSame(['16:20'], CronJob::warehouseStockSyncTimeLabels(4));
         $this->assertSame('inventory-sync-fgs2-returns', CronJob::inventoryWarehouseJobKey('FGS2 RETURNS'));
         $this->assertSame('FGS2 Returns', CronJob::inventoryWarehouseLabel('FGS2 RETURNS'));
     }
@@ -45,9 +57,8 @@ class InventoryWarehouseCronScheduleTest extends TestCase
         $index = array_search('TPFGS', $warehouses, true);
         $this->assertIsInt($index);
 
-        // Appended after TRMS so existing warehouse slots stay stable.
         $this->assertSame(
-            ['13:00', '16:30'],
+            ['16:20'],
             CronJob::warehouseStockSyncTimeLabels($index),
         );
         $this->assertSame('inventory-sync-tpfgs', CronJob::inventoryWarehouseJobKey('TPFGS'));

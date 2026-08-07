@@ -8,6 +8,31 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CronJob extends Model
 {
+    /** @return list<string> */
+    public static function businessCheckpointCronExpressions(int $offsetMinutes = 0): array
+    {
+        $baseMinutes = [8 * 60, 10 * 60 + 30, 13 * 60, 15 * 60, 16 * 60 + 20];
+
+        return array_map(static function (int $base) use ($offsetMinutes): string {
+            $total = ($base + max(0, $offsetMinutes)) % (24 * 60);
+            return sprintf('%d %d * * *', $total % 60, intdiv($total, 60));
+        }, $baseMinutes);
+    }
+
+    /** @return list<string> */
+    public static function businessCheckpointLabels(): array
+    {
+        return ['08:00', '10:30', '13:00', '15:00', '16:20'];
+    }
+
+    private static function checkpointSettings(array $settings = [], int $offsetMinutes = 0): array
+    {
+        return array_merge($settings, [
+            'cron_expressions' => self::businessCheckpointCronExpressions($offsetMinutes),
+            'schedule_times' => self::businessCheckpointLabels(),
+        ]);
+    }
+
     protected $fillable = [
         'job_key',
         'name',
@@ -116,14 +141,15 @@ class CronJob extends Model
             ],
         );
 
-        // Keep existing rows aligned with the same-day / 3-hour product requirement.
+        // Working-day checkpoints replace continuous polling.
         $job->fill([
             'name' => 'Email Synchronization',
             'description' => 'Outlook same-day mailbox sync every 3 hours. Only emails received today since the last check watermark — not full mailbox history.',
-            'frequency_label' => 'Every 3 Hours',
-            'cron_expression' => '0 */3 * * *',
+            'frequency_label' => '5 daily checkpoints (08:00-16:20)',
+            'cron_expression' => '0 8 * * *',
             'command' => 'php artisan orderwatch:email-sync',
             'trigger_type' => 'scheduler',
+            'settings' => self::checkpointSettings($job->settings ?? [], 0),
         ])->save();
 
         return $job->fresh() ?? $job;
@@ -131,7 +157,7 @@ class CronJob extends Model
 
     public static function orderMatching(): self
     {
-        return self::firstOrCreate(
+        $job = self::firstOrCreate(
             ['job_key' => 'order-matching-3h'],
             [
                 'name' => 'Order Matching',
@@ -146,6 +172,14 @@ class CronJob extends Model
                 'settings' => [],
             ],
         );
+
+        $job->fill([
+            'frequency_label' => '5 daily checkpoints (08:00-16:20)',
+            'cron_expression' => '0 8 * * *',
+            'settings' => self::checkpointSettings($job->settings ?? [], 10),
+        ])->save();
+
+        return $job->fresh() ?? $job;
     }
 
     public static function salesOrderSync(): self
@@ -182,13 +216,13 @@ class CronJob extends Model
         }
         // Scheduler uses settings.cron_expressions when set; clear stale multi-expr overrides
         // so the single 2-hour expression below is the source of truth.
-        unset($settings['cron_expressions']);
+        $settings = self::checkpointSettings($settings, 5);
 
         $job->fill([
             'name' => 'Sales Order + Backorder Sync',
             'description' => 'Acumatica sales orders (sales_orders) every 2 hours + chained backorders. Full import of last lookback_days. Manual: php artisan orderwatch:sales-orders-sync --force',
-            'frequency_label' => 'Every 2 Hours',
-            'cron_expression' => '0 */2 * * *',
+            'frequency_label' => '5 daily checkpoints (08:00-16:20)',
+            'cron_expression' => '0 8 * * *',
             'command' => 'php artisan orderwatch:sales-orders-sync',
             'trigger_type' => 'scheduler',
             'settings' => $settings,
@@ -221,6 +255,9 @@ class CronJob extends Model
         $job->fill([
             'description' => 'Lightweight status sync for SO workflow. Also deletes local SOs that no longer exist in Acumatica.',
             'command' => 'php artisan orderwatch:sales-order-status-sync',
+            'frequency_label' => '5 daily checkpoints (08:00-16:20)',
+            'cron_expression' => '0 8 * * *',
+            'settings' => self::checkpointSettings($job->settings ?? [], 15),
         ])->save();
 
         return $job->fresh() ?? $job;
@@ -358,7 +395,7 @@ class CronJob extends Model
         $labels = self::warehouseStockSyncTimeLabels($index);
         $cronExpressions = array_column($times, 'cron');
         $primaryCron = $cronExpressions[0] ?? '30 8 * * *';
-        $frequency = 'Twice daily: '.implode(' & ', $labels).' EAT';
+        $frequency = 'Daily at '.implode(' & ', $labels).' EAT';
         // Quote warehouse for CLI when it contains spaces (e.g. FGS2 RETURNS).
         $warehouseArg = str_contains($warehouse, ' ') ? '"'.$warehouse.'"' : $warehouse;
 
@@ -366,7 +403,7 @@ class CronJob extends Model
             ['job_key' => $jobKey],
             [
                 'name' => "Inventory Stock Sync — {$label}",
-                'description' => "Updates SKU stock positions for warehouse {$label} ({$warehouse}) from Acumatica. Morning and midday waves, staggered 30 minutes after the previous warehouse.",
+                'description' => "Updates SKU stock positions for warehouse {$label} ({$warehouse}) from Acumatica once daily, distributed across business checkpoints.",
                 'is_enabled' => true,
                 'frequency_label' => $frequency,
                 'cron_expression' => $primaryCron,
@@ -389,7 +426,7 @@ class CronJob extends Model
 
         $job->fill([
             'name' => "Inventory Stock Sync — {$label}",
-            'description' => "Updates SKU stock positions for warehouse {$label} ({$warehouse}) from Acumatica. Morning and midday waves, staggered 30 minutes after the previous warehouse.",
+            'description' => "Updates SKU stock positions for warehouse {$label} ({$warehouse}) from Acumatica once daily, distributed across business checkpoints.",
             'is_enabled' => true,
             'status' => 'active',
             'frequency_label' => $frequency,
@@ -414,25 +451,16 @@ class CronJob extends Model
      */
     public static function warehouseStockSyncCronExpressions(int $index): array
     {
-        $morningStart = self::parseHhMm((string) config('inventory.stock_sync.morning_start', '08:30'));
-        $middayStart = self::parseHhMm((string) config('inventory.stock_sync.midday_start', '12:00'));
-        $stagger = max(0, (int) config('inventory.stock_sync.stagger_minutes', 30));
-        $offset = $index * $stagger;
+        $expressions = self::businessCheckpointCronExpressions();
+        $labels = self::businessCheckpointLabels();
+        $slot = $index % count($expressions);
+        [$minute, $hour] = array_map('intval', explode(' ', $expressions[$slot], 3));
 
-        $slots = [$morningStart + $offset, $middayStart + $offset];
-        $result = [];
-        foreach ($slots as $totalMinutes) {
-            $totalMinutes = $totalMinutes % (24 * 60);
-            $hour = intdiv($totalMinutes, 60);
-            $minute = $totalMinutes % 60;
-            $result[] = [
-                'cron' => sprintf('%d %d * * *', $minute, $hour),
-                'label' => sprintf('%02d:%02d', $hour, $minute),
-                'total_minutes' => $totalMinutes,
-            ];
-        }
-
-        return $result;
+        return [[
+            'cron' => $expressions[$slot],
+            'label' => $labels[$slot],
+            'total_minutes' => ($hour * 60) + $minute,
+        ]];
     }
 
     /**
@@ -444,18 +472,6 @@ class CronJob extends Model
             static fn (array $slot) => $slot['label'],
             self::warehouseStockSyncCronExpressions($index),
         );
-    }
-
-    private static function parseHhMm(string $value): int
-    {
-        if (! preg_match('/^(\d{1,2}):(\d{2})$/', trim($value), $m)) {
-            return 8 * 60 + 30;
-        }
-
-        $hour = max(0, min(23, (int) $m[1]));
-        $minute = max(0, min(59, (int) $m[2]));
-
-        return ($hour * 60) + $minute;
     }
 
     public static function backorderProcessing(): self
@@ -574,10 +590,11 @@ class CronJob extends Model
         $job->fill([
             'name' => 'FOL Sales Order Create / Retry',
             'description' => 'Checks final-approved FOLs missing an Acumatica SO number, retries creation, and logs failures to fol_so_create_logs.',
-            'frequency_label' => 'Every 30 Minutes',
-            'cron_expression' => '7,37 * * * *',
+            'frequency_label' => '5 daily checkpoints (08:00-16:20)',
+            'cron_expression' => '0 8 * * *',
             'command' => 'php artisan orderwatch:fol-so-retry',
             'trigger_type' => 'scheduler',
+            'settings' => self::checkpointSettings($job->settings ?? [], 20),
         ])->save();
 
         return $job->fresh() ?? $job;

@@ -66,9 +66,11 @@ class KpCustomerPortfolio202608Seeder extends Seeder
             $contactsCreated = 0;
             $contactsWithoutPrimary = [];
             $assignmentsCreated = 0;
+            $assignmentsUpdated = 0;
             $unresolvedRepCodes = [];
+            $ambiguousRepCodes = [];
 
-            DB::transaction(function () use ($handle, $headers, &$imported, &$contactsCreated, &$contactsWithoutPrimary, &$assignmentsCreated, &$unresolvedRepCodes): void {
+            DB::transaction(function () use ($handle, $headers, &$imported, &$contactsCreated, &$contactsWithoutPrimary, &$assignmentsCreated, &$assignmentsUpdated, &$unresolvedRepCodes, &$ambiguousRepCodes): void {
                 while (($values = fgetcsv($handle, escape: '')) !== false) {
                     if ($values === [null] || $values === []) {
                         continue;
@@ -123,13 +125,23 @@ class KpCustomerPortfolio202608Seeder extends Seeder
 
                     if ($attributes['customer_group'] === 'Kim-Fay Professional' && $attributes['rep_code'] !== null) {
                         $repCode = strtoupper($attributes['rep_code']);
-                        $owner = User::query()
+                        $owners = User::query()
                             ->where('is_active', true)
                             ->whereRaw('UPPER(TRIM(rep_code)) = ?', [$repCode])
-                            ->first();
+                            ->get();
 
-                        if ($owner) {
-                            $assignment = UserCustomerAssignment::query()->firstOrCreate(
+                        if ($owners->count() > 1) {
+                            $ambiguousRepCodes[$repCode] = true;
+                        } elseif ($owners->count() === 1) {
+                            $owner = $owners->first();
+
+                            UserCustomerAssignment::query()
+                                ->where('customer_acumatica_id', $customerId)
+                                ->whereIn('assignment_type', [UserCustomerAssignment::TYPE_SERVICING, UserCustomerAssignment::TYPE_LEGACY_PRIMARY])
+                                ->where('user_id', '!=', $owner->id)
+                                ->delete();
+
+                            $assignment = UserCustomerAssignment::query()->updateOrCreate(
                                 [
                                     'user_id' => $owner->id,
                                     'customer_acumatica_id' => $customerId,
@@ -144,6 +156,7 @@ class KpCustomerPortfolio202608Seeder extends Seeder
                                 ],
                             );
                             $assignmentsCreated += $assignment->wasRecentlyCreated ? 1 : 0;
+                            $assignmentsUpdated += $assignment->wasRecentlyCreated ? 0 : 1;
                         } else {
                             $unresolvedRepCodes[$repCode] = true;
                         }
@@ -174,7 +187,11 @@ class KpCustomerPortfolio202608Seeder extends Seeder
             fclose($handle);
         }
 
-        $this->command?->info("KP customer portfolio: {$imported} rows imported; {$contactsCreated} default contacts and {$assignmentsCreated} servicing assignments created.");
+        $this->command?->info("KP customer portfolio: {$imported} rows imported; {$contactsCreated} default contacts, {$assignmentsCreated} servicing assignments created, {$assignmentsUpdated} re-pointed to a new owner.");
+
+        if ($ambiguousRepCodes !== []) {
+            $this->command?->warn('KP customer rep codes claimed by more than one active user (assignment skipped, resolve the duplicate rep_code first): '.implode(', ', array_keys($ambiguousRepCodes)));
+        }
 
         if ($contactsWithoutPrimary !== []) {
             $this->command?->warn(sprintf(

@@ -42,6 +42,7 @@ export const ALL_AUTHENTICATED_URLS = new Set([
 ]);
 
 const ADMIN_ONLY_ADMIN_TABS = new Set([
+  "sfa",
   "acumatica",
   "ai-keys",
   "data-tools",

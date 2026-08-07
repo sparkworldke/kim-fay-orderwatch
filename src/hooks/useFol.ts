@@ -21,6 +21,8 @@ export interface FolLine {
   qty_requested: number;
   qty_previously_issued?: number;
   date_last_issue?: string | null;
+  /** Requested issue/delivery date for this line. */
+  fol_date?: string | null;
   /** Unit sales price (ex-VAT) captured when added to cart. */
   unit_price?: number | null;
 }
@@ -94,6 +96,18 @@ export interface FolRequest {
   attachments: FolAttachment[];
   events?: FolEvent[];
   so_links?: Array<{ id: number; acumatica_order_nbr: string; po_number?: string | null; link_type: string }>;
+  so_create_attempts?: FolSoCreateAttempt[];
+  latest_so_create_attempt?: FolSoCreateAttempt | null;
+}
+
+export interface FolSoCreateAttempt {
+  id: number;
+  attempt_source: string;
+  status: "success" | "failed" | "skipped" | "already_linked";
+  acumatica_order_nbr: string | null;
+  error_message: string | null;
+  actor_user_id: number | null;
+  created_at: string;
 }
 
 export interface FolTechnician {
@@ -383,6 +397,20 @@ export function useFolSoLink(id: number | string) {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["kp-fol"] });
       qc.setQueryData(["kp-fol", id], data);
+    },
+  });
+}
+
+export function useCreateFolSalesOrder(id: number | string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{
+      fol: FolRequest;
+      result: { ok: boolean; order_nbr: string | null; already_linked: boolean };
+    }>(`kp/fol/${id}/sales-order`, { method: "POST" }),
+    onSuccess: ({ fol }) => {
+      qc.invalidateQueries({ queryKey: ["kp-fol"] });
+      qc.setQueryData(["kp-fol", id], fol);
     },
   });
 }

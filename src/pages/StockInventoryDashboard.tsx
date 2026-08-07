@@ -1,22 +1,21 @@
 ﻿import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Boxes, Layers, PackageCheck, ShieldCheck, Timer, TrendingDown, Package } from "lucide-react";
+import { Boxes } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/production/DataTable";
 import { PageTitle } from "@/components/production/DashboardHeader";
 import { FilterDrawer, FilterTrigger } from "@/components/production/FilterDrawer";
-import { KpiGrid, type KpiCardProps } from "@/components/production/KpiCard";
+import type { KpiCardProps } from "@/components/production/KpiCard";
 import { Panel } from "@/components/production/Panel";
 import { ProductDetailPanel } from "@/components/production/ProductDetailPanel";
 import { StatusBadge, StatusLegend } from "@/components/production/StatusBadge";
 import { TransferRequests } from "@/components/production/TransferRequests";
 import { TrendChart } from "@/components/production/TrendChart";
-import { yearToCurrentMonth } from "@/utils/Stock/calculations";
 import { useMsi } from "@/hooks/useMsiOverrides";
 import type { InventoryItem, InventoryMetrics, StockStatus } from "@/types/Stock/inventory";
-import { buildMetrics } from "@/utils/Stock/calculations";
+import { buildMetrics, yearToCurrentMonth } from "@/utils/Stock/calculations";
 import { matchesSearch } from "@/utils/Stock/filters";
-import { formatCover, formatNumber } from "@/utils/Stock/format";
+import { formatNumber } from "@/utils/Stock/format";
 import { STATUS_LABEL } from "@/utils/Stock/status";
 import { getFgsTransferRecommendation } from "@/utils/Stock/transferRecommendation";
 import { ProductionPreloader } from "@/components/production/ProductionPreloader";
@@ -65,7 +64,6 @@ export function StockInventoryDashboard({
   showMachine,
   showBusinessLineColumn,
   allowMsiEdit,
-  extraKpis = [],
   filters,
   isLoading,
   tableTitle,
@@ -73,7 +71,6 @@ export function StockInventoryDashboard({
   pageSubtitle,
   extraActions,
   enableTransferRequests = true,
-  serverSummary,
 }: StockInventoryDashboardProps) {
   const { overrides } = useMsi();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -85,55 +82,29 @@ export function StockInventoryDashboard({
       .map((item) => buildMetrics(item, warehouseIds, allowMsiEdit ? overrides[item.inventoryId] : undefined))
       .filter((m) => statuses.includes(m.planningStatus))
       .filter((m) => matchesSearch(search, [m.inventoryId, m.productName, m.brand, m.category]))
-      .sort((a, b) => b.qtyOnHand - a.qtyOnHand);
-  }, [items, warehouseIds, overrides, statuses, search, allowMsiEdit]);
+      .sort((a, b) => {
+        if (enableTransferRequests) {
+          const aTransfer = getFgsTransferRecommendation(a.item);
+          const bTransfer = getFgsTransferRecommendation(b.item);
+          if (!!aTransfer !== !!bTransfer) return aTransfer ? -1 : 1;
+          if (aTransfer && bTransfer && aTransfer.quantity !== bTransfer.quantity) {
+            return bTransfer.quantity - aTransfer.quantity;
+          }
+        }
+        return b.qtyOnHand - a.qtyOnHand;
+      });
+  }, [items, warehouseIds, overrides, statuses, search, allowMsiEdit, enableTransferRequests]);
 
-  const totals = useMemo(() => {
-    const qty = rows.reduce((a, r) => a + r.qtyAvailable, 0);
-    const finiteCover = rows.filter((r) => Number.isFinite(r.monthsOfCover));
-    return {
-      qty,
-      critical: rows.filter((r) => r.msiConfigured && r.planningStatus === "critical").length,
-      atRisk: rows.filter((r) => r.msiConfigured && r.planningStatus === "at-risk").length,
-      healthy: rows.filter((r) => r.msiConfigured && r.planningStatus === "healthy").length,
-      belowMsi: rows.filter((r) => r.msiConfigured && r.qtyAvailable < r.msi).length,
-      requirement: rows.filter((r) => r.msiConfigured).reduce((a, r) => a + r.requirement, 0),
-      avgCover: finiteCover.length
-        ? finiteCover.reduce((a, r) => a + r.monthsOfCover, 0) / finiteCover.length
-        : 0,
-    };
-  }, [rows]);
-
-  const effectiveTotal = serverSummary?.total_skus ?? rows.length;
-  const effectiveTotals = serverSummary ? {
-    qty: serverSummary.qty_available,
-    critical: serverSummary.critical_skus,
-    atRisk: serverSummary.at_risk_skus,
-    healthy: serverSummary.healthy_skus,
-    belowMsi: serverSummary.skus_below_msi,
-    requirement: serverSummary.requirement,
-    avgCover: serverSummary.avg_months_of_cover ?? Number.NaN,
-  } : totals;
-  const pct = (n: number) => (effectiveTotal ? `${Math.round((n / effectiveTotal) * 100)}% of SKUs` : "—");
-
-  const kpis: KpiCardProps[] = [
-    { label: "Total SKUs", value: formatNumber(effectiveTotal), caption: "Matching filters", icon: Layers, tone: "primary" },
-    { label: "Critical SKUs", value: formatNumber(effectiveTotals.critical), caption: pct(effectiveTotals.critical), icon: AlertTriangle, tone: "critical" },
-    { label: "At-Risk SKUs", value: formatNumber(effectiveTotals.atRisk), caption: pct(effectiveTotals.atRisk), icon: TrendingDown, tone: "warning" },
-    { label: "Healthy SKUs", value: formatNumber(effectiveTotals.healthy), caption: pct(effectiveTotals.healthy), icon: ShieldCheck, tone: "success" },
-    { label: "Qty Available", value: formatNumber(effectiveTotals.qty), caption: "Selected warehouses", icon: Boxes, tone: "primary" },
-    { label: "Avg Months of Cover", value: Number.isNaN(effectiveTotals.avgCover) ? "—" : formatCover(effectiveTotals.avgCover), caption: "Across filtered SKUs", icon: Timer, tone: "neutral" },
-    { label: "SKUs Below MSI", value: formatNumber(effectiveTotals.belowMsi), caption: pct(effectiveTotals.belowMsi), icon: Package, tone: "warning" },
-    { label: requirementLabel, value: formatNumber(effectiveTotals.requirement), caption: "Units to reach MSI", icon: PackageCheck, tone: "primary" },
-    ...extraKpis,
-  ];
-
-  const selected = rows.find((r) => r.inventoryId === selectedId) ?? null;
+  const selected = rows.find((r) => r.inventoryId === selectedId) ?? rows[0] ?? null;
+  const selectedSeries = selected ? yearToCurrentMonth(selected.item.monthlySales) : [];
 
   const columns: ColumnDef<InventoryMetrics, unknown>[] = useMemo(() => {
     const base: ColumnDef<InventoryMetrics, unknown>[] = [
       { accessorKey: "inventoryId", header: "Inventory ID", meta: { width: "7%" }, cell: (c) => <span className="font-bold text-primary">{c.row.original.inventoryId}</span> },
-      { accessorKey: "productName", header: "Product", meta: { width: "14%" }, cell: (c) => <span className="block truncate font-medium text-navy">{c.row.original.productName}</span> },
+      { accessorKey: "productName", header: "Product", meta: { width: "14%" }, cell: (c) => {
+        const transfer = getFgsTransferRecommendation(c.row.original.item);
+        return <div className="min-w-0"><span className="block truncate font-medium text-navy">{c.row.original.productName}</span>{transfer ? <span className="mt-0.5 block truncate text-[10px] font-semibold text-amber-700">Transfer from {transfer.sourceWarehouse}</span> : null}</div>;
+      } },
       { accessorKey: "brand", header: "Brand", meta: { width: "8%" } },
       { accessorKey: "category", header: "Category", meta: { width: "9%" } },
     ];
@@ -177,17 +148,17 @@ export function StockInventoryDashboard({
       </FilterDrawer>
 
       {isLoading ? <ProductionPreloader /> : null}
-      <KpiGrid items={kpis} compact loading={isLoading} />
-
-      <div className="grid items-start gap-2 lg:min-h-0 lg:flex-1 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
-        <div className="min-w-0 space-y-2">
-          <Panel
-            title={tableTitle}
-            icon={Boxes}
-            actions={<StatusLegend />}
-            compact
-            bodyClassName="p-0"
-          >
+      <div className="grid items-start gap-2 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)] xl:items-stretch">
+        <div className="min-w-0 space-y-2 xl:grid xl:min-h-0 xl:grid-rows-[240px_minmax(0,1fr)]">
+          <div className="h-[240px] min-h-0 [&>section]:h-full">
+            <Panel
+              title={tableTitle}
+              icon={Boxes}
+              actions={<StatusLegend />}
+              compact
+              fill
+              bodyClassName="p-0"
+            >
             <DataTable
             data={rows}
             columns={columns}
@@ -208,6 +179,7 @@ export function StockInventoryDashboard({
             onSearchChange={onSearchChange}
             isLoading={isLoading}
             initialColumnVisibility={DEFAULT_COLUMN_VISIBILITY}
+            fill
             renderMobileCard={(r) => (
               <div className="space-y-1.5">
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
@@ -219,6 +191,11 @@ export function StockInventoryDashboard({
                   </div>
                   <StatusBadge status={r.planningStatus} />
                 </div>
+                {getFgsTransferRecommendation(r.item) ? (
+                  <p className="font-semibold text-amber-700">
+                    FGS empty · transfer from {getFgsTransferRecommendation(r.item)?.sourceWarehouse}
+                  </p>
+                ) : null}
                 <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground sm:grid-cols-4">
                   <span>Available<br /><b className="text-sm text-primary tabular-nums">{formatNumber(r.qtyAvailable)}</b></span>
                   <span>On Hand<br /><b className="text-sm text-foreground tabular-nums">{formatNumber(r.qtyOnHand)}</b></span>
@@ -228,12 +205,12 @@ export function StockInventoryDashboard({
               </div>
             )}
             />
-          </Panel>
-
-          {selected ?? rows[0] ? (
+            </Panel>
+          </div>
+          {selected ? (
             <TrendChart
-              series={yearToCurrentMonth((selected ?? rows[0]).item.monthlySales)}
-              subtitle={`January to current month · ${(selected ?? rows[0]).productName}`}
+              series={selectedSeries}
+              subtitle={`January to current month · ${selected.productName}`}
             />
           ) : null}
         </div>
@@ -248,6 +225,7 @@ export function StockInventoryDashboard({
           onOpenChange={setSheetOpen}
         />
       </div>
+
     </div>
   );
 }

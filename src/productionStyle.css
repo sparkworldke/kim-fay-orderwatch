@@ -10,8 +10,17 @@
     0 1px 2px oklch(0.208 0.04 265.8 / 6%),
     0 1px 3px oklch(0.208 0.04 265.8 / 4%);
   --production-shadow-pop: 0 10px 30px -12px oklch(0.317 0.129 262.2 / 25%);
-  font-size: 0.8125rem;
+  font-size: 9px;
   line-height: 1.4;
+}
+
+/* Compact typography for production and imported production data. */
+.production-dashboard :where(p, span, label, button, input, select, textarea, th, td, li) {
+  font-size: 9px !important;
+}
+
+.production-dashboard :where(h1, h2, h3, .ui-title) {
+  font-size: 12px !important;
 }
 
 .dark .production-dashboard {

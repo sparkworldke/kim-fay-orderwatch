@@ -62,7 +62,7 @@ export function TrendChart({
               tickLine={false}
               axisLine={false}
               padding={{ left: 18, right: 18 }}
-              tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+              tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
               interval="preserveStartEnd"
             />
             <YAxis
@@ -70,13 +70,13 @@ export function TrendChart({
               tickLine={false}
               axisLine={false}
               width={44}
-              tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+              tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
             />
             <Tooltip
               contentStyle={{
                 borderRadius: 10,
                 border: "1px solid var(--border)",
-                fontSize: 12,
+                fontSize: 9,
                 boxShadow: "var(--shadow-pop)",
               }}
               formatter={(value: number, name) => [formatNumber(value), name]}
@@ -124,7 +124,7 @@ export function TrendChart({
                   label={{
                     value: a.label,
                     position: "top",
-                    fontSize: 10,
+                    fontSize: 9,
                     fill: TONE_COLOR[a.tone],
                   }}
                 />

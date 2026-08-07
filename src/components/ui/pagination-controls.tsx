@@ -12,7 +12,7 @@ interface PaginationControlsProps {
   className?: string;
 }
 
-const DEFAULT_SIZES = [20, 50, 100];
+const DEFAULT_SIZES = [10, 20, 50, 100];
 
 function getPageNumbers(current: number, last: number): (number | "…")[] {
   if (last <= 7) return Array.from({ length: last }, (_, i) => i + 1);

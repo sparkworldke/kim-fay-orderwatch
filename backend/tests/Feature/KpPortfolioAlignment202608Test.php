@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CustomerContact;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\UserCustomerAssignment;
 use Database\Seeders\KpCustomerPortfolio202608Seeder;
 use Database\Seeders\KpFolTechnicianEligibility202608Seeder;
 use Database\Seeders\KpRepCodeAlignment202608Seeder;
@@ -108,5 +109,65 @@ class KpPortfolioAlignment202608Test extends TestCase
             $this->assertSame('Original designation', $user->designation);
         }
         $this->assertDatabaseCount('user_roles', 3);
+    }
+
+    public function test_rep_code_owner_change_replaces_previous_assignment_instead_of_duplicating(): void
+    {
+        $berna = User::factory()->create([
+            'employee_number' => 'P460',
+            'rep_code' => 'C967',
+            'is_active' => true,
+        ]);
+
+        $this->seed(KpCustomerPortfolio202608Seeder::class);
+
+        $this->assertDatabaseHas('user_customer_assignments', [
+            'user_id' => $berna->id,
+            'customer_acumatica_id' => 'CUST100003',
+            'assignment_type' => UserCustomerAssignment::TYPE_SERVICING,
+        ]);
+
+        $berna->forceFill(['rep_code' => 'ZZZ9'])->save();
+        $successor = User::factory()->create([
+            'employee_number' => 'P999',
+            'rep_code' => 'C967',
+            'is_active' => true,
+        ]);
+
+        $this->seed(KpCustomerPortfolio202608Seeder::class);
+
+        $this->assertSame(1, UserCustomerAssignment::query()
+            ->where('customer_acumatica_id', 'CUST100003')
+            ->whereIn('assignment_type', [UserCustomerAssignment::TYPE_SERVICING, UserCustomerAssignment::TYPE_LEGACY_PRIMARY])
+            ->count());
+        $this->assertDatabaseHas('user_customer_assignments', [
+            'user_id' => $successor->id,
+            'customer_acumatica_id' => 'CUST100003',
+            'assignment_type' => UserCustomerAssignment::TYPE_SERVICING,
+        ]);
+        $this->assertDatabaseMissing('user_customer_assignments', [
+            'user_id' => $berna->id,
+            'customer_acumatica_id' => 'CUST100003',
+        ]);
+    }
+
+    public function test_ambiguous_rep_code_owners_are_skipped_not_arbitrarily_attached(): void
+    {
+        User::factory()->create([
+            'employee_number' => 'P460',
+            'rep_code' => 'C967',
+            'is_active' => true,
+        ]);
+        User::factory()->create([
+            'employee_number' => 'P999',
+            'rep_code' => 'C967',
+            'is_active' => true,
+        ]);
+
+        $this->seed(KpCustomerPortfolio202608Seeder::class);
+
+        $this->assertSame(0, UserCustomerAssignment::query()
+            ->where('customer_acumatica_id', 'CUST100003')
+            ->count());
     }
 }

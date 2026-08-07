@@ -24,9 +24,9 @@ function IntelligenceLayout() {
     <MsiProvider>
       <ProductionStockViewContext.Provider value={{ value: stockView, setValue: setStockView }}>
         <ResetTokenContext.Provider value={resetToken}>
-          <div className="production-dashboard flex min-h-dvh flex-col bg-background">
+          <div className="production-dashboard flex min-h-dvh flex-col bg-background xl:h-dvh xl:min-h-0 xl:overflow-hidden">
             <DashboardHeader onReset={() => setResetToken((t) => t + 1)} />
-            <main className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col px-3 py-2 sm:px-4">
+            <main className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col overflow-y-auto px-3 py-2 sm:px-4 xl:overflow-hidden">
               <Outlet />
             </main>
           </div>

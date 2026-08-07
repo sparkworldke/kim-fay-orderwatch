@@ -542,6 +542,8 @@ class OperationsController extends Controller
                 DB::raw($this->backorderLeadTimeDaysExpression().' as lead_time_days'),
                 DB::raw('aso.order_date as order_date'),
                 DB::raw('aso.status as sales_order_status'),
+                DB::raw('ac.parent_acumatica_id as parent_customer_id'),
+                DB::raw('COALESCE(parent_ac.name, ac.main_account_name, ac.name, acumatica_backorder_lines.customer_name) as parent_customer_name'),
                 DB::raw($this->backorderSoLineReasonSubquery().' as so_line_reason_code'),
             ]);
         $paginated = $query->paginate($request->integer('per_page', 50));
@@ -1640,6 +1642,8 @@ class OperationsController extends Controller
     {
         $query = AcumaticaBackorderLine::query()
             ->leftJoin('acumatica_inventory_items as ai', 'acumatica_backorder_lines.inventory_id', '=', 'ai.inventory_id')
+            ->leftJoin('acumatica_customers as ac', 'acumatica_backorder_lines.customer_acumatica_id', '=', 'ac.acumatica_id')
+            ->leftJoin('acumatica_customers as parent_ac', 'ac.parent_acumatica_id', '=', 'parent_ac.acumatica_id')
             ->leftJoin('acumatica_sales_orders as aso', function ($join) {
                 $join->on('acumatica_backorder_lines.order_nbr', '=', 'aso.acumatica_order_nbr');
             });

@@ -12,6 +12,7 @@ use App\Models\FolRequest;
 use App\Models\FolRequestAttachment;
 use App\Models\FolRequestEvent;
 use App\Models\FolSoLink;
+use App\Models\FolSoCreateLog;
 use App\Services\Crm\CustomerContactService;
 use App\Models\NotificationRule;
 use App\Models\Role;
@@ -153,6 +154,14 @@ class FolRequestService
             $soNumbers = $request->soLinks->pluck('acumatica_order_nbr')->filter()->values();
         }
         $primarySo = $soNumbers->first();
+        $soCreateAttempts = FolSoCreateLog::query()
+            ->where('fol_request_id', $request->id)
+            ->latest('id')
+            ->limit(5)
+            ->get([
+                'id', 'attempt_source', 'status', 'acumatica_order_nbr',
+                'error_message', 'actor_user_id', 'created_at',
+            ]);
         $ownership = UserCustomerAssignment::query()
             ->where('user_id', $request->sales_consultant_user_id)
             ->where('customer_acumatica_id', $request->customer_acumatica_id)
@@ -181,6 +190,8 @@ class FolRequestService
             'acumatica_so_number' => $primarySo,
             'so_numbers' => $soNumbers->all(),
             'so_status' => $request->linked_so_status_summary,
+            'so_create_attempts' => $soCreateAttempts,
+            'latest_so_create_attempt' => $soCreateAttempts->first(),
             'ownership_source' => $ownershipSource,
             'lines' => $request->lines->values(),
             'attachments' => $attachments,
@@ -293,6 +304,7 @@ class FolRequestService
                     'qty_requested' => $line['qty_requested'],
                     'qty_previously_issued' => $line['qty_previously_issued'] ?? $prior['qty'],
                     'date_last_issue' => $line['date_last_issue'] ?? $prior['date'],
+                    'fol_date' => $line['fol_date'] ?? null,
                     'previous_source' => 'prior_fol',
                     'commitment_sku_ids' => $line['commitment_sku_ids'] ?? null,
                 ]);
@@ -379,6 +391,7 @@ class FolRequestService
                     'qty_requested' => $line['qty_requested'],
                     'qty_previously_issued' => $line['qty_previously_issued'] ?? $prior['qty'],
                     'date_last_issue' => $line['date_last_issue'] ?? $prior['date'],
+                    'fol_date' => $line['fol_date'] ?? null,
                     'previous_source' => 'prior_fol',
                     'commitment_sku_ids' => $line['commitment_sku_ids'] ?? null,
                 ]);

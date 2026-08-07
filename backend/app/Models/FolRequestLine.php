@@ -16,6 +16,7 @@ class FolRequestLine extends Model
         'qty_requested',
         'qty_previously_issued',
         'date_last_issue',
+        'fol_date',
         'previous_source',
         'commitment_sku_ids',
     ];
@@ -26,6 +27,7 @@ class FolRequestLine extends Model
             'qty_requested' => 'decimal:4',
             'qty_previously_issued' => 'decimal:4',
             'date_last_issue' => 'date',
+            'fol_date' => 'date',
             'commitment_sku_ids' => 'array',
         ];
     }

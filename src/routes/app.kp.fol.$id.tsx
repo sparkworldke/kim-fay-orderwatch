@@ -1,9 +1,9 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, Link2, Pencil, RefreshCw, UserRoundCog, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Link2, PackagePlus, Pencil, RefreshCw, UserRoundCog, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AttachmentList } from "@/components/attachment-viewer";
-import { CustomerLink } from "@/components/entity-links";
+import { CustomerLink, OrderLink } from "@/components/entity-links";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { useAssignFolTechnician, useFolDecision, useFolPoLink, useFolRequest, useFolSoLink, useFolTechnicians, useResolveFolTechnician } from "@/hooks/useFol";
+import { useAssignFolTechnician, useCreateFolSalesOrder, useFolDecision, useFolPoLink, useFolRequest, useFolSoLink, useFolTechnicians, useResolveFolTechnician } from "@/hooks/useFol";
 import { useAuth } from "@/lib/auth";
 import { FOL_STATUS_CLASS, FOL_STATUS_LABEL, formatFolDate } from "@/lib/fol";
 
@@ -28,6 +28,7 @@ function FolDetailPage() {
   const request = useFolRequest(id);
   const decision = useFolDecision(id);
   const soLink = useFolSoLink(id);
+  const createSo = useCreateFolSalesOrder(id);
   const poLink = useFolPoLink(id);
   const assignTechnician = useAssignFolTechnician(id);
   const resolveTechnician = useResolveFolTechnician(id);
@@ -37,8 +38,12 @@ function FolDetailPage() {
   const [technicianId, setTechnicianId] = useState("");
   const permissions = caps.permissions ?? [];
   const fol = request.data;
+  const linkedSoNumber = fol?.so_number ?? fol?.acumatica_so_number ?? fol?.linked_so_order_nbrs?.[0] ?? null;
+  const latestSoAttempt = fol?.latest_so_create_attempt ?? fol?.so_create_attempts?.[0] ?? null;
+  const lastSoAttemptFailed = latestSoAttempt?.status === "failed";
   const canApprove = permissions.includes("kp.fol.approve") && fol && ["submitted", "in_approval"].includes(fol.status);
   const canInvoice = permissions.includes("kp.fol.invoice") && fol && ["ready_for_invoicing", "so_linked", "invoiced", "fulfilled"].includes(fol.status);
+  const canCreateSo = canInvoice && !linkedSoNumber && fol.status !== "fulfilled";
   const canPoMatch = fol && ["ready_for_invoicing", "so_linked", "invoiced", "fulfilled"].includes(fol.status);
   const canEditDraft =
     !!fol &&
@@ -79,6 +84,18 @@ function FolDetailPage() {
       toast.success("Sales order linked.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to link sales order.");
+    }
+  }
+
+  async function createSalesOrder() {
+    try {
+      const response = await createSo.mutateAsync();
+      toast.success(response.result.already_linked
+        ? `Sales Order ${response.result.order_nbr} is already linked.`
+        : `Sales Order ${response.result.order_nbr} created and linked.`);
+    } catch (error) {
+      await request.refetch();
+      toast.error(error instanceof Error ? error.message : "Unable to create the Acumatica sales order.");
     }
   }
 
@@ -266,56 +283,52 @@ function FolDetailPage() {
             </section>
           )}
 
-          {canInvoice && (
-            <section className="rounded-lg border bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-semibold">Match by SO number</h2>
-              <Label className="mt-3 block">Acumatica SO number</Label>
-              <div className="mt-1 flex gap-2">
-                <Input value={soNbr} onChange={(e) => setSoNbr(e.target.value)} placeholder="SO..." />
-                <Button onClick={linkSo} disabled={!soNbr || soLink.isPending}>
-                  <Link2 className="h-4 w-4" />
-                </Button>
+          <section className={`rounded-lg border bg-card p-4 shadow-sm ${linkedSoNumber ? "border-emerald-200" : lastSoAttemptFailed ? "border-destructive/40" : ""}`}>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">Sales order</h2>
+              <Badge variant="outline" className={linkedSoNumber ? "border-emerald-200 bg-emerald-50 text-emerald-800" : lastSoAttemptFailed ? "border-destructive/30 bg-destructive/5 text-destructive" : "text-muted-foreground"}>
+                {linkedSoNumber ? "Linked" : lastSoAttemptFailed ? "Last attempt failed" : "Not linked"}
+              </Badge>
+            </div>
+            {linkedSoNumber ? (
+              <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50/50 p-3">
+                <OrderLink customerId={fol.customer_acumatica_id} orderId={linkedSoNumber} className="text-base text-emerald-900" />
+                {(fol.so_status || fol.linked_so_status_summary) && <p className="mt-1 text-xs text-emerald-800">Status: {fol.so_status ?? fol.linked_so_status_summary}</p>}
               </div>
-            </section>
-          )}
-
-          {canPoMatch && (
-            <section className="rounded-lg border bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-semibold">Match by customer PO</h2>
-              <Label className="mt-3 block">Customer PO number</Label>
-              <div className="mt-1 flex gap-2">
-                <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO..." />
-                <Button onClick={linkPo} disabled={!poNumber || poLink.isPending}>
-                  <Link2 className="h-4 w-4" />
-                </Button>
+            ) : <p className="mt-2 text-xs text-muted-foreground">No Acumatica sales order is linked to this FOL yet.</p>}
+            {lastSoAttemptFailed && (
+              <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                <p className="font-medium">Acumatica creation failed</p>
+                <p className="mt-1 break-words">{latestSoAttempt?.error_message || "The sales order could not be created."}</p>
+                <p className="mt-1 opacity-75">{formatFolDate(latestSoAttempt?.created_at ?? null)}</p>
               </div>
-            </section>
-          )}
-
-          {((fol.so_links ?? []).length > 0 || fol.so_number || (fol.linked_so_order_nbrs ?? []).length > 0) && (
-            <section className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
-              <h2 className="text-sm font-semibold text-emerald-900">Attached Sales Order</h2>
-              <div className="mt-2 font-mono text-lg font-semibold tracking-tight text-emerald-900">
-                {fol.so_number ?? fol.acumatica_so_number ?? fol.linked_so_order_nbrs?.[0] ?? "—"}
-              </div>
-              {(fol.so_status || fol.linked_so_status_summary) && (
-                <p className="mt-1 text-xs text-emerald-800">
-                  Status: {fol.so_status ?? fol.linked_so_status_summary}
-                </p>
-              )}
-              {(fol.so_links ?? []).length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {(fol.so_links ?? []).map((link) => (
-                    <Badge key={link.id} variant="outline" className="gap-1 border-emerald-200 bg-white">
-                      {link.acumatica_order_nbr}
-                      <span className="text-muted-foreground">· {link.link_type.replaceAll("_", " ")}</span>
-                      {link.po_number && <span className="text-muted-foreground">· PO {link.po_number}</span>}
-                    </Badge>
-                  ))}
+            )}
+            {canCreateSo && (
+              <Button className="mt-3 w-full" onClick={() => void createSalesOrder()} disabled={createSo.isPending}>
+                <PackagePlus className="mr-1 h-4 w-4" />
+                {createSo.isPending ? "Creating in Acumatica..." : lastSoAttemptFailed ? "Retry create in Acumatica" : "Create SO in Acumatica"}
+              </Button>
+            )}
+            {canInvoice && (
+              <div className="mt-4 border-t pt-3">
+                <Label className="text-xs">Link an existing Acumatica SO</Label>
+                <div className="mt-1 flex gap-2">
+                  <Input value={soNbr} onChange={(e) => setSoNbr(e.target.value)} placeholder="SO number" />
+                  <Button variant="outline" onClick={linkSo} disabled={!soNbr.trim() || soLink.isPending} aria-label="Link sales order"><Link2 className="h-4 w-4" /></Button>
                 </div>
-              )}
-            </section>
-          )}
+              </div>
+            )}
+            {canPoMatch && (
+              <div className="mt-3">
+                <Label className="text-xs">Match by customer PO</Label>
+                <div className="mt-1 flex gap-2">
+                  <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO number" />
+                  <Button variant="outline" onClick={linkPo} disabled={!poNumber.trim() || poLink.isPending} aria-label="Match customer PO"><Link2 className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            )}
+          </section>
+
 
           {canAssignTechnician && (
             <section className="rounded-lg border bg-card p-4 shadow-sm">

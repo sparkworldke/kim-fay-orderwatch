@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { getToken, useAuth } from "@/lib/auth";
 import { canSeeAdminTab } from "@/lib/nav-permissions";
-import { Activity, AlertTriangle, ArrowUpRight, Bot, Boxes, CalendarDays, ChevronDown, ChevronRight, Clock, Copy, Database, Download, FlaskConical, Gauge, History, KeyRound, Loader2, Mail, PackageX, Pencil, Play, RefreshCw, RotateCcw, Search, ShieldCheck, Sparkles, Timer, ToggleLeft, Trash2, Upload, UserCog, UserPlus, Users, X } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, Bot, Boxes, CalendarDays, ChevronDown, ChevronRight, Clock, Copy, Database, DatabaseZap, Download, FlaskConical, Gauge, History, KeyRound, Loader2, Mail, PackageX, Pencil, Play, RefreshCw, RotateCcw, Search, ShieldCheck, Sparkles, Timer, ToggleLeft, Trash2, Upload, UserCog, UserPlus, Users, X } from "lucide-react";
 import { useRef, useEffect, useState, type ChangeEvent, type ComponentType, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { UserSessionsSheet } from "@/components/admin/UserSessionsSheet";
@@ -83,6 +83,7 @@ import {
   useValidateAcumatica,
   useRestoreRepCode,
 } from "@/hooks/admin/useAdminSettings";
+import { apiFetch } from "@/lib/api";
 import {
   useImpersonationCandidates,
   useStartImpersonation,
@@ -139,6 +140,7 @@ function findActiveSyncRun(logs: AcumaticaSyncLog[] | undefined, syncTypes: stri
 }
 
 const ADMIN_TABS = [
+  { value: "sfa", label: "SFA Sync", perm: "sfa", panel: SfaSyncPanel },
   { value: "acumatica", label: "Acumatica", perm: "acumatica", panel: AcumaticaPanel },
   { value: "sync", label: "Sync Operations", perm: "sync", panel: SyncPanel },
   { value: "data-tools", label: "Data Tools", perm: "data-tools", panel: DataToolsPanel },
@@ -156,6 +158,57 @@ const ADMIN_TABS = [
   { value: "cron-jobs", label: "Cron Jobs", perm: "cron-jobs", panel: CronJobsPanel },
   { value: "ai-logs", label: "AI Logs", perm: "ai-logs", panel: AiLogsPanel },
 ] as const;
+
+type SfaState = { table_name: string; is_enabled: boolean; last_success_at: string | null };
+type SfaStatus = { configured: boolean; connected: boolean; error: string | null; visible_team: string; states: SfaState[] };
+
+function SfaSyncPanel() {
+  const [status, setStatus] = useState<SfaStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try { setStatus(await apiFetch<SfaStatus>("admin/sfa/status")); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Could not load SFA status."); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  async function pull(table: "reps" | "customers") {
+    setRunning(table);
+    try {
+      await apiFetch("admin/sfa/run", { method: "POST", body: { table }, timeoutMs: 120_000 });
+      toast.success(`${table === "reps" ? "Representatives" : "Customers"} pulled from SFA.`);
+      await load();
+    } catch (error) { toast.error(error instanceof Error ? error.message : "SFA pull failed."); }
+    finally { setRunning(null); }
+  }
+
+  const state = (table: string) => status?.states.find((item) => item.table_name === table);
+  return <Card>
+    <CardHeader><CardTitle className="flex items-center gap-2"><DatabaseZap className="h-5 w-5" />Solutech SFA</CardTitle></CardHeader>
+    <CardContent className="space-y-5">
+      {loading ? <Skeleton className="h-24 w-full" /> : <>
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge variant={status?.connected ? "default" : "destructive"}>{status?.connected ? "Connected" : status?.configured ? "Connection failed" : "Credentials required"}</Badge>
+          <span className="text-sm text-muted-foreground">Visible dashboard team: <strong>{status?.visible_team ?? "GT"}</strong>. GT and MT may be stored locally.</span>
+        </div>
+        {status?.error && <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{status.error}</p>}
+        <div className="grid gap-3 md:grid-cols-2">
+          {(["reps", "customers"] as const).map((table) => <div key={table} className="rounded-lg border p-4">
+            <div className="mb-3"><p className="font-medium capitalize">{table}</p><p className="text-xs text-muted-foreground">Last success: {state(table)?.last_success_at ? new Date(state(table)!.last_success_at!).toLocaleString() : "Never"}</p></div>
+            <Button disabled={!status?.connected || running !== null || (table === "customers" && !state("reps")?.last_success_at)} onClick={() => void pull(table)}>
+              {running === table ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Pull {table}
+            </Button>
+          </div>)}
+        </div>
+        <p className="text-xs text-muted-foreground">Credentials stay in the server environment and are never returned to the browser. Pull representatives before customers.</p>
+      </>}
+    </CardContent>
+  </Card>;
+}
 
 function AdminPage() {
   const { session } = useAuth();

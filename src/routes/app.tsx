@@ -6,7 +6,7 @@ import { AiAssistant } from "@/components/ai-assistant";
 import { DownloadReadyNotifier } from "@/components/download-ready-notifier";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { clearSession, syncSessionFromMe, type ImpersonationPayload } from "@/lib/auth";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { usePageActivityTracker } from "@/hooks/usePageActivityTracker";
@@ -35,17 +35,12 @@ export const Route = createFileRoute("/app")({
         impersonation?: ImpersonationPayload | null;
       }>("auth/me");
       syncSessionFromMe(me);
-    } catch (err) {
-      // Only log out on a genuine 401 (token revoked/expired). Network errors,
-      // timeouts and 5xx responses are transient — killing the session for those
-      // would log users out on every brief connectivity blip or server restart.
-      if (err instanceof ApiError && err.status === 401) {
-        clearSession();
-        throw redirect({ to: "/auth" });
-      }
-      // For any other error (network failure, 5xx, etc.) let the app shell
-      // mount with whatever session data is already in localStorage rather than
-      // forcing a logout. The user can retry their action.
+    } catch {
+      // Protected pages require a session that the authentication service can
+      // verify now. Clear stale local credentials and return to login whenever
+      // validation is expired, rejected, unavailable, or times out.
+      clearSession();
+      throw redirect({ to: "/auth" });
     }
   },
   component: AppLayout,

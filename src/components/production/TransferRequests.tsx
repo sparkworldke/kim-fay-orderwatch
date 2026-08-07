@@ -14,7 +14,7 @@ import { ApiError } from "@/lib/api";
 import { inventoryService } from "@/services/Stock/inventory.service";
 import type { InventoryItem } from "@/types/Stock/inventory";
 import { formatNumber } from "@/utils/Stock/format";
-import { getFgsTransferRecommendation, isPrimaryFgsWarehouse } from "@/utils/Stock/transferRecommendation";
+import { getFgsTransferRecommendation, isEligibleFgsTransferSource } from "@/utils/Stock/transferRecommendation";
 import { cn } from "@/lib/utils";
 
 interface TransferRequestsProps {
@@ -55,7 +55,7 @@ export function TransferRequests({ items }: TransferRequestsProps) {
       ["Brand", "Inventory ID", "Product", "Source Warehouse", "Qty on Hand", "Qty Available"],
       ...requests.flatMap(({ item }) =>
         item.warehouseStocks
-          .filter((stock) => !isPrimaryFgsWarehouse(stock.warehouseId, stock.warehouseName) && (stock.qtyAvailable > 0 || stock.qtyOnHand > 0))
+          .filter(isEligibleFgsTransferSource)
           .map((stock) => [
             item.brand,
             item.inventoryId,
@@ -107,11 +107,7 @@ export function TransferRequests({ items }: TransferRequestsProps) {
         recipients: unique,
         requests: requests.map(({ item, transfer }) => {
           const sources = item.warehouseStocks
-            .filter(
-              (stock) =>
-                !isPrimaryFgsWarehouse(stock.warehouseId, stock.warehouseName) &&
-                (stock.qtyAvailable > 0 || stock.qtyOnHand > 0),
-            )
+            .filter(isEligibleFgsTransferSource)
             .map((stock) => ({
               warehouse_name: stock.warehouseName,
               qty_on_hand: stock.qtyOnHand,
@@ -233,11 +229,7 @@ export function TransferRequests({ items }: TransferRequestsProps) {
                   {expanded ? (
                     <div className="border-t border-border bg-secondary/30 px-3 py-2">
                       {brandRequests.map(({ item }) => {
-                        const sources = item.warehouseStocks.filter(
-                          (stock) =>
-                            !isPrimaryFgsWarehouse(stock.warehouseId, stock.warehouseName) &&
-                            (stock.qtyAvailable > 0 || stock.qtyOnHand > 0),
-                        );
+                        const sources = item.warehouseStocks.filter(isEligibleFgsTransferSource);
                         return (
                           <div
                             key={item.inventoryId}

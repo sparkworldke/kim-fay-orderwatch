@@ -12,7 +12,8 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command(PruneExpiredOtps::class)
-    ->everyThirtyMinutes()
+    ->dailyAt('05:00')
+    ->timezone((string) config('cron.timezone', config('app.timezone')))
     ->withoutOverlapping(10, releaseOnTerminationSignals: false);
 
 Schedule::command('orderwatch:sync-dtc-prices --source=scheduler')
@@ -22,15 +23,18 @@ Schedule::command('orderwatch:sync-dtc-prices --source=scheduler')
     ->name('dtc-price-sync');
 
 Schedule::command('orderwatch:send-consultant-inactivity-digests')
-    ->hourlyAt(15)
+    ->dailyAt('16:20')
     ->timezone((string) config('cron.timezone', config('app.timezone')))
     ->withoutOverlapping(20, releaseOnTerminationSignals: false)
     ->name('sales-consultant-inactivity-digests');
 
-Schedule::command('production:summaries-refresh --recent')
-    ->everyThirtyMinutes()
-    ->withoutOverlapping(20, releaseOnTerminationSignals: false)
-    ->name('production-summary-refresh');
+foreach (CronJob::businessCheckpointCronExpressions(25) as $index => $expression) {
+    Schedule::command('production:summaries-refresh --recent')
+        ->cron($expression)
+        ->timezone((string) config('cron.timezone', config('app.timezone')))
+        ->withoutOverlapping(20, releaseOnTerminationSignals: false)
+        ->name('production-summary-refresh-'.$index);
+}
 
 // Refresh customer master status and payment terms without touching manually
 // maintained CRM contacts.
@@ -62,6 +66,9 @@ Schedule::command('orderwatch:send-daily-report-fixed --source=scheduler')
 //     ->withoutOverlapping(5, releaseOnTerminationSignals: false);
 
 try {
+    if (app()->environment('testing')) {
+        return;
+    }
     CronJob::ensureDefaults();
     $timezone = (string) config('cron.timezone', config('app.timezone'));
 

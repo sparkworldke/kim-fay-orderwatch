@@ -9,6 +9,7 @@ use App\Models\FolRequest;
 use App\Models\FolRequestAttachment;
 use App\Services\Attachments\AttachmentPreviewService;
 use App\Services\Fol\FolRequestService;
+use App\Services\Fol\FolAcumaticaSalesOrderService;
 use App\Services\Fol\FolSettingsService;
 use App\Support\DataScope;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,7 @@ class FolController extends Controller
 {
     public function __construct(
         private readonly FolRequestService $fol,
+        private readonly FolAcumaticaSalesOrderService $folSalesOrders,
         private readonly FolSettingsService $folSettings,
         private readonly AttachmentPreviewService $attachmentPreview,
     ) {}
@@ -216,6 +218,35 @@ class FolController extends Controller
         return response()->json($this->fol->present(
             $this->fol->linkSalesOrder($request->user(), $folRequest, $validated['acumatica_order_nbr']),
         ));
+    }
+
+    public function createSalesOrder(Request $request, FolRequest $folRequest): JsonResponse
+    {
+        $this->fol->ensureCan($request->user(), 'kp.fol.invoice');
+        $this->authorizeRequestView($request, $folRequest);
+
+        if (! in_array($folRequest->status, ['ready_for_invoicing', 'approved_final', 'so_linked', 'invoiced'], true)) {
+            return response()->json([
+                'message' => 'A sales order can only be created after final FOL approval.',
+            ], 422);
+        }
+
+        $result = $this->folSalesOrders->createAndLink(
+            $folRequest,
+            $request->user(),
+            'manual_ui',
+        );
+        $presented = $this->fol->present($folRequest->fresh());
+
+        if (! $result['ok']) {
+            return response()->json([
+                'message' => $result['error'] ?: 'Sales order creation was skipped.',
+                'fol' => $presented,
+                'result' => $result,
+            ], 422);
+        }
+
+        return response()->json(['fol' => $presented, 'result' => $result]);
     }
 
     public function matchPurchaseOrder(Request $request, FolRequest $folRequest): JsonResponse
