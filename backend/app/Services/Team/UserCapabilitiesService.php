@@ -68,6 +68,7 @@ class UserCapabilitiesService
                 $department,
                 $hasReportees,
             ),
+            'default_sales_channel' => $this->defaultSalesChannel($department),
             'kp_crm_access' => $kpCrmAccess,
             'can_manage_users' => $canManageUsers,
             'unrestricted_business_access' => $unrestrictedBusinessAccess,
@@ -76,6 +77,18 @@ class UserCapabilitiesService
             'partner_brand_scope' => $this->partnerBrandScope($user),
             'idle_timeout_minutes' => config('departments.idle_timeout_minutes', 60),
         ];
+    }
+
+    private function defaultSalesChannel(?Department $department): ?string
+    {
+        return match ($department?->slug) {
+            'kp' => 'KP',
+            'mt_consumer_sales' => 'MT',
+            // GT has no live channel-tagged customer data yet — default to MT
+            // until General Trade portfolio data exists. Flip to 'GT' then.
+            'gt' => 'MT',
+            default => null,
+        };
     }
 
     private function canViewExecutive(User $user): bool

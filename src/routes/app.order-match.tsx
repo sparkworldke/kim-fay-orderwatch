@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 import {
   confidenceBadgeVariant,
   useAcceptMatch,
@@ -37,9 +39,10 @@ function OrderMatchPage() {
   const [dateFrom, setDateFrom] = useState(daysAgo(7));
   const [dateTo, setDateTo] = useState(today());
   const [queueStatus, setQueueStatus] = useState<"pending" | "accepted" | "rejected" | "all">("pending");
+  const { page, perPage, setPage, setPerPage, resetPage } = usePagination(20);
 
   const folders = useOrderMatchFolders();
-  const queue = useOrderMatchQueue(queueStatus);
+  const queue = useOrderMatchQueue(queueStatus, page, perPage);
   const syncFolder = useSyncOrderMatchFolder();
   const runPipeline = useRunOrderMatchPipeline();
   const accept = useAcceptMatch();
@@ -169,7 +172,7 @@ function OrderMatchPage() {
               <button
                 key={s}
                 type="button"
-                onClick={() => setQueueStatus(s)}
+                onClick={() => { setQueueStatus(s); resetPage(); }}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-all ${
                   queueStatus === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
@@ -237,6 +240,18 @@ function OrderMatchPage() {
             </div>
           );
         })}
+        {(queue.data?.total ?? 0) > 0 && (
+          <div className="border-t px-4 py-3">
+            <PaginationControls
+              currentPage={queue.data?.current_page ?? page}
+              lastPage={queue.data?.last_page ?? 1}
+              total={queue.data?.total ?? 0}
+              perPage={perPage}
+              onPageChange={setPage}
+              onPerPageChange={setPerPage}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

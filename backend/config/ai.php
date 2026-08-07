@@ -16,6 +16,9 @@ return [
 
     'http_timeout_seconds' => (int) env('AI_HTTP_TIMEOUT_SECONDS', 120),
     'max_tokens' => (int) env('AI_MAX_TOKENS', 1800),
+    'image_model' => env('OPENAI_IMAGE_MODEL', 'gpt-image-2'),
+    'image_quality' => env('OPENAI_IMAGE_QUALITY', 'medium'),
+    'image_timeout_seconds' => (int) env('OPENAI_IMAGE_TIMEOUT', 150),
 
     /**
      * When false (default), explicit Generate fails if no key / provider error

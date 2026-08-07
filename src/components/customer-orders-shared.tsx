@@ -30,7 +30,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { CommonProductsResponse, SuggestedOrdersResponse } from "@/hooks/useCustomers";
+import type {
+  CommonProductsResponse,
+  SuggestedOrdersResponse,
+  WhitespaceMonthlyLines,
+  WhitespaceOpportunity,
+  WhitespaceResponse,
+} from "@/hooks/useCustomers";
 import { useBackorders, type BackorderLine } from "@/hooks/useOperations";
 import { fillRateIssueReason } from "@/lib/order-reasons";
 import { MaskedKES } from "@/components/MaskedCurrency";
@@ -39,7 +45,7 @@ import type {
   AcumaticaSalesOrder,
   AcumaticaSalesOrderLine,
 } from "@/types/admin";
-import { Building2, ClipboardList, Search, X } from "lucide-react";
+import { Building2, ClipboardList, Search, Sparkles, X } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Documents table — shared between the flat customer page and the branch page.
@@ -383,7 +389,9 @@ export function SuggestedOrdersCard({
           <SkeletonRows count={2} />
         ) : isError ? (
           <ErrorBlock
-            message={error instanceof Error ? error.message : "Items not ordered could not be loaded."}
+            message={
+              error instanceof Error ? error.message : "Items not ordered could not be loaded."
+            }
             onRetry={onRetry}
           />
         ) : total === 0 ? (
@@ -468,6 +476,223 @@ export function SuggestedOrdersLinkCard({ children }: { children: ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
+// White spot — cohort product-gap (SKUs peers buy that this account doesn't).
+// ---------------------------------------------------------------------------
+
+function cohortDimensionLabel(dim?: string): string {
+  switch (dim) {
+    case "customer_group":
+      return "customer group";
+    case "shipping_zone":
+      return "shipping zone";
+    default:
+      return "customer class";
+  }
+}
+
+function LinesTrendStrip({
+  monthly,
+  cohortAvg,
+}: {
+  monthly: WhitespaceMonthlyLines[];
+  cohortAvg: number;
+}) {
+  if (monthly.length === 0) return null;
+  const maxLines = Math.max(cohortAvg, ...monthly.map((m) => m.focal_lines), 1);
+  return (
+    <div className="mb-4 rounded-md border bg-muted/20 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase text-muted-foreground">
+          Lines purchased — month on month
+        </p>
+        <p className="text-xs text-muted-foreground">Cohort avg ≈ {cohortAvg} lines/mo</p>
+      </div>
+      <div className="flex items-end gap-1.5 sm:gap-2">
+        {monthly.map((m) => {
+          const barHeight = Math.round((m.focal_lines / maxLines) * 52) + 3;
+          const avgFromBottom = Math.round((cohortAvg / maxLines) * 52) + 3;
+          return (
+            <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
+              <div className="relative flex h-14 w-full items-end justify-center">
+                <div
+                  className="absolute left-0 right-0 border-t border-dashed border-amber-500/70"
+                  style={{ bottom: avgFromBottom }}
+                  title={`Cohort avg ${cohortAvg} lines`}
+                />
+                <div
+                  className="w-full max-w-[26px] rounded-t bg-primary/80"
+                  style={{ height: barHeight }}
+                  title={`${m.focal_lines} lines`}
+                />
+              </div>
+              <span className="text-[10px] font-medium tabular-nums">{m.focal_lines}</span>
+              <span className="text-[10px] text-muted-foreground">{m.month.slice(5)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WhitespaceRow({
+  item,
+  activePeers,
+}: {
+  item: WhitespaceOpportunity;
+  activePeers: number;
+}) {
+  const lapsed = item.status === "lapsed";
+  return (
+    <TableRow>
+      <TableCell>
+        <ProductListingCell product={item} />
+      </TableCell>
+      <TableCell>
+        {lapsed ? (
+          <Badge
+            variant="secondary"
+            title={item.last_order_date ? `Last bought ${item.last_order_date}` : undefined}
+          >
+            Lapsed{item.months_since_last != null ? ` · ${item.months_since_last}mo ago` : ""}
+          </Badge>
+        ) : (
+          <Badge variant="outline">Never bought</Badge>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        <Badge className="bg-amber-600">{item.cohort_penetration_pct}% buy this</Badge>
+      </TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">
+        {item.buyer_count}
+        {activePeers > 0 ? `/${activePeers}` : ""}
+      </TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">
+        {item.cohort_avg_qty} {item.uom ?? ""}
+      </TableCell>
+      <TableCell className="text-right tabular-nums font-medium">
+        <MaskedKES value={item.opportunity_value} />
+      </TableCell>
+    </TableRow>
+  );
+}
+
+export function CohortWhitespaceCard({
+  data,
+  isLoading,
+  isError,
+  error,
+  onRetry,
+  pageSize,
+}: {
+  data: WhitespaceResponse | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  onRetry: () => void;
+  pageSize?: number;
+}) {
+  const { page, perPage, setPage, setPerPage } = usePagination(pageSize ?? 8);
+  const opportunities = data?.opportunities ?? [];
+  const summary = data?.summary;
+  const total = opportunities.length;
+  const lastPage = Math.max(1, Math.ceil(total / perPage));
+  const currentPage = Math.min(page, lastPage);
+  const start = (currentPage - 1) * perPage;
+  const pagedOpportunities = opportunities.slice(start, start + perPage);
+  const activePeers = summary?.active_peers ?? 0;
+
+  return (
+    <Card className="rounded-lg shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              White spot opportunities
+              <InfoTip text="SKUs that a meaningful share of similar customers buy, but this account does not — never bought, or not bought recently and likely needing revival. Use the cohort share as a closing angle." />
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Peer benchmark by {cohortDimensionLabel(summary?.cohort_dimension)}
+              {summary?.cohort_value ? ` · ${summary.cohort_value}` : ""}
+              {summary ? ` · last ${summary.analysis_window_months} months` : ""}
+            </p>
+          </div>
+          {data?.available && summary ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant="secondary">{summary.active_peers} active peers</Badge>
+              <Badge variant="secondary">{summary.catalog_lines} lines sold to peers</Badge>
+              <Badge className="bg-emerald-600">
+                {`This account buys ${summary.focal_lines_in_window}/${summary.catalog_lines} lines (${summary.focal_line_penetration_pct}%)`}
+              </Badge>
+            </div>
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <SkeletonRows count={3} />
+        ) : isError ? (
+          <ErrorBlock
+            message={
+              error instanceof Error ? error.message : "White spot analysis could not be loaded."
+            }
+            onRetry={onRetry}
+          />
+        ) : !data?.available ? (
+          <EmptyBlock
+            message={
+              data?.reason ??
+              "Not enough peer data to build a white-spot comparison for this account."
+            }
+          />
+        ) : total === 0 ? (
+          <EmptyBlock message="No white spots right now — this account already buys the lines its peers buy." />
+        ) : (
+          <>
+            {summary && (
+              <LinesTrendStrip
+                monthly={summary.monthly_lines}
+                cohortAvg={summary.cohort_avg_lines}
+              />
+            )}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Cohort share</TableHead>
+                  <TableHead className="text-right">Peer buyers</TableHead>
+                  <TableHead className="text-right">Typical qty</TableHead>
+                  <TableHead className="text-right">Est. value</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pagedOpportunities.map((item) => (
+                  <WhitespaceRow key={item.inventory_id} item={item} activePeers={activePeers} />
+                ))}
+              </TableBody>
+            </Table>
+            {lastPage > 1 && (
+              <div className="mt-4">
+                <PaginationControls
+                  currentPage={currentPage}
+                  lastPage={lastPage}
+                  total={total}
+                  perPage={perPage}
+                  onPageChange={setPage}
+                  onPerPageChange={setPerPage}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Shared primitives
 // ---------------------------------------------------------------------------
 
@@ -523,9 +748,8 @@ export function summarizeLines(lines: AcumaticaSalesOrderLine[], orderStatus?: s
 
   const totalOrdered = eligibleLines.reduce((sum, l) => sum + (numeric(l.order_qty) ?? 0), 0);
   const finalized = isFinalizedOrderStatus(orderStatus);
-  const completedUnavailable = finalized && eligibleLines.some(
-    (line) => line.invoice_reconciliation_status !== "reconciled",
-  );
+  const completedUnavailable =
+    finalized && eligibleLines.some((line) => line.invoice_reconciliation_status !== "reconciled");
   const totalShipped = eligibleLines.reduce((sum, l) => {
     if (finalized) {
       return sum + Math.min(numeric(l.invoiced_qty) ?? 0, numeric(l.order_qty) ?? 0);
@@ -536,7 +760,8 @@ export function summarizeLines(lines: AcumaticaSalesOrderLine[], orderStatus?: s
   }, 0);
 
   return {
-    fillRate: totalOrdered > 0 && !completedUnavailable ? (totalShipped / totalOrdered) * 100 : null,
+    fillRate:
+      totalOrdered > 0 && !completedUnavailable ? (totalShipped / totalOrdered) * 100 : null,
     backorderQty: lines.reduce((sum, line) => sum + missingLineQty(line, orderStatus), 0),
   };
 }
@@ -558,10 +783,7 @@ export function isFinalizedOrderStatus(status?: string | null): boolean {
  * total gap on such documents is a price adjustment, not missing goods.
  * Undelivered history belongs to the fulfillment-history shortfall, not here.
  */
-export function missingLineQty(
-  line: AcumaticaSalesOrderLine,
-  orderStatus?: string | null,
-): number {
+export function missingLineQty(line: AcumaticaSalesOrderLine, orderStatus?: string | null): number {
   if (isFinalizedOrderStatus(orderStatus)) {
     if (line.invoice_reconciliation_status !== "reconciled") return 0;
     const ordered = numeric(line.order_qty) ?? 0;
@@ -582,8 +804,9 @@ export function missingLineQty(
 
 export function FulfillmentHistoryCard({ order }: { order: AcumaticaSalesOrder }) {
   const history = order.fulfillment_history;
-  const invoiceReconciled = isFinalizedOrderStatus(order.status)
-    && (order.lines ?? []).some((line) => line.invoice_reconciliation_status === "reconciled");
+  const invoiceReconciled =
+    isFinalizedOrderStatus(order.status) &&
+    (order.lines ?? []).some((line) => line.invoice_reconciliation_status === "reconciled");
   if (!history)
     return (
       <Card>
@@ -591,10 +814,13 @@ export function FulfillmentHistoryCard({ order }: { order: AcumaticaSalesOrder }
           <CardTitle className="text-base">Historical delivery shortfall</CardTitle>
         </CardHeader>
         <CardContent>
-          <EmptyBlock message={invoiceReconciled
-            ? "Completed delivery has been reconstructed from released invoice lines and is shown in Unfulfilled lines above; it is not presented as a first-completed snapshot."
-            : "No recoverable first-completed snapshot is available for this SO."
-          } />
+          <EmptyBlock
+            message={
+              invoiceReconciled
+                ? "Completed delivery has been reconstructed from released invoice lines and is shown in Unfulfilled lines above; it is not presented as a first-completed snapshot."
+                : "No recoverable first-completed snapshot is available for this SO."
+            }
+          />
         </CardContent>
       </Card>
     );
@@ -680,17 +906,17 @@ export function BackorderCard({
 
   // Finalized orders (completed/closed/etc): open_qty is stale after sync,
   // so surface lines where shipped < ordered as genuinely undelivered goods.
-  const reconciliationUnavailable = isFinalized && lines.some(
-    (line) => (numeric(line.order_qty) ?? 0) > 0 && line.invoice_reconciliation_status !== "reconciled",
-  );
+  const reconciliationUnavailable =
+    isFinalized &&
+    lines.some(
+      (line) =>
+        (numeric(line.order_qty) ?? 0) > 0 && line.invoice_reconciliation_status !== "reconciled",
+    );
   const unfulfilledLines = isFinalized
     ? lines.filter((line) => missingLineQty(line, orderStatus) > 0)
     : [];
 
-  const totalQty = backorderLines.reduce(
-    (sum, line) => sum + missingLineQty(line, orderStatus),
-    0,
-  );
+  const totalQty = backorderLines.reduce((sum, line) => sum + missingLineQty(line, orderStatus), 0);
   const totalValue = backorderLines.reduce((sum, line) => {
     const qty = missingLineQty(line, orderStatus);
     const unitPrice = numeric(line.unit_price) ?? 0;
@@ -714,10 +940,13 @@ export function BackorderCard({
           <div>
             <CardTitle className="flex items-center gap-1.5 text-base">
               {isFinalized ? "Unfulfilled lines" : "Backorder"}
-              <InfoTip text={isFinalized
-                ? "Lines where shipped qty < ordered qty on this completed document. These goods were not delivered — value = (ordered − shipped) × unit price per line."
-                : "Only quantities still open on this document: unit price × open qty per line — never the document or invoice total. Completed/closed documents show unfulfilled lines instead."
-              } />
+              <InfoTip
+                text={
+                  isFinalized
+                    ? "Lines where shipped qty < ordered qty on this completed document. These goods were not delivered — value = (ordered − shipped) × unit price per line."
+                    : "Only quantities still open on this document: unit price × open qty per line — never the document or invoice total. Completed/closed documents show unfulfilled lines instead."
+                }
+              />
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               {isFinalized
@@ -741,7 +970,13 @@ export function BackorderCard({
         {reconciliationUnavailable ? (
           <EmptyBlock message="Completed-order invoice details are unavailable. Sync this order again or review it in Acumatica; fulfillment is not assumed to be 100%." />
         ) : !hasItems ? (
-          <EmptyBlock message={isFinalized ? "All eligible ordered quantities were invoiced." : "No backordered items on this document."} />
+          <EmptyBlock
+            message={
+              isFinalized
+                ? "All eligible ordered quantities were invoiced."
+                : "No backordered items on this document."
+            }
+          />
         ) : isFinalized ? (
           <Table>
             <TableHeader>
@@ -764,17 +999,29 @@ export function BackorderCard({
                 const lineValue = missedQty * unitPrice;
                 return (
                   <TableRow key={line.id}>
-                    <TableCell><ProductListingCell product={line} /></TableCell>
-                    <TableCell className="text-right tabular-nums">{ordered.toLocaleString("en-KE")}{uom}</TableCell>
-                    <TableCell className="text-right tabular-nums">{invoiced.toLocaleString("en-KE")}{uom}</TableCell>
+                    <TableCell>
+                      <ProductListingCell product={line} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {ordered.toLocaleString("en-KE")}
+                      {uom}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {invoiced.toLocaleString("en-KE")}
+                      {uom}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold text-destructive">
-                      {missedQty.toLocaleString("en-KE")}{uom}
+                      {missedQty.toLocaleString("en-KE")}
+                      {uom}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       <span className="inline-flex flex-wrap items-center justify-end gap-1">
                         <MaskedKES value={unitPrice} />
                         <span className="text-muted-foreground">×</span>
-                        <span>{missedQty.toLocaleString("en-KE")}{uom}</span>
+                        <span>
+                          {missedQty.toLocaleString("en-KE")}
+                          {uom}
+                        </span>
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium text-destructive">
@@ -787,7 +1034,9 @@ export function BackorderCard({
             <TableFooter>
               <TableRow>
                 <TableCell colSpan={5}>Total missed sale</TableCell>
-                <TableCell className="text-right tabular-nums"><MaskedKES value={unfulfilledValue} /></TableCell>
+                <TableCell className="text-right tabular-nums">
+                  <MaskedKES value={unfulfilledValue} />
+                </TableCell>
               </TableRow>
             </TableFooter>
           </Table>
@@ -1134,7 +1383,10 @@ export function OrderDetailBody({
   const missedQtyTotal = isFinalized
     ? lines.reduce((sum, line) => {
         const ordered = numeric(line.order_qty) ?? 0;
-        const shipped = Math.max(numeric(line.shipped_qty) ?? 0, numeric(line.qty_on_shipments) ?? 0);
+        const shipped = Math.max(
+          numeric(line.shipped_qty) ?? 0,
+          numeric(line.qty_on_shipments) ?? 0,
+        );
         return sum + Math.max(ordered - shipped, 0);
       }, 0)
     : summary.backorderQty;
@@ -1222,7 +1474,10 @@ export function OrderDetailBody({
               <TableBody>
                 {lines.map((line) => {
                   const reason = fillRateIssueReason(line);
-                  const shipped = Math.max(numeric(line.shipped_qty) ?? 0, numeric(line.qty_on_shipments) ?? 0);
+                  const shipped = Math.max(
+                    numeric(line.shipped_qty) ?? 0,
+                    numeric(line.qty_on_shipments) ?? 0,
+                  );
                   const ordered = numeric(line.order_qty) ?? 0;
                   // A line is unfilled if shipped quantity is less than ordered — regardless
                   // of order status. This makes OOS lines visible even on "Completed" orders.
@@ -1230,9 +1485,12 @@ export function OrderDetailBody({
                   const openQty = numeric(line.open_qty) ?? 0;
                   const backorderQty = numeric(line.backorder_qty) ?? 0;
                   // Missed qty = explicit open_qty, or backorder_qty, or computed remainder.
-                  const missedQty = openQty > 0 ? openQty
-                    : backorderQty > 0 ? backorderQty
-                    : Math.max(ordered - shipped, 0);
+                  const missedQty =
+                    openQty > 0
+                      ? openQty
+                      : backorderQty > 0
+                        ? backorderQty
+                        : Math.max(ordered - shipped, 0);
                   const unitPrice = numeric(line.unit_price) ?? 0;
                   const missedValue = missedQty * unitPrice;
                   const rowClass = isUnfilled ? "bg-destructive/5" : "";
@@ -1243,25 +1501,39 @@ export function OrderDetailBody({
                       </TableCell>
                       <QtyCell value={line.order_qty} />
                       <QtyCell value={line.shipped_qty} />
-                      <TableCell className={`text-right tabular-nums ${isUnfilled && openQty > 0 ? "font-semibold text-destructive" : ""}`}>
-                        {(openQty).toLocaleString("en-KE")}
+                      <TableCell
+                        className={`text-right tabular-nums ${isUnfilled && openQty > 0 ? "font-semibold text-destructive" : ""}`}
+                      >
+                        {openQty.toLocaleString("en-KE")}
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums ${isUnfilled && backorderQty > 0 ? "font-semibold text-destructive" : ""}`}>
-                        {(backorderQty).toLocaleString("en-KE")}
+                      <TableCell
+                        className={`text-right tabular-nums ${isUnfilled && backorderQty > 0 ? "font-semibold text-destructive" : ""}`}
+                      >
+                        {backorderQty.toLocaleString("en-KE")}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {unitPrice > 0 ? <MaskedKES value={unitPrice} /> : <span className="text-muted-foreground">-</span>}
+                        {unitPrice > 0 ? (
+                          <MaskedKES value={unitPrice} />
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums ${isUnfilled && missedValue > 0 ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
+                      <TableCell
+                        className={`text-right tabular-nums ${isUnfilled && missedValue > 0 ? "font-semibold text-destructive" : "text-muted-foreground"}`}
+                      >
                         {missedValue > 0 ? (
-                          <span title={`${missedQty.toLocaleString("en-KE")} × ${unitPrice.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`}>
+                          <span
+                            title={`${missedQty.toLocaleString("en-KE")} × ${unitPrice.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`}
+                          >
                             <MaskedKES value={missedValue} />
                           </span>
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell className={`text-right ${isUnfilled ? "font-semibold text-destructive" : ""}`}>
+                      <TableCell
+                        className={`text-right ${isUnfilled ? "font-semibold text-destructive" : ""}`}
+                      >
                         {formatPercent(line.fill_rate_pct)}
                       </TableCell>
                       <TableCell>

@@ -8,7 +8,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { useEffect, useMemo, useState } from "react";
-import { FileDown, PackageX, PencilLine, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Download, FileDown, ImageIcon, PackageX, PencilLine, RefreshCw, Search, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -62,7 +62,8 @@ import {
 } from "@/hooks/useOperations";
 import { formatDate, formatNumber } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
-import { downloadApiFile } from "@/lib/api";
+import { apiFetch, downloadApiFile } from "@/lib/api";
+import { renderBackorderExecutiveReport, type BackorderExecutiveReport } from "@/lib/backorder-executive-image";
 import { useQueueExportDownload } from "@/hooks/useExportDownloads";
 import { DATE_PRESETS, type DatePresetId, resolveDatePreset } from "@/lib/date-presets";
 import {
@@ -388,6 +389,10 @@ function BackordersPage() {
   const [reasonDraftNotes, setReasonDraftNotes] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const [isQueuingDownload, setIsQueuingDownload] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [imageReport, setImageReport] = useState<BackorderExecutiveReport | null>(null);
+  const [imageReportUrl, setImageReportUrl] = useState<string | null>(null);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const queueExport = useQueueExportDownload();
 
   useEffect(() => {
@@ -617,6 +622,23 @@ function BackordersPage() {
     }
   }
 
+  async function handleGenerateImage(force = false) {
+    if (!dateFrom || !dateTo || dateFrom > dateTo) { toast.error("Select a valid report period first."); return; }
+    setIsGeneratingImage(true);
+    try {
+      const filters=exportFilters();
+      if(searchActive){delete filters.date_from;delete filters.date_to;}
+      const report=await apiFetch<BackorderExecutiveReport>("operations/backorders/executive-image",{method:"POST",body:{...filters,force},timeoutMs:180_000});
+      const url=await renderBackorderExecutiveReport(report);setImageReport(report);setImageReportUrl(url);setImageDialogOpen(true);
+      toast.success(report.ai_status.image==="generated"?"Executive image report generated.":"Executive report generated with the branded fallback.");
+    } catch(error){toast.error(error instanceof Error?error.message:"Unable to generate image report.");}
+    finally{setIsGeneratingImage(false);}
+  }
+
+  function downloadImageReport() {
+    if(!imageReportUrl)return;const link=document.createElement("a");link.href=imageReportUrl;link.download=`backorders-executive-report-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,"")}.png`;document.body.appendChild(link);link.click();link.remove();
+  }
+
   const allGroups = useMemo(() => {
     const groups = groupBackordersByInventory(data?.data ?? []);
     if (!searchActive) return groups;
@@ -761,6 +783,9 @@ function BackordersPage() {
             <FileDown className={`mr-2 h-4 w-4 ${isQueuingDownload ? "animate-pulse" : ""}`} />
             {isQueuingDownload ? "Queuing…" : "Queue download"}
           </Button>
+          <Button variant="outline" onClick={()=>void handleGenerateImage()} disabled={isGeneratingImage} title="Create a filter-aware executive PNG using exact Sight metrics.">
+            {isGeneratingImage?<RefreshCw className="mr-2 h-4 w-4 animate-spin"/>:<Sparkles className="mr-2 h-4 w-4"/>}{isGeneratingImage?"Generating report…":"Generate Image Report"}
+          </Button>
           <Button onClick={handleUpdate} disabled={sync.isPending}>
             <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
             {sync.isPending ? "Updating…" : "Update backorders"}
@@ -810,6 +835,15 @@ function BackordersPage() {
       </Tabs>
 
       {view === "resolved" && <ResolvedBackordersPanel />}
+
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent className="max-h-[94vh] max-w-6xl overflow-y-auto">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ImageIcon className="h-5 w-5"/>Backorder executive image report</DialogTitle><DialogDescription>All figures come from the current scoped filters. Open exposure is not labelled as lost sales.</DialogDescription></DialogHeader>
+          {imageReportUrl?<img src={imageReportUrl} alt="Backorder executive report preview" className="w-full rounded-lg border bg-slate-950"/>:<Skeleton className="aspect-[3/2] w-full"/>}
+          {imageReport&&<div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="secondary">{imageReport.cached?"Cached AI visual":"Fresh report"}</Badge><span>Narrative: {imageReport.ai_status.narrative}</span><span>Visual: {imageReport.ai_status.image}</span></div>}
+          <DialogFooter><Button variant="outline" onClick={()=>setImageDialogOpen(false)}>Close</Button><Button variant="secondary" disabled={isGeneratingImage} onClick={()=>void handleGenerateImage(true)}><Sparkles className="mr-2 h-4 w-4"/>Regenerate</Button><Button disabled={!imageReportUrl} onClick={downloadImageReport}><Download className="mr-2 h-4 w-4"/>Download PNG</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {view === "active" && (
       <>
@@ -1693,7 +1727,7 @@ function CustomerHierarchyPanel({ groups, loading }: { groups: CustomerBackorder
           {parent.branches.map((branch) => <div key={branch.id} className="rounded-lg border bg-muted/20 p-3">
             <div className="mb-2 flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-medium">{branch.name}</p><p className="text-xs text-muted-foreground">{branch.id} · {branch.orders} SOs</p></div><p className="text-sm font-semibold">{kes(branch.revenue)}</p></div>
             {[...new Set(branch.lines.map((line)=>line.order_nbr))].map((orderNbr) => { const orderLines=branch.lines.filter((line)=>line.order_nbr===orderNbr); const total=orderLines.reduce((sum,line)=>sum+(Number(line.revenue_at_risk)||0),0); return <div key={orderNbr} className="mt-2 rounded-md bg-background p-3 text-xs">
-              <div className="mb-2 flex justify-between gap-3"><div><OrderLink orderNbr={orderNbr} /><span className="ml-2 text-muted-foreground">{formatDate(orderLines[0]?.order_date)}</span></div><strong>{kes(total)}</strong></div>
+              <div className="mb-2 flex justify-between gap-3"><div><OrderLink customerId={orderLines[0]?.customer_acumatica_id} orderId={orderNbr}>{orderNbr}</OrderLink><span className="ml-2 text-muted-foreground">{formatDate(orderLines[0]?.order_date)}</span></div><strong>{kes(total)}</strong></div>
               <div className="space-y-1">{orderLines.map((line)=><div key={line.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t pt-1"><span>{line.inventory_id} · {line.product_name || "Unnamed product"} · {formatNumber(Number(line.open_qty)||Number(line.backorder_qty))} {line.uom || ""} · {line.backorder_age_days ?? 0}d</span><span>{kes(Number(line.revenue_at_risk)||0)}</span></div>)}</div>
             </div>; })}
           </div>)}

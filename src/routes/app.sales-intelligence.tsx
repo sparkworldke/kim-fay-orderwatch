@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BadgeDollarSign,
   Building2,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { CustomerLink } from "@/components/entity-links";
@@ -20,10 +21,12 @@ import {
   type SalesIntelligenceCustomer,
   useSalesIntelligenceMetrics,
 } from "@/hooks/useSalesIntelligence";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { cn } from "@/lib/utils";
 
 type SearchParams = { channel?: SalesIntelligenceChannel };
 const CHANNELS: SalesIntelligenceChannel[] = ["PORTFOLIO", "MT", "MT1", "MT2", "GT", "DTC_DTB", "ECOMMERCE", "KP"];
+const BUSINESS_CHANNELS: SalesIntelligenceChannel[] = ["MT", "MT1", "MT2", "GT", "DTC_DTB", "ECOMMERCE", "KP"];
 
 function currentNairobiPeriod() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -42,11 +45,12 @@ function currentNairobiPeriod() {
 
 export const Route = createFileRoute("/app/sales-intelligence")({
   validateSearch: (search: Record<string, unknown>): SearchParams => {
-    const value = typeof search.channel === "string" ? search.channel.toUpperCase() : "MT";
+    if (typeof search.channel !== "string") return { channel: undefined };
+    const value = search.channel.toUpperCase();
     return {
       channel: CHANNELS.includes(value as SalesIntelligenceChannel)
         ? (value as SalesIntelligenceChannel)
-        : "MT",
+        : undefined,
     };
   },
   head: () => ({ meta: [{ title: "Sales Intelligence - Kim-Fay Sight" }] }),
@@ -64,17 +68,62 @@ type SortKey =
   | "last_order_date";
 
 function SalesIntelligencePage() {
-  const { channel = "MT" } = Route.useSearch();
-  return <SalesIntelligenceView channel={channel} />;
+  const { channel } = Route.useSearch();
+  const caps = useCapabilities();
+  const effectiveChannel = channel ?? (caps.default_sales_channel as SalesIntelligenceChannel | null) ?? "MT";
+  return <SalesIntelligenceView channel={effectiveChannel} />;
 }
 
 export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceChannel }) {
+  const caps = useCapabilities();
   const initialPeriod = useMemo(currentNairobiPeriod, []);
   const [from, setFrom] = useState(initialPeriod.from);
   const [to, setTo] = useState(initialPeriod.to);
   const [q, setQ] = useState("");
   const [region, setRegion] = useState("");
   const [comparison, setComparison] = useState<"" | "previous_month" | "past_3_months" | "past_6_months">("");
+  const [selectedChannels, setSelectedChannels] = useState<SalesIntelligenceChannel[]>([channel]);
+  const [selectedReps, setSelectedReps] = useState<string[]>([]);
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+
+  // Keep the in-page channel selection in sync when the URL channel changes.
+  useEffect(() => {
+    setSelectedChannels([channel]);
+  }, [channel]);
+
+  // Reset the rep/customer filters whenever the channel scope changes so stale
+  // selections never hide every row.
+  useEffect(() => {
+    setSelectedReps([]);
+    setSelectedCustomers([]);
+  }, [selectedChannels]);
+
+  // The channel selector only offers the business channels the viewer is
+  // authorized for. PORTFOLIO is a personal scope, so it is intentionally left
+  // out of the multi-select.
+  const channelOptions = useMemo<SalesIntelligenceChannel[]>(() => {
+    const allowed = new Set(caps.sales_intelligence_channels.map((code) => code.toLowerCase()));
+    const options = BUSINESS_CHANNELS.filter((code) => {
+      const slug = code.toLowerCase();
+      if (code === "MT") return allowed.has("mt1") || allowed.has("mt2") || allowed.has("mt");
+      return allowed.has(slug);
+    });
+    return options.length ? options : [channel];
+  }, [caps.sales_intelligence_channels, channel]);
+
+  const onChannelsChange = (next: string[]) => {
+    // Clearing the selection is treated as "any / all channels".
+    if (next.length === 0) {
+      setSelectedChannels(channelOptions);
+      return;
+    }
+    setSelectedChannels(
+      next.filter((code): code is SalesIntelligenceChannel =>
+        BUSINESS_CHANNELS.includes(code as SalesIntelligenceChannel),
+      ),
+    );
+  };
+
   const monthOptions = useMemo(() => {
     const now = new Date();
     return Array.from({ length: now.getMonth() + 1 }, (_, index) => ({
@@ -86,7 +135,7 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const query = useSalesIntelligenceMetrics(
-    channel,
+    selectedChannels,
     from || undefined,
     to || undefined,
     region || undefined,
@@ -94,12 +143,83 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
   );
   const data = query.data;
 
-  const customers = useMemo(() => {
+  // Representative options are derived from the customers returned for the
+  // current scope, so the filter always reflects the visible data.
+  const repOptions = useMemo(() => {
     const rows = data?.customers ?? [];
+    const byId = new Map<string, { id: number; name: string; rep_code: string | null }>();
+    rows.forEach((row) =>
+      row.representatives.forEach((rep) => {
+        if (!byId.has(String(rep.id))) byId.set(String(rep.id), rep);
+      }),
+    );
+    return Array.from(byId, ([value, rep]) => ({
+      value,
+      label: rep.name + (rep.rep_code ? ` (${rep.rep_code})` : ""),
+    }));
+  }, [data?.customers]);
+
+  const customerOptions = useMemo(
+    () => (data?.customers ?? []).map((row) => ({ value: row.customer_id, label: row.customer_name })),
+    [data?.customers],
+  );
+
+  const matchesRepCustomer = (row: {
+    representatives: SalesIntelligenceCustomer["representatives"];
+    customer_id: string;
+  }) => {
+    const repOk = selectedReps.length === 0 || row.representatives.some((rep) => selectedReps.includes(String(rep.id)));
+    const custOk = selectedCustomers.length === 0 || selectedCustomers.includes(row.customer_id);
+    return repOk && custOk;
+  };
+
+  const scopedCustomers = useMemo(
+    () => (data?.customers ?? []).filter(matchesRepCustomer),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data?.customers, selectedReps, selectedCustomers],
+  );
+
+  const scopedNotOrdered = useMemo(
+    () => (data?.not_ordered_customers ?? []).filter(matchesRepCustomer),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data?.not_ordered_customers, selectedReps, selectedCustomers],
+  );
+
+  const filtersActive = selectedReps.length > 0 || selectedCustomers.length > 0;
+
+  const metricsView = useMemo(() => {
+    if (!data) return null;
+    if (!filtersActive) {
+      return {
+        customerCount: data.scope.customer_count,
+        notOrderedCount: data.scope.not_ordered_count,
+        soCount: data.metrics.so_count,
+        gross: data.metrics.gross_revenue,
+        credit: data.metrics.credit_revenue,
+        net: data.metrics.net_revenue,
+        orderedVolume: data.metrics.ordered_volume,
+        creditedVolume: data.metrics.credited_volume,
+        netVolume: data.metrics.net_volume,
+      };
+    }
+    return {
+      customerCount: scopedCustomers.length + scopedNotOrdered.length,
+      notOrderedCount: scopedNotOrdered.length,
+      soCount: scopedCustomers.reduce((total, row) => total + row.so_count, 0),
+      gross: scopedCustomers.reduce((total, row) => total + row.gross_revenue, 0),
+      credit: scopedCustomers.reduce((total, row) => total + row.credit_revenue, 0),
+      net: scopedCustomers.reduce((total, row) => total + row.net_revenue, 0),
+      orderedVolume: scopedCustomers.reduce((total, row) => total + row.ordered_volume, 0),
+      creditedVolume: scopedCustomers.reduce((total, row) => total + row.credited_volume, 0),
+      netVolume: scopedCustomers.reduce((total, row) => total + row.net_volume, 0),
+    };
+  }, [data, filtersActive, scopedCustomers, scopedNotOrdered]);
+
+  const customers = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    let filtered = rows;
+    let filtered = scopedCustomers;
     if (needle) {
-      filtered = rows.filter(
+      filtered = scopedCustomers.filter(
         (row) =>
           row.customer_name.toLowerCase().includes(needle) ||
           row.customer_id.toLowerCase().includes(needle) ||
@@ -120,7 +240,7 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
       }
       return (Number(av) - Number(bv)) * dir;
     });
-  }, [data?.customers, q, sortKey, sortDir]);
+  }, [scopedCustomers, q, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -130,6 +250,19 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
       setSortDir(key === "customer_name" || key === "last_order_date" ? "asc" : "desc");
     }
   };
+
+  const channelLabel = useMemo(
+    () =>
+      selectedChannels.map((code) => code.replace(/_/g, " / ")).join(", ") ||
+      channel.replace(/_/g, " / "),
+    [selectedChannels, channel],
+  );
+
+  const comparisonOutlets = useMemo(() => {
+    const rows = data?.comparison?.outlets ?? [];
+    return filtersActive ? rows.filter(matchesRepCustomer) : rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.comparison?.outlets, filtersActive, selectedReps, selectedCustomers]);
 
   return (
     <div className="space-y-4">
@@ -201,13 +334,58 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
         </div>
       </header>
 
+      <section className="flex flex-wrap items-end gap-3 rounded-md border bg-card p-3">
+        <MultiSelect
+          label="Channel"
+          options={channelOptions}
+          selected={selectedChannels}
+          onChange={onChannelsChange}
+          allLabel="All channels"
+          emptyLabel="All channels"
+          className="min-w-[12rem] flex-1"
+        />
+        <MultiSelect
+          label="Representative"
+          options={repOptions}
+          selected={selectedReps}
+          onChange={setSelectedReps}
+          allLabel="All reps"
+          emptyLabel="All reps"
+          className="min-w-[12rem] flex-1"
+          disabled={!data}
+        />
+        <MultiSelect
+          label="Customer"
+          options={customerOptions}
+          selected={selectedCustomers}
+          onChange={setSelectedCustomers}
+          allLabel="All customers"
+          emptyLabel="All customers"
+          className="min-w-[14rem] flex-1"
+          searchPlaceholder="Search customers..."
+          disabled={!data}
+        />
+        {filtersActive ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSelectedReps([]);
+              setSelectedCustomers([]);
+            }}
+          >
+            Clear rep / customer
+          </Button>
+        ) : null}
+      </section>
+
       {query.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, index) => (
             <Skeleton key={index} className="h-24" />
           ))}
         </div>
-      ) : query.isError || !data ? (
+      ) : query.isError || !data || !metricsView ? (
         <div className="border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           <div className="font-medium">Unable to load this authorized channel scope.</div>
           <div className="mt-1 text-xs">
@@ -220,57 +398,58 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
             <Metric
               icon={Building2}
               label="Customers"
-              value={data.scope.customer_count.toLocaleString()}
+              value={metricsView.customerCount.toLocaleString()}
             />
             <Metric
               icon={ShoppingCart}
               label="Sales orders"
-              value={data.metrics.so_count.toLocaleString()}
+              value={metricsView.soCount.toLocaleString()}
             />
             <Metric
               icon={BadgeDollarSign}
               label="Gross sales"
-              value={money(data.metrics.gross_revenue)}
+              value={money(metricsView.gross)}
             />
-            <Metric icon={FileMinus2} label="Credits" value={money(data.metrics.credit_revenue)} />
+            <Metric icon={FileMinus2} label="Credits" value={money(metricsView.credit)} />
             <Metric
               icon={BadgeDollarSign}
               label={data.scope.portfolio_scope === "team" ? "Team portfolio revenue" : data.scope.portfolio_scoped ? "Your accounts revenue" : "Net revenue"}
-              value={money(data.metrics.net_revenue)}
+              value={money(metricsView.net)}
             />
             <Metric
               icon={PackageCheck}
               label="Ordered volume"
-              value={data.metrics.ordered_volume.toLocaleString()}
+              value={metricsView.orderedVolume.toLocaleString()}
             />
             <Metric
               icon={FileMinus2}
               label="Credited volume"
-              value={data.metrics.credited_volume.toLocaleString()}
+              value={metricsView.creditedVolume.toLocaleString()}
             />
             <Metric
               icon={PackageCheck}
               label="Net volume"
-              value={data.metrics.net_volume.toLocaleString()}
+              value={metricsView.netVolume.toLocaleString()}
             />
             <Metric
               icon={Store}
               label="Outlets not ordered"
-              value={data.scope.not_ordered_count.toLocaleString()}
+              value={metricsView.notOrderedCount.toLocaleString()}
             />
           </div>
           <p className="text-xs text-muted-foreground">
             {data.period.from} to {data.period.to} ({data.period.timezone}). Credit notes are shown
             separately and deducted from net results.
+            {filtersActive ? " Metric cards reflect the selected representative / customer filters." : ""}
           </p>
 
           <section className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold">Customers in {channel.replace("_", " / ")}</h2>
+                <h2 className="text-sm font-semibold">Customers in {channelLabel}</h2>
                 <p className="text-[11px] text-muted-foreground">
                   {customers.length} shown
-                  {q.trim() ? ` of ${data.customers?.length ?? 0}` : ""}. Click a customer to open
+                  {q.trim() ? ` of ${scopedCustomers.length}` : ""}. Click a customer to open
                   their orders.
                 </p>
               </div>
@@ -326,7 +505,7 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
                   {customers.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
-                        No customers in this segment for the selected period.
+                        No customers in this segment for the selected period and filters.
                       </td>
                     </tr>
                   ) : null}
@@ -339,8 +518,8 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
             <div>
               <h2 className="text-sm font-semibold">Outlets that have not ordered</h2>
               <p className="text-[11px] text-muted-foreground">
-                {data.not_ordered_customers.length} outlet(s) in {channel.replace("_", " / ")} with no
-                sales order from {data.period.from} to {data.period.to}.
+                {scopedNotOrdered.length} outlet(s) in {channelLabel} with no sales order from{" "}
+                {data.period.from} to {data.period.to}.
               </p>
             </div>
             <div className="overflow-x-auto rounded-md border bg-card">
@@ -357,7 +536,7 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
                   </tr>
                 </thead>
                 <tbody>
-                  {data.not_ordered_customers.map((row) => (
+                  {scopedNotOrdered.map((row) => (
                     <tr key={row.customer_id} className="border-t hover:bg-muted/20">
                       <td className="px-2 py-2">
                         <CustomerLink customerId={row.customer_id} customerName={row.customer_name} className="font-semibold">
@@ -377,7 +556,7 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
                       </td>
                     </tr>
                   ))}
-                  {data.not_ordered_customers.length === 0 ? (
+                  {scopedNotOrdered.length === 0 ? (
                     <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">All outlets in this segment ordered during the selected period.</td></tr>
                   ) : null}
                 </tbody>
@@ -390,7 +569,7 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
               <div>
                 <h2 className="text-sm font-semibold">Outlets below the comparison period</h2>
                 <p className="text-[11px] text-muted-foreground">
-                  {data.comparison.declined_outlet_count} outlet(s) with lower revenue or fewer orders versus {data.comparison.from} to {data.comparison.to}.
+                  {comparisonOutlets.length} outlet(s) with lower revenue or fewer orders versus {data.comparison.from} to {data.comparison.to}.
                 </p>
               </div>
               <div className="overflow-x-auto rounded-md border bg-card">
@@ -401,7 +580,7 @@ export function SalesIntelligenceView({ channel }: { channel: SalesIntelligenceC
                     <th className="px-2 py-2">Revenue change</th><th className="px-2 py-2">Order change</th><th className="px-2 py-2">Missing items</th>
                   </tr></thead>
                   <tbody>
-                    {data.comparison.outlets.map((row) => <tr key={row.customer_id} className="border-t">
+                    {comparisonOutlets.map((row) => <tr key={row.customer_id} className="border-t">
                       <td className="px-2 py-2"><CustomerLink customerId={row.customer_id} customerName={row.customer_name}>{row.customer_name}</CustomerLink></td>
                       <td className="px-2 py-2"><RepresentativeNames representatives={row.representatives} /></td>
                       <td className="px-2 py-2">{row.sales_channel ?? channel}</td><td className="px-2 py-2">{row.region ?? "—"}</td>

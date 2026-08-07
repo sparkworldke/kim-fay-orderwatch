@@ -85,11 +85,12 @@ export interface PcrInput {
   effective_date_requested?: string | null;
 }
 
-export function usePcrList(params: { view?: string; q?: string; page?: number }) {
+export function usePcrList(params: { view?: string; q?: string; page?: number; per_page?: number }) {
   const qs = new URLSearchParams();
   if (params.view) qs.set("view", params.view);
   if (params.q) qs.set("q", params.q);
   if (params.page) qs.set("page", String(params.page));
+  if (params.per_page) qs.set("per_page", String(params.per_page));
 
   return useQuery({
     queryKey: ["price-change-requests", params],

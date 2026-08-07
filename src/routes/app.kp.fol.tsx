@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useFolList, type FolRequest } from "@/hooks/useFol";
+import { usePagination } from "@/hooks/usePagination";
 import { useAuth } from "@/lib/auth";
 import { FOL_STATUS_CLASS, FOL_STATUS_LABEL, formatFolDate } from "@/lib/fol";
 
@@ -55,7 +57,8 @@ function FolListPage() {
 
   const [view, setView] = useState(isTechnicianFirst ? "my_allocations" : "my");
   const [q, setQ] = useState("");
-  const list = useFolList({ view, q });
+  const { page, perPage, setPage, setPerPage, resetPage } = usePagination(20);
+  const list = useFolList({ view, q, page, per_page: perPage });
 
   const visibleTabs = TABS.filter((tab) => {
     if (tab.value === "pending_approval") return canApprove;
@@ -100,7 +103,7 @@ function FolListPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={view} onValueChange={setView}>
+        <Tabs value={view} onValueChange={(next) => { setView(next); resetPage(); }}>
           <TabsList className="flex h-auto flex-wrap justify-start">
             {visibleTabs.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
@@ -109,7 +112,7 @@ function FolListPage() {
         </Tabs>
         <div className="relative ml-auto min-w-[220px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search FOL ref or customer" className="h-9 pl-8" />
+          <Input value={q} onChange={(e) => { setQ(e.target.value); resetPage(); }} placeholder="Search FOL ref or customer" className="h-9 pl-8" />
         </div>
       </div>
 
@@ -139,6 +142,16 @@ function FolListPage() {
           </tbody>
         </table>
       </div>
+      {list.data && list.data.total > 0 && (
+        <PaginationControls
+          currentPage={list.data.current_page}
+          lastPage={list.data.last_page}
+          total={list.data.total}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+        />
+      )}
     </div>
   );
 }

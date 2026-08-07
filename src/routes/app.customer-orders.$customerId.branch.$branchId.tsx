@@ -1,12 +1,18 @@
 import { Link, Outlet, createFileRoute, useParams, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, FileText, Package, ClipboardList } from "lucide-react";
+import { ArrowLeft, FileText, Package, ClipboardList, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Accordion,
   AccordionContent,
@@ -14,6 +20,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
+  CohortWhitespaceCard,
   CommonProductsCard,
   CustomerBackorderCard,
   DocumentsTable,
@@ -25,7 +32,7 @@ import {
   summarizeDocuments,
 } from "@/components/customer-orders-shared";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { useCommonProducts, useSuggestedOrders } from "@/hooks/useCustomers";
+import { useCommonProducts, useSuggestedOrders, useWhitespace } from "@/hooks/useCustomers";
 import { useOrders, type OrderFilters } from "@/hooks/useOrders";
 import { usePagination } from "@/hooks/usePagination";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -60,7 +67,9 @@ function monthToDateRange() {
 }
 
 function BranchDocumentsPage() {
-  const { customerId, branchId } = useParams({ from: "/app/customer-orders/$customerId/branch/$branchId" });
+  const { customerId, branchId } = useParams({
+    from: "/app/customer-orders/$customerId/branch/$branchId",
+  });
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const basePath = `/app/customer-orders/${customerId}/branch/${branchId}`;
   if (pathname.replace(/\/$/, "") !== basePath) {
@@ -74,12 +83,18 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
   const [dateFrom, setDateFrom] = useState(() => monthToDateRange().from);
   const [dateTo, setDateTo] = useState(() => monthToDateRange().to);
   const [sort, setSort] = useState<SortOption>("latest");
-  const { page: docsPage, perPage: docsPerPage, setPage: setDocsPage, setPerPage: setDocsPerPage } = usePagination(20);
+  const {
+    page: docsPage,
+    perPage: docsPerPage,
+    setPage: setDocsPage,
+    setPerPage: setDocsPerPage,
+  } = usePagination(20);
 
   const branch = useQuery({
     queryKey: ["customers", branchId],
     queryFn: () => apiFetch<AcumaticaCustomer>(`customers/${encodeURIComponent(branchId)}`),
-    retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 2,
+    retry: (failureCount, error) =>
+      !(error instanceof ApiError && error.status === 404) && failureCount < 2,
   });
   const orders = useOrders({
     customer_id: branchId,
@@ -93,6 +108,7 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
   });
   const commonProducts = useCommonProducts(branchId);
   const suggestedOrders = useSuggestedOrders(branchId);
+  const whitespace = useWhitespace(branchId);
   const docs = orders.data?.data ?? [];
   const summary = useMemo(() => summarizeDocuments(docs), [docs]);
 
@@ -116,7 +132,10 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
     return (
       <div className="flex flex-col gap-4 p-6">
         {backButton}
-        <ErrorBlock message={`Branch "${branchId}" was not found.`} onRetry={() => branch.refetch()} />
+        <ErrorBlock
+          message={`Branch "${branchId}" was not found.`}
+          onRetry={() => branch.refetch()}
+        />
       </div>
     );
   }
@@ -137,6 +156,7 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
   const docsLastPage = orders.data?.last_page ?? 1;
   const commonProductsCount = commonProducts.data?.products.length ?? 0;
   const whitespotCount = suggestedOrders.data?.suggestions.length ?? 0;
+  const cohortWhitespaceCount = whitespace.data?.summary.opportunity_count ?? 0;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -144,11 +164,13 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
         <div>
           {backButton}
           <h1 className="text-2xl font-semibold tracking-tight">
-            {branch.isLoading ? "Branch" : branch.data?.name ?? branchId}
+            {branch.isLoading ? "Branch" : (branch.data?.name ?? branchId)}
           </h1>
           <p className="font-mono text-xs text-muted-foreground">{branchId}</p>
         </div>
-        {branch.data?.customer_class && <Badge variant="secondary">{branch.data.customer_class}</Badge>}
+        {branch.data?.customer_class && (
+          <Badge variant="secondary">{branch.data.customer_class}</Badge>
+        )}
       </div>
 
       <MetricsGrid summary={summary} loading={orders.isLoading} />
@@ -161,7 +183,11 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div className="grid gap-1.5">
             <Label>From</Label>
-            <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+            />
           </div>
           <div className="grid gap-1.5">
             <Label>To</Label>
@@ -170,7 +196,9 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
           <div className="grid gap-1.5">
             <Label>Sort</Label>
             <Select value={sort} onValueChange={(value) => setSort(value as SortOption)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="latest">Newest first</SelectItem>
                 <SelectItem value="oldest">Oldest first</SelectItem>
@@ -182,24 +210,41 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
         </CardContent>
       </Card>
 
-      <CustomerBackorderCard customerId={branchId} dateFrom={dateFrom || undefined} dateTo={dateTo || undefined} />
+      <CustomerBackorderCard
+        customerId={branchId}
+        dateFrom={dateFrom || undefined}
+        dateTo={dateTo || undefined}
+      />
 
       <Card className="rounded-lg shadow-sm">
         <CardContent className="p-4">
-          <Accordion type="multiple" defaultValue={["documents", "whitespot"]} className="w-full">
+          <Accordion
+            type="multiple"
+            defaultValue={["documents", "whitespace-cohort"]}
+            className="w-full"
+          >
             <AccordionItem value="documents" className="border-b">
               <AccordionTrigger>
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <span className="text-base font-semibold">All Documents</span>
-                  <Badge variant="secondary" className="ml-2">{docsTotal}</Badge>
+                  <Badge variant="secondary" className="ml-2">
+                    {docsTotal}
+                  </Badge>
                 </div>
               </AccordionTrigger>
               <AccordionContent>
                 {orders.isLoading ? (
                   <SkeletonRows />
                 ) : orders.isError ? (
-                  <ErrorBlock message={orders.error instanceof Error ? orders.error.message : "Documents could not be loaded."} onRetry={() => orders.refetch()} />
+                  <ErrorBlock
+                    message={
+                      orders.error instanceof Error
+                        ? orders.error.message
+                        : "Documents could not be loaded."
+                    }
+                    onRetry={() => orders.refetch()}
+                  />
                 ) : docs.length === 0 ? (
                   <EmptyBlock message="No sales documents found for this branch." />
                 ) : (
@@ -220,12 +265,36 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
               </AccordionContent>
             </AccordionItem>
 
+            <AccordionItem value="whitespace-cohort" className="border-b">
+              <AccordionTrigger>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  <span className="text-base font-semibold">White spot opportunities</span>
+                  <Badge variant="secondary" className="ml-2">
+                    {cohortWhitespaceCount}
+                  </Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <CohortWhitespaceCard
+                  data={whitespace.data}
+                  isLoading={whitespace.isLoading}
+                  isError={whitespace.isError}
+                  error={whitespace.error}
+                  onRetry={() => whitespace.refetch()}
+                  pageSize={WHITESPOT_PAGE_SIZE}
+                />
+              </AccordionContent>
+            </AccordionItem>
+
             <AccordionItem value="whitespot" className="border-b">
               <AccordionTrigger>
                 <div className="flex items-center gap-2">
                   <ClipboardList className="h-4 w-4 text-muted-foreground" />
                   <span className="text-base font-semibold">Items not ordered</span>
-                  <Badge variant="secondary" className="ml-2">{whitespotCount}</Badge>
+                  <Badge variant="secondary" className="ml-2">
+                    {whitespotCount}
+                  </Badge>
                 </div>
               </AccordionTrigger>
               <AccordionContent>
@@ -245,7 +314,9 @@ function BranchDocumentsIndex({ customerId, branchId }: { customerId: string; br
                 <div className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-muted-foreground" />
                   <span className="text-base font-semibold">Common Products</span>
-                  <Badge variant="secondary" className="ml-2">{commonProductsCount}</Badge>
+                  <Badge variant="secondary" className="ml-2">
+                    {commonProductsCount}
+                  </Badge>
                 </div>
               </AccordionTrigger>
               <AccordionContent>

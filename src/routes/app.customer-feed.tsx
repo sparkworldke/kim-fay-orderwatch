@@ -15,6 +15,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 import {
   formatCompletionTime,
   fillRateTone,
@@ -55,6 +57,12 @@ function CustomerFeedPage() {
   function toggleExpanded(key: string) {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   }
+
+  const groups = data?.groups ?? [];
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
+  const pageCount = Math.max(1, Math.ceil(groups.length / perPage));
+  const safePage = Math.min(page, pageCount);
+  const pagedGroups = groups.slice((safePage - 1) * perPage, safePage * perPage);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -124,7 +132,7 @@ function CustomerFeedPage() {
                 </td>
               </tr>
             )}
-            {!isLoading && (data?.groups ?? []).map((group) => (
+            {!isLoading && pagedGroups.map((group) => (
               <CustomerFeedRows
                 key={group.group_key}
                 group={group}
@@ -133,7 +141,7 @@ function CustomerFeedPage() {
                 onInsights={() => setInsightGroup(group)}
               />
             ))}
-            {!isLoading && (data?.groups ?? []).length === 0 && (
+            {!isLoading && groups.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                   No customer activity in this period
@@ -143,6 +151,16 @@ function CustomerFeedPage() {
           </tbody>
         </table>
       </div>
+      {groups.length > 0 && (
+        <PaginationControls
+          currentPage={safePage}
+          lastPage={pageCount}
+          total={groups.length}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+        />
+      )}
 
       <InsightsDialog
         group={insightGroup}

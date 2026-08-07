@@ -19,6 +19,7 @@ export type UserCapabilities = {
   employee_number: string | null;
   has_reportees: boolean;
   sales_intelligence_channels: string[];
+  default_sales_channel: string | null;
   /** COO / admin / store mgr / production mgr — MSI, safety & buffer bulk upload. */
   can_manage_production_planning?: boolean;
   can_manage_users: boolean;
@@ -39,6 +40,7 @@ const FALLBACK: UserCapabilities = {
   employee_number: null,
   has_reportees: false,
   sales_intelligence_channels: ["portfolio"],
+  default_sales_channel: null,
   can_manage_production_planning: false,
   can_manage_users: false,
   unrestricted_business_access: false,

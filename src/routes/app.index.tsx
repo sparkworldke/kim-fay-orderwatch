@@ -52,6 +52,8 @@ import {
 } from "@/components/customer-brand-report";
 import { BrandFilterCascade, type BrandFilterValue } from "@/components/filters/BrandFilterCascade";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 
 export const Route = createFileRoute("/app/")({
   head: () => ({ meta: [{ title: "Dashboard — Kim-Fay Sight" }] }),
@@ -349,12 +351,13 @@ function useCustomerBrands(
   enabled: boolean,
   /** When false, skip nested SO rows (faster brand roll-up). */
   includeDetail = true,
+  perPage = 20,
 ) {
   const params = new URLSearchParams({
     date_from: dateFrom,
     date_to: dateTo,
     page: String(page),
-    per_page: "20",
+    per_page: String(perPage),
     detail: includeDetail ? "1" : "0",
   });
   if (search.trim()) params.set("search", search.trim());
@@ -374,6 +377,7 @@ function useCustomerBrands(
       partnerBrand,
       brand,
       includeDetail,
+      perPage,
     ],
     queryFn: () =>
       apiFetch<CustomerBrandsResponse>(`dashboard/customer-brands?${params.toString()}`),
@@ -2088,7 +2092,7 @@ function CustomerBrandsPanel({
 }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
   // Default to Partner Brands (trading) — primary audience for this tab.
   const [brandFilter, setBrandFilter] = useState<BrandFilterValue>({
     partner_brand: "trading",
@@ -2127,6 +2131,7 @@ function CustomerBrandsPanel({
     enabled,
     // Brand roll-up does not need nested SO lists — much faster.
     view === "by-customer",
+    perPage,
   );
 
   const summary = report.data?.summary;
@@ -2247,30 +2252,14 @@ function CustomerBrandsPanel({
               {report.data?.data.length ? (
                 <>
                   <CustomerBrandAccordion rows={report.data.data} />
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{report.data.meta.total} customers</span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={page <= 1}
-                        onClick={() => setPage((value) => value - 1)}
-                      >
-                        Previous
-                      </Button>
-                      <span>
-                        Page {report.data.meta.current_page} of {report.data.meta.last_page}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={page >= report.data.meta.last_page}
-                        onClick={() => setPage((value) => value + 1)}
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
+                  <PaginationControls
+                    currentPage={report.data.meta.current_page}
+                    lastPage={report.data.meta.last_page}
+                    total={report.data.meta.total}
+                    perPage={perPage}
+                    onPageChange={setPage}
+                    onPerPageChange={setPerPage}
+                  />
                 </>
               ) : (
                 <div className="rounded border p-6 text-center text-muted-foreground">

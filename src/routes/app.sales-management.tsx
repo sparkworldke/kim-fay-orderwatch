@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { usePagination } from "@/hooks/usePagination";
 import { useAuth } from "@/lib/auth";
 import {
   useGenerateSalesManagementPrompts,
@@ -45,8 +47,9 @@ function SalesManagementPage() {
   const canGenerate = session?.role === "Administrator" && permissions.includes("sales.management.manage");
   const [view, setView] = useState("due");
   const [q, setQ] = useState("");
+  const { page, perPage, setPage, setPerPage, resetPage } = usePagination(20);
   const dashboard = useSalesManagementDashboard();
-  const prompts = useSalesManagementPrompts({ view, q, per_page: 75 });
+  const prompts = useSalesManagementPrompts({ view, q, page, per_page: perPage });
   const generate = useGenerateSalesManagementPrompts();
 
   async function runGenerate(force = false) {
@@ -103,14 +106,14 @@ function SalesManagementPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={view} onValueChange={setView}>
+        <Tabs value={view} onValueChange={(next) => { setView(next); resetPage(); }}>
           <TabsList className="flex h-auto flex-wrap justify-start">
             {TABS.map((tab) => <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
           </TabsList>
         </Tabs>
         <div className="relative ml-auto min-w-[240px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customer, consultant, reason" className="h-9 pl-8" />
+          <Input value={q} onChange={(e) => { setQ(e.target.value); resetPage(); }} placeholder="Search customer, consultant, reason" className="h-9 pl-8" />
         </div>
       </div>
 
@@ -138,6 +141,16 @@ function SalesManagementPage() {
           </tbody>
         </table>
       </div>
+      {prompts.data && prompts.data.total > 0 && (
+        <PaginationControls
+          currentPage={prompts.data.current_page}
+          lastPage={prompts.data.last_page}
+          total={prompts.data.total}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+        />
+      )}
     </div>
   );
 }

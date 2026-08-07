@@ -174,20 +174,22 @@ class ProfileController extends Controller
      */
     public function signInLogs(Request $request): JsonResponse
     {
+        $perPage = min(max($request->integer('per_page', 20), 5), 100);
         $logs = $request->user()
             ->signInLogs()
             ->orderBy('created_at', 'desc')
-            ->paginate(20, ['id', 'created_at', 'ip_address', 'user_agent', 'login_mode', 'status']);
+            ->paginate($perPage, ['id', 'created_at', 'ip_address', 'user_agent', 'login_mode', 'status']);
 
         return response()->json($logs);
     }
 
     public function sessions(Request $request): JsonResponse
     {
+        $perPage = min(max($request->integer('per_page', 20), 5), 100);
         $sessions = $request->user()
             ->userSessions()
             ->orderByDesc('login_at')
-            ->paginate(20, [
+            ->paginate($perPage, [
                 'id',
                 'login_at',
                 'logout_at',

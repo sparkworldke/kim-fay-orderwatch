@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { CustomerLink, OrderLink } from "@/components/entity-links";
 import { ProductListingCell } from "@/components/inventory/ProductListingCell";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 import {
   AlertTriangle,
   ArrowRight,
@@ -152,6 +154,15 @@ function BusinessOptimizationPage() {
     dateTo,
     selectedZone,
     regionFilter,
+  );
+
+  const atRiskPagination = usePagination(20);
+  const atRiskItems = data?.production_forecast.at_risk_items ?? [];
+  const atRiskPageCount = Math.max(1, Math.ceil(atRiskItems.length / atRiskPagination.perPage));
+  const atRiskSafePage = Math.min(atRiskPagination.page, atRiskPageCount);
+  const pagedAtRiskItems = atRiskItems.slice(
+    (atRiskSafePage - 1) * atRiskPagination.perPage,
+    atRiskSafePage * atRiskPagination.perPage,
   );
 
   const backordersByReason = data?.charts.backorders_by_reason ?? [];
@@ -543,7 +554,7 @@ function BusinessOptimizationPage() {
                       </td>
                     </tr>
                   )}
-                  {data.production_forecast.at_risk_items.map((item) => (
+                  {pagedAtRiskItems.map((item) => (
                     <tr key={item.inventory_id} className="border-b">
                       <td className="px-4 py-2">
                         <ProductListingCell product={item} />
@@ -573,6 +584,16 @@ function BusinessOptimizationPage() {
                 </tbody>
               </table>
             </div>
+            {atRiskItems.length > 0 && (
+              <PaginationControls
+                currentPage={atRiskSafePage}
+                lastPage={atRiskPageCount}
+                total={atRiskItems.length}
+                perPage={atRiskPagination.perPage}
+                onPageChange={atRiskPagination.setPage}
+                onPerPageChange={atRiskPagination.setPerPage}
+              />
+            )}
           </Section>
 
           <div className="grid gap-6 lg:grid-cols-2">

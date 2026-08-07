@@ -22,6 +22,7 @@ use App\Services\Operations\FillRateBusinessCategory;
 use App\Services\Operations\BackorderExcelExporter;
 use App\Services\Operations\BackorderLineTransformer;
 use App\Services\Operations\BackorderMetricsService;
+use App\Services\Operations\BackorderExecutiveImageService;
 use App\Services\Operations\FillRateExcelExporter;
 use App\Services\Operations\FillRateReasonCaptureReport;
 use App\Services\Operations\OperationsCatalogResolver;
@@ -39,6 +40,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -61,6 +63,7 @@ class OperationsController extends Controller
         private readonly BackorderExcelExporter $backorderExporter,
         private readonly BackorderLineTransformer $backorderLineTransformer,
         private readonly BackorderMetricsService $backorderMetrics,
+        private readonly BackorderExecutiveImageService $backorderExecutiveImage,
         private readonly FillRateReasonCaptureReport $reasonCaptureReport,
         private readonly FillRateBusinessCategory $businessCategory,
         private readonly SalesPortfolioService $salesPortfolio,
@@ -404,6 +407,67 @@ class OperationsController extends Controller
             'open_skus' => $openSkus,
             'open_episodes' => $openLines,
         ]);
+    }
+
+    public function backordersExecutiveImage(Request $request): JsonResponse
+    {
+        $request->validate([
+            'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'q' => ['nullable', 'string', 'max:150'], 'product_line' => ['nullable', 'string', 'max:100'],
+            'customer_group' => ['nullable', 'string', 'max:100'], 'warehouse_id' => ['nullable', 'string', 'max:50'],
+            'reason_code' => ['nullable', 'string', 'max:100'], 'fulfillment_status' => ['nullable', 'string', 'max:100'],
+            'partner_brand' => ['nullable', 'string', 'max:100'], 'brand' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'string', 'max:100'], 'segment' => ['nullable', 'in:KP,CS'],
+            'product_segment' => ['nullable', 'in:manufactured,trading'], 'force' => ['nullable', 'boolean'],
+        ]);
+
+        $rows = $this->backordersFilteredQuery($request)
+            ->where('acumatica_backorder_lines.shortfall_kind', 'active_backorder')
+            ->select([
+                'acumatica_backorder_lines.*', DB::raw('ai.item_class as product_line'),
+                DB::raw('aso.order_date as order_date'), DB::raw('aso.status as sales_order_status'),
+                DB::raw('ac.parent_acumatica_id as parent_customer_id'),
+                DB::raw('COALESCE(parent_ac.name, ac.main_account_name, ac.name, acumatica_backorder_lines.customer_name) as parent_customer_name'),
+                DB::raw($this->backorderSoLineReasonSubquery().' as so_line_reason_code'),
+            ])->get();
+        $lines = $this->backorderLineTransformer->transform($rows);
+        $canonical = $this->backorderMetrics->summarize($lines);
+        $stock = $canonical['stock_diagnosis'];
+
+        $rollup = fn ($group, string $labelKey) => $group->map(function ($items, $label) use ($labelKey) {
+            return [$labelKey => (string) $label, 'revenue_at_risk' => round((float) $items->sum('revenue_at_risk'), 2), 'line_count' => $items->count()];
+        })->sortByDesc('revenue_at_risk')->take(5)->values()->all();
+
+        $report = [
+            'metrics' => [
+                'revenue_at_risk' => (float) $canonical['revenue_at_risk'],
+                'ready_to_release' => round((float) $stock['rar_stock_available_not_shipped'] + (float) $stock['rar_partial_cover'], 2),
+                'blocked_no_stock' => (float) $stock['rar_true_stockout'],
+                'open_lines' => $lines->count(), 'open_skus' => $lines->pluck('inventory_id')->filter()->unique()->count(),
+                'open_customers' => $lines->pluck('customer_acumatica_id')->filter()->unique()->count(),
+                'open_orders' => $lines->pluck('order_nbr')->filter()->unique()->count(),
+            ],
+            'breakdowns' => [
+                'segments' => $canonical['by_product_segment'],
+                'brands' => array_slice($canonical['by_brand'], 0, 5),
+                'customers' => $rollup($lines->groupBy(fn ($line) => $line->parent_customer_name ?: $line->customer_name ?: 'Unclassified'), 'name'),
+                'skus' => $rollup($lines->groupBy(fn ($line) => $line->inventory_id ?: 'Unclassified'), 'inventory_id'),
+                'reasons' => $rollup($lines->groupBy(fn ($line) => $line->reason_code ?: 'Unassigned'), 'reason'),
+            ],
+            'filters' => collect($request->only(['date_from','date_to','q','product_line','customer_group','warehouse_id','reason_code','fulfillment_status','partner_brand','brand','category','segment','product_segment']))->filter(fn ($value) => filled($value))->all(),
+            'generated_at' => now('Africa/Nairobi')->toIso8601String(),
+        ];
+
+        $scopeKey = hash('sha256', json_encode([
+            $request->user()->id, $request->user()->role,
+            $report['metrics'], $report['breakdowns'], $report['filters'],
+        ], JSON_UNESCAPED_SLASHES));
+        $cacheKey = 'backorders:executive-image:'.$scopeKey;
+        $cached = ! $request->boolean('force') && Cache::has($cacheKey);
+        $enrichment = $cached ? Cache::get($cacheKey) : $this->backorderExecutiveImage->enrich($report);
+        if (! $cached) Cache::put($cacheKey, $enrichment, now()->addHour());
+
+        return response()->json([...$report, ...$enrichment, 'cached' => $cached]);
     }
 
     /**

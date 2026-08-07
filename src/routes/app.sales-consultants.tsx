@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 import {
   Table,
   TableBody,
@@ -146,6 +148,13 @@ function SalesConsultantsIndex() {
     });
   }, [items, searchDebounced, selectedRegions, selectedCustomers, selectedConsultants]);
   const displayItems = filteredItems;
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
+  const pageCount = Math.max(1, Math.ceil(displayItems.length / perPage));
+  const safePage = Math.min(page, pageCount);
+  const pagedItems = useMemo(
+    () => displayItems.slice((safePage - 1) * perPage, safePage * perPage),
+    [displayItems, safePage, perPage],
+  );
   const totals = displayItems.reduce(
     (acc, item) => ({
       assignedOrders: acc.assignedOrders + item.assigned_orders,
@@ -334,7 +343,7 @@ function SalesConsultantsIndex() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {displayItems.map((item) => (
+                {pagedItems.map((item) => (
                   <TableRow key={`${item.id}-${item.rep_code ?? "no-rep"}`}>
                     <TableCell>
                       <ConsultantLink consultantId={String(item.id)} repCode={item.rep_code} consultantName={item.name} className="font-medium">
@@ -392,6 +401,18 @@ function SalesConsultantsIndex() {
                 ))}
               </TableBody>
             </Table>
+          )}
+          {displayItems.length > 0 && (
+            <div className="mt-3">
+              <PaginationControls
+                currentPage={safePage}
+                lastPage={pageCount}
+                total={displayItems.length}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+              />
+            </div>
           )}
         </CardContent>
       </Card>

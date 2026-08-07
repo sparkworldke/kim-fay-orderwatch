@@ -113,6 +113,7 @@ export function useHandoffKpDormant(customerId: string) {
 export type KpMeeting = {
   id: number;
   title: string;
+  activity_type: "phone" | "email" | "meeting" | "visit";
   notes: string | null;
   purpose_id: number | null;
   purpose?: KpMeetingPurpose | null;
@@ -125,6 +126,10 @@ export type KpMeeting = {
   follow_up_date: string | null;
   no_follow_up_reason: string | null;
   b2b_details?: Record<string, string> | null;
+  questionnaire_id?: number | null;
+  questionnaire_version?: number | null;
+  questionnaire_answers?: Record<string, unknown> | null;
+  questionnaire?: KpActivityQuestionnaire | null;
   customer_acumatica_id: string | null;
   customer_name: string | null;
   starts_at: string;
@@ -140,10 +145,14 @@ export type KpMeeting = {
 export type KpMeetingPurpose = {
   id: number;
   name: string;
+  activity_types?: Array<"phone" | "email" | "meeting" | "visit"> | null;
   allows_internal: boolean;
+  customer_required?: boolean;
   is_active: boolean;
   sort_order: number;
 };
+export type KpActivityQuestion = { key: string; label: string; type: "text" | "select" | "multi_select" | "number" | "date" | "boolean"; required?: boolean; options?: string[] };
+export type KpActivityQuestionnaire = { id: number; purpose_id: number | null; activity_type: KpMeeting["activity_type"]; version: number; questions: KpActivityQuestion[]; is_active: boolean };
 export type KpActionCategory = {
   id: number;
   name: string;
@@ -171,6 +180,7 @@ export type KpMeetingParticipant = {
 
 export type KpMeetingInput = {
   title: string;
+  activity_type?: KpMeeting["activity_type"];
   notes?: string | null;
   purpose_id: number;
   meeting_mode: "virtual" | "physical";
@@ -182,6 +192,8 @@ export type KpMeetingInput = {
   follow_up_date?: string | null;
   no_follow_up_reason?: string | null;
   b2b_details?: Record<string, string>;
+  questionnaire_id?: number | null;
+  questionnaire_answers?: Record<string, unknown>;
   owner_user_id?: number;
   participant_user_ids?: number[];
   actions?: Array<{
@@ -209,6 +221,7 @@ export function useKpMeetings(
     status?: string;
     purpose_id?: number;
     page?: number;
+    per_page?: number;
   } = {},
 ) {
   const qs = new URLSearchParams();
@@ -220,6 +233,7 @@ export function useKpMeetings(
   if (params.status) qs.set("status", params.status);
   if (params.purpose_id) qs.set("purpose_id", String(params.purpose_id));
   if (params.page) qs.set("page", String(params.page));
+  if (params.per_page) qs.set("per_page", String(params.per_page));
 
   return useQuery({
     queryKey: ["kp-meetings", params],
@@ -265,6 +279,7 @@ export function useUpdateKpMeeting() {
 
 export type KpMeetingsMeta = {
   purposes: KpMeetingPurpose[];
+  questionnaires?: KpActivityQuestionnaire[];
   action_categories: KpActionCategory[];
   consultants: Array<{
     id: number;
@@ -274,8 +289,31 @@ export type KpMeetingsMeta = {
     org_level: string | null;
   }>;
   is_admin: boolean;
+  can_edit?: boolean;
+  allowed_scopes?: Array<"self" | "team" | "department" | "organization">;
+  departments?: Array<{ id: number; name: string; slug: string }>;
+  sectors?: string[];
   current_user_id: number;
 };
+
+export function useKpActivities(params: { q?: string; month?: string; owner_user_id?: number; status?: string; activity_type?: string; department_id?: number; sector?: string } = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key,value]) => { if (value !== undefined && value !== "") qs.set(key,String(value)); });
+  return useQuery({ queryKey:["kp-activities",params], queryFn:()=>apiFetch<{data:KpMeeting[];current_page:number;last_page:number;total:number}>(`kp/activities?${qs}`) });
+}
+
+export function useCreateKpActivity() {
+  const qc=useQueryClient();
+  return useMutation({ mutationFn:(body:KpMeetingInput)=>apiFetch<KpMeeting>("kp/activities",{method:"POST",body}), onSuccess:()=>{toast.success("Activity saved");qc.invalidateQueries({queryKey:["kp-activities"]});qc.invalidateQueries({queryKey:["kp-activities-dashboard"]});qc.invalidateQueries({queryKey:["kp-activity-follow-ups"]});}, onError:(e:Error)=>toast.error(e.message||"Unable to save activity") });
+}
+export function useUpdateKpActivity() {
+  const qc=useQueryClient();
+  return useMutation({ mutationFn:({id,...body}:Partial<KpMeetingInput>&{id:number})=>apiFetch<KpMeeting>(`kp/activities/${id}`,{method:"PUT",body}), onSuccess:()=>{toast.success("Activity updated");qc.invalidateQueries({queryKey:["kp-activities"]});qc.invalidateQueries({queryKey:["kp-activities-dashboard"]});qc.invalidateQueries({queryKey:["kp-activity-follow-ups"]});}, onError:(e:Error)=>toast.error(e.message||"Unable to update activity") });
+}
+export type KpActivityDashboard = { month:string;scope:string;allowed_scopes:string[];metrics:{total:number;planned:number;completed:number;missed:number;cancelled:number;unplanned:number;adherence_percent:number;active_consultants:number;customers_engaged:number;overdue_follow_ups:number};activity_split:Array<{name:string;count:number}>;purpose_split:Array<{name:string;count:number}>;consultants:Array<Record<string,number|string>>;departments:Array<Record<string,number|string>> };
+export function useKpActivitiesDashboard(params:{month:string;scope:string;owner_user_id?:number;activity_type?:string;department_id?:number;sector?:string}) { const qs=new URLSearchParams({month:params.month,scope:params.scope});Object.entries(params).forEach(([key,value])=>{if(value!==undefined&&value!=="")qs.set(key,String(value));});return useQuery({queryKey:["kp-activities-dashboard",params],queryFn:()=>apiFetch<KpActivityDashboard>(`kp/activities/dashboard?${qs}`)}); }
+export type KpActivityFollowUps={overdue:KpMeetingAction[];due_today:KpMeetingAction[];upcoming:KpMeetingAction[];completed:KpMeetingAction[]};
+export function useKpActivityFollowUps(owner_user_id?:number){const qs=owner_user_id?`?owner_user_id=${owner_user_id}`:"";return useQuery({queryKey:["kp-activity-follow-ups",owner_user_id],queryFn:()=>apiFetch<KpActivityFollowUps>(`kp/activities/follow-ups${qs}`)});}
 
 export type KpMeetingCustomer = {
   acumatica_id: string;

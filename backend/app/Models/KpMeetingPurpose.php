@@ -3,6 +3,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class KpMeetingPurpose extends Model
 {
-    protected $fillable = ['name', 'allows_internal', 'is_active', 'sort_order'];
-    protected function casts(): array { return ['allows_internal' => 'boolean', 'is_active' => 'boolean']; }
+    protected $fillable = ['name', 'activity_types', 'allows_internal', 'customer_required', 'is_active', 'sort_order'];
+    protected function casts(): array { return ['activity_types' => 'array', 'allows_internal' => 'boolean', 'customer_required' => 'boolean', 'is_active' => 'boolean']; }
 }

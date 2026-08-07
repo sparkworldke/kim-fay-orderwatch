@@ -244,7 +244,7 @@ class PrivilegeHierarchyTest extends TestCase
             ]);
         }
 
-        $ids = app(SalesIntelligenceService::class)->channelCustomerIds($executive, 'MT1');
+        $ids = app(SalesIntelligenceService::class)->channelCustomerIds($executive, ['MT1']);
 
         sort($ids);
         $this->assertSame(['MT-ATTACHED', 'MT-UNATTACHED'], $ids);

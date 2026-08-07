@@ -1,0 +1,924 @@
+{
+    "items": [
+        {
+            "fol_category": "manu",
+            "inventory_id": "ALKBT0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ALKBT0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ALKBT0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ALKBT0006"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ALKBT0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ANTFM0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ANTFM0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ANTFM0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ANTFM0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ANTFM0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0016"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0019"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0020"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0022"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0025"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0006"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0010"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0012"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0022"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0025"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0026"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0029"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0036"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0042"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0046"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0049"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0050"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0052"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0053"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0054"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0055"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0056"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0057"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0058"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0059"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0060"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0066"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0068"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0069"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0070"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0072"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0074"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0076"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0077"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0078"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0079"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0080"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0085"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0086"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0087"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0088"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0089"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0091"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0093"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0094"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0095"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0099"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0100"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0101"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0102"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0105"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0106"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0107"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0108"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0109"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0110"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0111"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0112"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0113"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0114"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0115"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0116"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0117"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0118"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0122"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0123"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0126"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0128"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0129"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0130"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0131"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0136"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0137"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0146"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DURBT0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DURBT0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DURBT0008"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DURBT0009"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0006"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0008"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0009"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0010"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0011"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYBA0012"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0006"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0008"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYIN0009"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0008"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0010"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0011"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0012"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0013"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0014"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0015"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0016"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0017"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0018"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0019"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0020"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0021"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0022"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0023"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYSA0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYSA0008"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYSA0010"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0029"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0036"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0037"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0038"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0039"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0040"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0050"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0052"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0053"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0054"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HANSA0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGFR0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGFR0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGFR0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGFR0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGFR0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGFR0006"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGFR0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGKL0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOBW0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOBW0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOBW0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOBW0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOCN0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOCN0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOHW0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOHW0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOHW0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOHW0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOLT0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOLT0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOSH0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOSH0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOSH0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "IKOSH0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SHOFM0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SHOFM0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SHOFM0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SHOFM0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0027"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0036"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0037"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0038"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0039"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0040"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0041"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0042"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0048"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0050"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0052"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0053"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "STDFM0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "STDFM0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "STDFM0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "STDFM0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "STDFM0005"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "STDFM0006"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "STDFM0007"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "TISTP0002"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "TISTP0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "TISTP0004"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "TISTP0015"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "TISTP0018"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "TOISA0001"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "ALKBT0008"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0017"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "COSTP0021"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0003"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0016"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0030"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0039"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0047"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0051"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0061"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0063"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0064"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "DISPE0073"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYMU0009"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "FAYTP0023"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "HYGFR0008"
+        },
+        {
+            "fol_category": "manu",
+            "inventory_id": "SIFTP0028"
+        }
+    ],
+    "description": "FOL-eligible inventory sync from new-doc/acumatica_inventory_items.sql snapshot",
+    "generated_from": [
+        "new-doc/acumatica_inventory_items.sql"
+    ]
+}

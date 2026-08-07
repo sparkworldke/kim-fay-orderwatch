@@ -14,6 +14,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 import { MaskedKES } from "@/components/MaskedCurrency";
 
 export const Route = createFileRoute("/app/kp/items-not-ordered")({
@@ -97,6 +99,14 @@ function Page() {
       .sort((a, b) => b.item_count - a.item_count);
   }, [result.data]);
 
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
+  const pageCount = Math.max(1, Math.ceil(groups.length / perPage));
+  const safePage = Math.min(page, pageCount);
+  const pagedGroups = useMemo(
+    () => groups.slice((safePage - 1) * perPage, safePage * perPage),
+    [groups, safePage, perPage],
+  );
+
   return (
     <div className="space-y-5">
       <div>
@@ -169,7 +179,7 @@ function Page() {
             </p>
           ) : (
             <Accordion type="multiple" className="rounded-lg border bg-card">
-              {groups.map((g) => (
+              {pagedGroups.map((g) => (
                 <AccordionItem
                   key={g.customer_id}
                   value={g.customer_id}
@@ -251,6 +261,16 @@ function Page() {
                 </AccordionItem>
               ))}
             </Accordion>
+          )}
+          {groups.length > 0 && (
+            <PaginationControls
+              currentPage={safePage}
+              lastPage={pageCount}
+              total={groups.length}
+              perPage={perPage}
+              onPageChange={setPage}
+              onPerPageChange={setPerPage}
+            />
           )}
 
           <p className="text-xs text-muted-foreground">

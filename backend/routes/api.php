@@ -201,6 +201,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('inventory/{inventoryId}/sku-detail', [InventorySkuDetailController::class, 'show']);
         Route::get('inventory/{inventoryId}/insights',   [InventoryInsightController::class, 'show']);
         Route::get('backorders/summary',              [OperationsController::class, 'backordersSummary'])->middleware('response.cache:backorders,120');
+        Route::post('backorders/executive-image',     [OperationsController::class, 'backordersExecutiveImage'])->middleware('throttle:10,1');
         Route::get('backorders/reconciliation',       [OperationsController::class, 'backordersReconciliation']);
         Route::get('backorders/analytics',            [OperationsController::class, 'backordersAnalytics'])->middleware('response.cache:backorders,120');
         Route::get('backorders/sku-breakdown',         [OperationsController::class, 'backordersSkuBreakdown'])->middleware('response.cache:backorders,120');
@@ -256,7 +257,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('kp/dormant-customers/{customerId}/feedback', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'feedback'])->middleware('kp.crm');
     Route::post('kp/dormant-customers/{customerId}/handoff', [\App\Http\Controllers\Api\KpDormantCustomersController::class, 'handoff'])->middleware('kp.crm');
     Route::middleware(['kp.crm', 'response.cache:kp-crm,120'])->group(function () {
-        Route::get('kp/meetings', [\App\Http\Controllers\Api\KpMeetingsController::class, 'index']);
+        Route::get('kp/meetings', [\App\Http\Controllers\Api\KpMeetingsController::class, 'index'])->name('kp.meetings.index');
         Route::get('kp/meetings-dashboard', [\App\Http\Controllers\Api\KpMeetingsController::class, 'dashboard']);
         Route::get('kp/meetings-meta', [\App\Http\Controllers\Api\KpMeetingsController::class, 'meta']);
         Route::get('kp/meetings-customer-search', [\App\Http\Controllers\Api\KpMeetingsController::class, 'searchCustomers']);
@@ -270,6 +271,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('kp/meeting-purposes/{purpose}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'savePurpose'])->whereNumber('purpose');
         Route::post('kp/meeting-action-categories', [\App\Http\Controllers\Api\KpMeetingsController::class, 'saveActionCategory']);
         Route::put('kp/meeting-action-categories/{category}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'saveActionCategory'])->whereNumber('category');
+        Route::get('kp/activities', [\App\Http\Controllers\Api\KpMeetingsController::class, 'index'])->name('kp.activities.index');
+        Route::get('kp/activities/meta', [\App\Http\Controllers\Api\KpMeetingsController::class, 'meta'])->name('kp.activities.meta');
+        Route::get('kp/activities/dashboard', [\App\Http\Controllers\Api\KpMeetingsController::class, 'activityDashboard'])->name('kp.activities.dashboard');
+        Route::get('kp/activities/follow-ups', [\App\Http\Controllers\Api\KpMeetingsController::class, 'followUps'])->name('kp.activities.follow-ups');
+        Route::post('kp/activities', [\App\Http\Controllers\Api\KpMeetingsController::class, 'store'])->name('kp.activities.store');
+        Route::put('kp/activities/{meeting}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'update'])->whereNumber('meeting')->name('kp.activities.update');
+        Route::delete('kp/activities/{meeting}', [\App\Http\Controllers\Api\KpMeetingsController::class, 'destroy'])->whereNumber('meeting')->name('kp.activities.destroy');
+        Route::post('kp/activity-questionnaires', [\App\Http\Controllers\Api\KpMeetingsController::class, 'saveQuestionnaire'])->name('kp.activities.questionnaires.store');
     });
     Route::get('kp/calendar', [\App\Http\Controllers\Api\KpCalendarController::class, 'index'])->middleware(['kp.crm', 'response.cache:kp-crm,120']);
 
@@ -349,6 +358,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('customers/{id}/set-parent',        [CustomerController::class, 'setParent']);
     Route::get('customers/{id}/suggested-orders',    [CustomerController::class, 'suggestedOrders']);
     Route::get('customers/{id}/common-products',     [CustomerController::class, 'commonProducts']);
+    Route::get('customers/{id}/whitespace',          [CustomerController::class, 'whitespace']);
     // CRM contacts on account
     Route::get('customer-contact-designations', [\App\Http\Controllers\Api\CustomerContactController::class, 'designations']);
     Route::get('customers/{customerId}/contacts', [\App\Http\Controllers\Api\CustomerContactController::class, 'index']);
@@ -492,6 +502,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->middleware('admin.only')->group(function () {
         Route::get('sfa/status', [SfaSyncController::class, 'status']);
         Route::post('sfa/run', [SfaSyncController::class, 'run']);
+        Route::get('sfa/matches', [SfaSyncController::class, 'matches']);
+        Route::post('sfa/matches/suggest', [SfaSyncController::class, 'suggest']);
+        Route::post('sfa/matches/{customer}/confirm', [SfaSyncController::class, 'confirm'])->whereNumber('customer');
+        Route::post('sfa/matches/{customer}/ignore', [SfaSyncController::class, 'ignore'])->whereNumber('customer');
+        Route::post('sfa/matches/{customer}/unlink', [SfaSyncController::class, 'unlink'])->whereNumber('customer');
         Route::get('sales-consultant-digests', [SalesConsultantDigestController::class, 'index']);
         Route::put('sales-consultant-digests/bulk', [SalesConsultantDigestController::class, 'bulk']);
         Route::put('sales-consultant-digests/{user}', [SalesConsultantDigestController::class, 'update']);

@@ -25,24 +25,53 @@ class SalesIntelligenceService
         private readonly OrgTreeService $orgTree,
     ) {}
 
-    /** @return list<string> */
-    public function channelCustomerIds(User $viewer, string $channel, ?string $region = null): array
+    /**
+     * Resolve the authorized customer Acumatica IDs for one or more channels.
+     *
+     * @param  list<string>  $channels
+     * @return list<string>
+     */
+    public function channelCustomerIds(User $viewer, array $channels, ?string $region = null): array
     {
-        $channel = strtoupper($channel);
-        $capability = strtolower($channel);
-        $allowedChannels = $this->capabilities->forUser($viewer)['sales_intelligence_channels'] ?? [];
-        $authorized = $channel === 'MT'
-            ? in_array('mt1', $allowedChannels, true) || in_array('mt2', $allowedChannels, true)
-            : in_array($capability, $allowedChannels, true);
-        abort_unless($authorized, 403, 'This Sales Intelligence channel is not authorized.');
+        $channels = array_values(array_unique(array_map('strtoupper', array_filter(array_map('trim', $channels)))));
+        abort_if($channels === [], 422, 'A Sales Intelligence channel is required.');
 
-        if ($channel === 'KP' && ! $this->kpAccess->canAccess($viewer)) {
-            abort(403, 'KP CRM access is not authorized.');
+        $allowedChannels = $this->capabilities->forUser($viewer)['sales_intelligence_channels'] ?? [];
+
+        // Keep only the channels the viewer is actually authorized to see.
+        $authorized = array_values(array_filter(
+            $channels,
+            function (string $channel) use ($allowedChannels, $viewer): bool {
+                if ($channel === 'PORTFOLIO') {
+                    return in_array('portfolio', $allowedChannels, true);
+                }
+                if ($channel === 'KP') {
+                    return in_array('kp', $allowedChannels, true) && $this->kpAccess->canAccess($viewer);
+                }
+                if ($channel === 'MT') {
+                    return in_array('mt1', $allowedChannels, true) || in_array('mt2', $allowedChannels, true);
+                }
+
+                return in_array(strtolower($channel), $allowedChannels, true);
+            },
+        ));
+        abort_if($authorized === [], 403, 'This Sales Intelligence channel is not authorized.');
+
+        $includePortfolio = in_array('PORTFOLIO', $authorized, true);
+        $businessChannels = array_values(array_diff($authorized, ['PORTFOLIO']));
+        $portfolioIds = $includePortfolio ? $this->hierarchyPortfolioCustomerIds($viewer) : [];
+
+        if ($businessChannels === []) {
+            $ids = $portfolioIds;
+        } else {
+            $ids = DataScope::scopedCustomerAcumaticaIds($viewer);
+            if ($ids === []) {
+                $ids = $portfolioIds;
+            } elseif ($includePortfolio) {
+                $ids = array_values(array_unique(array_merge($ids, $portfolioIds)));
+            }
         }
 
-        $ids = $channel === 'PORTFOLIO'
-            ? $this->hierarchyPortfolioCustomerIds($viewer)
-            : DataScope::scopedCustomerAcumaticaIds($viewer);
         if ($ids === []) {
             return [];
         }
@@ -56,16 +85,20 @@ class SalesIntelligenceService
         }
 
         return $customers
-            ->when($channel !== 'PORTFOLIO', function ($customers) use ($channel) {
-                $customers->where(function ($query) use ($channel) {
-                if ($channel === 'MT') {
-                    $query->whereIn('sales_channel_code', ['MT', 'MT1', 'MT2']);
-                } elseif ($channel === 'KP') {
-                    $query->where('sales_channel_code', 'KP')
-                        ->orWhere('customer_class', 'like', 'KP%');
-                } else {
-                    $query->where('sales_channel_code', $channel);
-                }
+            ->when($businessChannels !== [], function ($query) use ($businessChannels) {
+                $query->where(function ($subQuery) use ($businessChannels) {
+                    foreach ($businessChannels as $channel) {
+                        $subQuery->orWhere(function ($channelQuery) use ($channel) {
+                            if ($channel === 'MT') {
+                                $channelQuery->whereIn('sales_channel_code', ['MT', 'MT1', 'MT2']);
+                            } elseif ($channel === 'KP') {
+                                $channelQuery->where('sales_channel_code', 'KP')
+                                    ->orWhere('customer_class', 'like', 'KP%');
+                            } else {
+                                $channelQuery->where('sales_channel_code', $channel);
+                            }
+                        });
+                    }
                 });
             })
             ->distinct()
@@ -97,7 +130,7 @@ class SalesIntelligenceService
     /** @return array<string, mixed> */
     public function metrics(
         User $viewer,
-        string $channel,
+        array $channels,
         ?string $from,
         ?string $to,
         ?string $region = null,
@@ -110,8 +143,8 @@ class SalesIntelligenceService
             throw ValidationException::withMessages(['from' => ['The from date must be before the to date.']]);
         }
 
-        $allChannelIds = $this->channelCustomerIds($viewer, $channel);
-        $ids = $this->channelCustomerIds($viewer, $channel, $region);
+        $allChannelIds = $this->channelCustomerIds($viewer, $channels);
+        $ids = $this->channelCustomerIds($viewer, $channels, $region);
         $orders = DB::table('acumatica_sales_orders')
             ->whereIn('customer_acumatica_id', $ids ?: ['__none__'])
             ->whereBetween('order_date', [$fromDate, $toDate]);
@@ -159,12 +192,12 @@ class SalesIntelligenceService
 
         return [
             'scope' => [
-                'channel' => strtoupper($channel),
+                'channel' => strtoupper(implode(',', $channels)),
                 'customer_count' => count($ids),
                 'customer_ids' => $ids,
-                'portfolio_scoped' => strtoupper($channel) === 'PORTFOLIO'
+                'portfolio_scoped' => in_array('PORTFOLIO', array_map('strtoupper', $channels), true)
                     || $this->accessTier->isExclusivelySalesConsultant($viewer),
-                'portfolio_scope' => strtoupper($channel) === 'PORTFOLIO'
+                'portfolio_scope' => in_array('PORTFOLIO', array_map('strtoupper', $channels), true)
                     ? ($viewer->reportees()->where('is_active', true)->exists() ? 'team' : 'own')
                     : null,
                 'not_ordered_count' => count($notOrdered),

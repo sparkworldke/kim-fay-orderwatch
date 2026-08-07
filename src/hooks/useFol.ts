@@ -190,11 +190,12 @@ export interface FolInput {
   lines: FolLine[];
 }
 
-export function useFolList(params: { view?: string; q?: string; page?: number }) {
+export function useFolList(params: { view?: string; q?: string; page?: number; per_page?: number }) {
   const qs = new URLSearchParams();
   if (params.view) qs.set("view", params.view);
   if (params.q) qs.set("q", params.q);
   if (params.page) qs.set("page", String(params.page));
+  if (params.per_page) qs.set("per_page", String(params.per_page));
 
   return useQuery({
     queryKey: ["kp-fol", params],

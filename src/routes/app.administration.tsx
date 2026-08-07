@@ -6,6 +6,7 @@ import { useRef, useEffect, useState, type ChangeEvent, type ComponentType, type
 import { toast } from "sonner";
 import { UserSessionsSheet } from "@/components/admin/UserSessionsSheet";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -161,17 +162,36 @@ const ADMIN_TABS = [
 
 type SfaState = { table_name: string; is_enabled: boolean; last_success_at: string | null };
 type SfaStatus = { configured: boolean; connected: boolean; error: string | null; visible_team: string; states: SfaState[] };
+type SfaMatchRow = { id: number; sfa_shop_id: number; customer_code: string | null; customer_name: string; match_status: string; match_score: string | null; match_method: string | null; suggested_acumatica_customer_id: string | null; suggested_customer_name: string | null; suggested_customer_class: string | null };
+type SfaMatches = { counts: Record<string, number>; customers: { data: SfaMatchRow[]; total: number } };
 
 function SfaSyncPanel() {
   const [status, setStatus] = useState<SfaStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
+  const [matches, setMatches] = useState<SfaMatches | null>(null);
+  const [matching, setMatching] = useState(false);
 
   async function load() {
     setLoading(true);
-    try { setStatus(await apiFetch<SfaStatus>("admin/sfa/status")); }
+    try { const [nextStatus,nextMatches]=await Promise.all([apiFetch<SfaStatus>("admin/sfa/status"),apiFetch<SfaMatches>("admin/sfa/matches?status=all&per_page=20")]); setStatus(nextStatus); setMatches(nextMatches); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Could not load SFA status."); }
     finally { setLoading(false); }
+  }
+
+  async function suggestMatches() {
+    setMatching(true);
+    try { const result=await apiFetch<{processed:number;suggested:number;conflict:number}>("admin/sfa/matches/suggest",{method:"POST",timeoutMs:120_000}); toast.success(`Reviewed ${result.processed} outlets: ${result.suggested} suggestions, ${result.conflict} conflicts.`); await load(); }
+    catch(error){ toast.error(error instanceof Error?error.message:"Customer matching failed."); }
+    finally { setMatching(false); }
+  }
+
+  async function updateMatch(row:SfaMatchRow, action:"confirm"|"ignore"|"unlink") {
+    if(action==="confirm"&&!row.suggested_acumatica_customer_id)return;
+    setRunning(`match-${row.id}`);
+    try { await apiFetch(`admin/sfa/matches/${row.id}/${action}`,{method:"POST",body:action==="confirm"?{acumatica_customer_id:row.suggested_acumatica_customer_id}:undefined}); toast.success(action==="confirm"?"Customer match confirmed.":action==="ignore"?"Outlet ignored.":"Customer link removed."); await load(); }
+    catch(error){toast.error(error instanceof Error?error.message:"Match update failed.");}
+    finally{setRunning(null);}
   }
 
   useEffect(() => { void load(); }, []);
@@ -205,6 +225,14 @@ function SfaSyncPanel() {
           </div>)}
         </div>
         <p className="text-xs text-muted-foreground">Credentials stay in the server environment and are never returned to the browser. Pull representatives before customers.</p>
+        <div className="border-t pt-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><p className="font-medium">GT customer match desk</p><p className="text-xs text-muted-foreground">Suggestions use CSBSTREET, CSDIST, CSSTOCKPTS and CSWSALERS. Every link requires confirmation.</p></div><Button variant="outline" disabled={matching||!state("customers")?.last_success_at} onClick={()=>void suggestMatches()}>{matching?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<Search className="mr-2 h-4 w-4"/>}Generate suggestions</Button></div>
+          <div className="mb-3 flex flex-wrap gap-2">{Object.entries(matches?.counts??{}).map(([key,value])=><Badge key={key} variant={key==="conflict"?"destructive":"secondary"}>{key}: {value}</Badge>)}</div>
+          <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[850px] text-sm"><thead className="bg-muted/50 text-left text-xs"><tr><th className="p-3">SFA outlet</th><th className="p-3">Suggested Acumatica customer</th><th className="p-3">Confidence</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr></thead><tbody>
+            {(matches?.customers.data??[]).map(row=><tr key={row.id} className="border-t"><td className="p-3"><p className="font-medium">{row.customer_name}</p><p className="text-xs text-muted-foreground">{row.customer_code||"No code"} · Shop {row.sfa_shop_id}</p></td><td className="p-3"><p>{row.suggested_customer_name||"No candidate"}</p><p className="text-xs text-muted-foreground">{row.suggested_acumatica_customer_id||"—"} {row.suggested_customer_class?`· ${row.suggested_customer_class}`:""}</p></td><td className="p-3">{row.match_score?`${Number(row.match_score).toFixed(1)}%`:"—"}<p className="text-xs text-muted-foreground">{row.match_method||""}</p></td><td className="p-3"><Badge variant={row.match_status==="conflict"?"destructive":"secondary"}>{row.match_status}</Badge></td><td className="p-3"><div className="flex justify-end gap-2">{row.match_status!=="matched"&&row.suggested_acumatica_customer_id&&<Button size="sm" disabled={running===`match-${row.id}`} onClick={()=>void updateMatch(row,"confirm")}>Confirm</Button>}{row.match_status==="matched"?<Button size="sm" variant="outline" onClick={()=>void updateMatch(row,"unlink")}>Unlink</Button>:<Button size="sm" variant="ghost" onClick={()=>void updateMatch(row,"ignore")}>Ignore</Button>}</div></td></tr>)}
+            {(matches?.customers.data.length??0)===0&&<tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Pull SFA customers, then generate match suggestions.</td></tr>}
+          </tbody></table></div>
+        </div>
       </>}
     </CardContent>
   </Card>;

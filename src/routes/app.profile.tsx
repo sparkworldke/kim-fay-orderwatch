@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 
 type PasswordOtpChannel = "email" | "whatsapp" | "both";
 
@@ -292,17 +294,17 @@ function ProfilePage() {
   });
 
   // ── Sign-in logs query ──────────────────────────────────────────────────
-  const [page, setPage] = useState(1);
-  const [sessionsPage, setSessionsPage] = useState(1);
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
+  const { page: sessionsPage, perPage: sessionsPerPage, setPage: setSessionsPage, setPerPage: setSessionsPerPage } = usePagination(20);
 
   const { data: logsData, isLoading: logsLoading } = useQuery({
-    queryKey: ["sign-in-logs", page],
-    queryFn: () => apiFetch<SignInLogsResponse>(`profile/sign-in-logs?page=${page}`),
+    queryKey: ["sign-in-logs", page, perPage],
+    queryFn: () => apiFetch<SignInLogsResponse>(`profile/sign-in-logs?page=${page}&per_page=${perPage}`),
   });
 
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
-    queryKey: ["user-sessions", sessionsPage],
-    queryFn: () => apiFetch<UserSessionsResponse>(`profile/sessions?page=${sessionsPage}`),
+    queryKey: ["user-sessions", sessionsPage, sessionsPerPage],
+    queryFn: () => apiFetch<UserSessionsResponse>(`profile/sessions?page=${sessionsPage}&per_page=${sessionsPerPage}`),
   });
 
   const passwordMatches =
@@ -747,29 +749,16 @@ function ProfilePage() {
               </div>
 
               {/* Pagination */}
-              {logsData.last_page > 1 && (
-                <div className="mt-4 flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    Page {logsData.current_page} of {logsData.last_page}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={logsData.current_page <= 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={logsData.current_page >= logsData.last_page}
-                    >
-                      Next
-                    </Button>
-                  </div>
+              {logsData.total > 0 && (
+                <div className="mt-4">
+                  <PaginationControls
+                    currentPage={logsData.current_page}
+                    lastPage={logsData.last_page}
+                    total={logsData.total}
+                    perPage={perPage}
+                    onPageChange={setPage}
+                    onPerPageChange={setPerPage}
+                  />
                 </div>
               )}
             </>
@@ -822,29 +811,16 @@ function ProfilePage() {
                 </table>
               </div>
 
-              {sessionsData.last_page > 1 && (
-                <div className="mt-4 flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    Page {sessionsData.current_page} of {sessionsData.last_page}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSessionsPage((p) => Math.max(1, p - 1))}
-                      disabled={sessionsData.current_page <= 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSessionsPage((p) => p + 1)}
-                      disabled={sessionsData.current_page >= sessionsData.last_page}
-                    >
-                      Next
-                    </Button>
-                  </div>
+              {sessionsData.total > 0 && (
+                <div className="mt-4">
+                  <PaginationControls
+                    currentPage={sessionsData.current_page}
+                    lastPage={sessionsData.last_page}
+                    total={sessionsData.total}
+                    perPage={sessionsPerPage}
+                    onPageChange={setSessionsPage}
+                    onPerPageChange={setSessionsPerPage}
+                  />
                 </div>
               )}
             </>

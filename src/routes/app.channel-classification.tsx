@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/usePagination";
 import { apiFetch } from "@/lib/api";
 
 type ClassificationData = {
@@ -52,6 +54,10 @@ function ChannelClassificationPage() {
     const needle = search.trim().toLowerCase();
     return !needle || row.customer_acumatica_id.toLowerCase().includes(needle) || row.sales_channel_code.toLowerCase().includes(needle);
   });
+  const { page, perPage, setPage, setPerPage } = usePagination(20);
+  const pageCount = Math.max(1, Math.ceil(rows.length / perPage));
+  const safePage = Math.min(page, pageCount);
+  const pagedRows = rows.slice((safePage - 1) * perPage, safePage * perPage);
 
   return (
     <div className="space-y-5">
@@ -95,11 +101,21 @@ function ChannelClassificationPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40"><tr><th className="px-3 py-2 text-left">Customer ID</th><th className="px-3 py-2 text-left">Channel</th><th className="px-3 py-2 text-left">Reason</th><th className="px-3 py-2 text-left">Updated</th></tr></thead>
             <tbody className="divide-y">
-              {rows.map((row) => <tr key={row.id}><td className="px-3 py-2 font-mono">{row.customer_acumatica_id}</td><td className="px-3 py-2">{row.sales_channel_code}</td><td className="px-3 py-2">{row.change_reason}</td><td className="px-3 py-2">{row.updated_at}</td></tr>)}
+              {pagedRows.map((row) => <tr key={row.id}><td className="px-3 py-2 font-mono">{row.customer_acumatica_id}</td><td className="px-3 py-2">{row.sales_channel_code}</td><td className="px-3 py-2">{row.change_reason}</td><td className="px-3 py-2">{row.updated_at}</td></tr>)}
               {rows.length === 0 && <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No customer overrides found.</td></tr>}
             </tbody>
           </table>
         </div>
+        {rows.length > 0 && (
+          <PaginationControls
+            currentPage={safePage}
+            lastPage={pageCount}
+            total={rows.length}
+            perPage={perPage}
+            onPageChange={setPage}
+            onPerPageChange={setPerPage}
+          />
+        )}
       </section>
     </div>
   );

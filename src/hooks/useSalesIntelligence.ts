@@ -25,7 +25,7 @@ export type SalesIntelligenceCustomer = {
 
 export type SalesIntelligenceMetrics = {
   scope: {
-    channel: SalesIntelligenceChannel;
+    channel: string;
     customer_count: number;
     customer_ids: string[];
     portfolio_scoped: boolean;
@@ -72,21 +72,25 @@ export type SalesIntelligenceMetrics = {
 };
 
 export function useSalesIntelligenceMetrics(
-  channel: SalesIntelligenceChannel,
+  channels: SalesIntelligenceChannel[],
   from?: string,
   to?: string,
   region?: string,
   comparison?: "previous_month" | "past_3_months" | "past_6_months",
 ) {
-  const params = new URLSearchParams({ channel });
+  // The backend accepts a single channel or a comma-separated list, enabling the
+  // multi-channel / "any channel" selector on the Sales Intelligence page.
+  const channelParam = channels.length ? Array.from(new Set(channels)).join(",") : "MT";
+  const params = new URLSearchParams({ channel: channelParam });
   if (from) params.set("from", from);
   if (to) params.set("to", to);
   if (region) params.set("region", region);
   if (comparison) params.set("comparison", comparison);
 
   return useQuery({
-    queryKey: ["sales-intelligence", channel, from ?? "month", to ?? "today", region ?? "all-regions", comparison ?? "none"],
+    queryKey: ["sales-intelligence", channelParam, from ?? "month", to ?? "today", region ?? "all-regions", comparison ?? "none"],
     queryFn: () => apiFetch<SalesIntelligenceMetrics>(`sales/intelligence/metrics?${params}`),
+    enabled: channels.length > 0,
     staleTime: 60_000,
   });
 }

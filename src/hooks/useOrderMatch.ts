@@ -51,16 +51,16 @@ export function useOrderMatchFolders() {
   });
 }
 
-export function useOrderMatchQueue(status = "pending", page = 1) {
+export function useOrderMatchQueue(status = "pending", page = 1, pageSize = 20) {
   return useQuery({
-    queryKey: ["order-match-queue", status, page],
+    queryKey: ["order-match-queue", status, page, pageSize],
     queryFn: () =>
       apiFetch<{
         groups: QueueGroup[];
         total: number;
         current_page: number;
         last_page: number;
-      }>(`order-match/queue?status=${status}&page=${page}&pageSize=50`),
+      }>(`order-match/queue?status=${status}&page=${page}&pageSize=${pageSize}`),
   });
 }
 

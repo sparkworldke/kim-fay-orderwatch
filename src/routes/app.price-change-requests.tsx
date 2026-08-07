@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { usePagination } from "@/hooks/usePagination";
 import {
   usePcrDashboard,
   usePcrList,
@@ -49,7 +51,8 @@ function PriceChangeListPage() {
     permissions.includes("pricing.pcr.config");
   const [view, setView] = useState("my");
   const [q, setQ] = useState("");
-  const list = usePcrList({ view, q });
+  const { page, perPage, setPage, setPerPage, resetPage } = usePagination(20);
+  const list = usePcrList({ view, q, page, per_page: perPage });
   const dashboard = usePcrDashboard();
 
   const visibleTabs = TABS.filter((tab) => {
@@ -90,7 +93,7 @@ function PriceChangeListPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={view} onValueChange={setView}>
+        <Tabs value={view} onValueChange={(next) => { setView(next); resetPage(); }}>
           <TabsList className="flex h-auto flex-wrap justify-start">
             {visibleTabs.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value}>
@@ -103,7 +106,7 @@ function PriceChangeListPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => { setQ(e.target.value); resetPage(); }}
             placeholder="Search ref, customer, SKU"
             className="h-9 pl-8"
           />
@@ -145,6 +148,16 @@ function PriceChangeListPage() {
           </tbody>
         </table>
       </div>
+      {list.data && list.data.total > 0 && (
+        <PaginationControls
+          currentPage={list.data.current_page}
+          lastPage={list.data.last_page}
+          total={list.data.total}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+        />
+      )}
     </div>
   );
 }

@@ -9,10 +9,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class KpMeeting extends Model
 {
     protected $fillable = [
-        'title',
+        'title', 'activity_type',
         'purpose_id', 'meeting_mode', 'is_internal', 'is_planned',
         'notes',
         'previous_notes', 'current_notes', 'outcome', 'follow_up_date', 'no_follow_up_reason', 'b2b_details',
+        'questionnaire_id', 'questionnaire_version', 'questionnaire_answers',
         'customer_acumatica_id',
         'customer_name',
         'starts_at',
@@ -30,7 +31,7 @@ class KpMeeting extends Model
         return [
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
-            'follow_up_date' => 'date', 'b2b_details' => 'array', 'is_internal' => 'boolean',
+            'follow_up_date' => 'date', 'b2b_details' => 'array', 'questionnaire_answers' => 'array', 'is_internal' => 'boolean',
             'is_planned' => 'boolean', 'completed_at' => 'datetime', 'cancelled_at' => 'datetime',
         ];
     }
@@ -46,6 +47,7 @@ class KpMeeting extends Model
     }
 
     public function purpose(): BelongsTo { return $this->belongsTo(KpMeetingPurpose::class, 'purpose_id'); }
+    public function questionnaire(): BelongsTo { return $this->belongsTo(KpActivityQuestionnaire::class, 'questionnaire_id'); }
     public function actions(): HasMany { return $this->hasMany(KpMeetingAction::class, 'meeting_id'); }
     public function participants(): HasMany { return $this->hasMany(KpMeetingParticipant::class, 'meeting_id'); }
 }

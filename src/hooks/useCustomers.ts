@@ -15,12 +15,12 @@ interface CustomerFilters {
 
 export function useCustomers(filters: CustomerFilters = {}) {
   const params = new URLSearchParams();
-  if (filters.q)      params.set("q", filters.q);
-  if (filters.class)  params.set("class", filters.class);
+  if (filters.q) params.set("q", filters.q);
+  if (filters.class) params.set("class", filters.class);
   if (filters.class_prefix) params.set("class_prefix", filters.class_prefix);
   if (filters.status) params.set("status", filters.status);
   if (filters.shipping_zone_id) params.set("shipping_zone_id", filters.shipping_zone_id);
-  if (filters.page)     params.set("page",     String(filters.page));
+  if (filters.page) params.set("page", String(filters.page));
   if (filters.per_page) params.set("per_page", String(filters.per_page));
 
   const qs = params.toString();
@@ -57,7 +57,10 @@ export interface SuggestedOrdersResponse {
 export function useSuggestedOrders(customerId: string | null) {
   return useQuery({
     queryKey: ["customers", customerId, "suggested-orders"],
-    queryFn: () => apiFetch<SuggestedOrdersResponse>(`customers/${encodeURIComponent(customerId ?? "")}/suggested-orders`),
+    queryFn: () =>
+      apiFetch<SuggestedOrdersResponse>(
+        `customers/${encodeURIComponent(customerId ?? "")}/suggested-orders`,
+      ),
     enabled: customerId !== null,
   });
 }
@@ -85,7 +88,77 @@ export interface CommonProductsResponse {
 export function useCommonProducts(customerId: string | null) {
   return useQuery({
     queryKey: ["customers", customerId, "common-products"],
-    queryFn: () => apiFetch<CommonProductsResponse>(`customers/${encodeURIComponent(customerId ?? "")}/common-products`),
+    queryFn: () =>
+      apiFetch<CommonProductsResponse>(
+        `customers/${encodeURIComponent(customerId ?? "")}/common-products`,
+      ),
+    enabled: customerId !== null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// White-spot / cohort product-gap engine — SKUs peers in the same segment buy
+// but this account does not (never bought, or lapsed and needs reviving).
+// ---------------------------------------------------------------------------
+
+export interface WhitespaceOpportunity {
+  inventory_id: string;
+  description: string | null;
+  uom: string | null;
+  brand?: string | null;
+  posting_class?: string | null;
+  sub_trading_group?: string | null;
+  supplier?: string | null;
+  status: "never_bought" | "lapsed";
+  last_order_date: string | null;
+  months_since_last: number | null;
+  buyer_count: number;
+  cohort_penetration_pct: number;
+  cohort_avg_qty: number;
+  avg_unit_price: number;
+  opportunity_value: number;
+}
+
+export interface WhitespaceMonthlyLines {
+  month: string; // YYYY-MM
+  focal_lines: number;
+  cohort_avg_lines: number;
+}
+
+export interface WhitespaceSummary {
+  cohort_dimension: string;
+  cohort_value: string | null;
+  peer_accounts: number;
+  active_peers: number;
+  analysis_window_months: number;
+  lapsed_months: number;
+  min_penetration_pct: number;
+  catalog_lines: number;
+  focal_lines_in_window: number;
+  focal_line_penetration_pct: number;
+  cohort_avg_lines: number;
+  opportunity_count: number;
+  opportunity_value: number;
+  monthly_lines: WhitespaceMonthlyLines[];
+}
+
+export interface WhitespaceResponse {
+  customer_id: string;
+  customer_name: string | null;
+  cohort_dimension: string;
+  cohort_value: string | null;
+  available: boolean;
+  reason?: string;
+  opportunities: WhitespaceOpportunity[];
+  summary: WhitespaceSummary;
+  data_as_of?: string;
+}
+
+export function useWhitespace(customerId: string | null) {
+  return useQuery({
+    queryKey: ["customers", customerId, "whitespace"],
+    queryFn: () =>
+      apiFetch<WhitespaceResponse>(`customers/${encodeURIComponent(customerId ?? "")}/whitespace`),
     enabled: customerId !== null,
   });
 }
